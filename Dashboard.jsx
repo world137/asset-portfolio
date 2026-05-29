@@ -89,42 +89,63 @@ function KpiRow({ totals, settings }) {
 
 function ClassTable({ totals, settings, onOpenClass, hot, setHot }) {
   const disp = settings.displayCcy;
+  const [sortBy, setSortBy] = React.useState(null);
+  const [sortDir, setSortDir] = React.useState(-1);
+  const handleSort = (col) => {
+    if (sortBy === col) setSortDir(d => -d);
+    else { setSortBy(col); setSortDir(-1); }
+  };
+  const SortTh = ({ col, label, right, width }) => (
+    <th className={(right ? 'num' : '') + ' th-sort'} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', ...(width ? { width } : {}) }} onClick={() => handleSort(col)}>
+      {label}{sortBy === col ? (sortDir < 0 ? ' ↓' : ' ↑') : ''}
+    </th>
+  );
+  const classesWithData = totals.classes.map((c, i) => ({
+    ...c,
+    alloc: totals.value ? (c.value / totals.value) * 100 : 0,
+    origIdx: i,
+  }));
+  const sortedClasses = sortBy ? [...classesWithData].sort((a, b) => {
+    const av = a[sortBy], bv = b[sortBy];
+    if (typeof av === 'string') return sortDir * bv.localeCompare(av);
+    return sortDir * (bv - av);
+  }) : classesWithData;
+
   return (
+    <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
     <table className="ptable">
       <thead>
         <tr>
-          <th>Asset Class</th>
-          <th style={{ width: 150 }}>Allocation</th>
-          <th className="num">Value</th>
-          <th className="num">Cost</th>
-          <th className="num">P/L</th>
-          <th className="num">%</th>
+          <SortTh col="label" label="Asset Class" />
+          <SortTh col="alloc" label="Allocation" width={150} />
+          <SortTh col="value" label="Value" right />
+          <SortTh col="cost" label="Cost" right />
+          <SortTh col="profit" label="P/L" right />
+          <SortTh col="pct" label="%" right />
         </tr>
       </thead>
       <tbody>
-        {totals.classes.map((c, i) => {
-          const pc = totals.value ? (c.value / totals.value) * 100 : 0;
-          return (
-            <tr className="pos" key={c.key} onClick={() => onOpenClass(c.key)}
-                onMouseEnter={() => setHot(i)} onMouseLeave={() => setHot(null)}>
-              <td>
-                <span className="tk"><span className="av" style={{ background: c.color, borderRadius: 7 }}>{c.label.slice(0, 2).toUpperCase()}</span>{c.label}</span>
-              </td>
-              <td>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div className="minibar" style={{ flex: 1 }}><span style={{ width: pc + '%', background: c.color }} /></div>
-                  <span style={{ font: '500 11.5px/1 var(--font-mono)', color: 'var(--fg-3)', minWidth: 38, textAlign: 'right' }}>{pc.toFixed(1)}%</span>
-                </div>
-              </td>
-              <td className="num">{window.ccySymbol(disp)}{window.fmtBig(c.value)}</td>
-              <td className="num" style={{ color: 'var(--fg-3)' }}>{window.ccySymbol(disp)}{window.fmtBig(c.cost)}</td>
-              <td className={'num ' + (c.profit >= 0 ? 'up' : 'down')}>{(c.profit >= 0 ? '+' : '−') + window.ccySymbol(disp) + window.fmtBig(Math.abs(c.profit))}</td>
-              <td className={'num ' + (c.profit >= 0 ? 'up' : 'down')}>{window.fmtPct(c.pct)}</td>
-            </tr>
-          );
-        })}
+        {sortedClasses.map((c) => (
+          <tr className="pos" key={c.key} onClick={() => onOpenClass(c.key)}
+              onMouseEnter={() => setHot(c.origIdx)} onMouseLeave={() => setHot(null)}>
+            <td>
+              <span className="tk"><span className="av" style={{ background: c.color, borderRadius: 7 }}>{c.label.slice(0, 2).toUpperCase()}</span>{c.label}</span>
+            </td>
+            <td>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div className="minibar" style={{ flex: 1 }}><span style={{ width: c.alloc + '%', background: c.color }} /></div>
+                <span style={{ font: '500 11.5px/1 var(--font-mono)', color: 'var(--fg-3)', minWidth: 38, textAlign: 'right' }}>{c.alloc.toFixed(1)}%</span>
+              </div>
+            </td>
+            <td className="num">{window.ccySymbol(disp)}{window.fmtBig(c.value)}</td>
+            <td className="num" style={{ color: 'var(--fg-3)' }}>{window.ccySymbol(disp)}{window.fmtBig(c.cost)}</td>
+            <td className={'num ' + (c.profit >= 0 ? 'up' : 'down')}>{(c.profit >= 0 ? '+' : '−') + window.ccySymbol(disp) + window.fmtBig(Math.abs(c.profit))}</td>
+            <td className={'num ' + (c.profit >= 0 ? 'up' : 'down')}>{window.fmtPct(c.pct)}</td>
+          </tr>
+        ))}
       </tbody>
     </table>
+    </div>
   );
 }
 

@@ -41,6 +41,7 @@ function LotRows({ position, classKey, ccy, onEdit }) {
     <tr className="lotrow">
       <td colSpan={8}>
         <div className="lotinner">
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <table className="lottable">
             <thead>
               <tr>
@@ -74,6 +75,7 @@ function LotRows({ position, classKey, ccy, onEdit }) {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       </td>
     </tr>
@@ -149,6 +151,23 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
 
   const filtered = positions.filter(p => p.name.toLowerCase().includes(q.toLowerCase()) || (p.sector || '').toLowerCase().includes(q.toLowerCase()));
   const toggle = (n) => setExpanded(e => ({ ...e, [n]: !e[n] }));
+  const [sortBy, setSortBy] = React.useState(null);
+  const [sortDir, setSortDir] = React.useState(-1);
+  const handleSort = (col) => {
+    if (sortBy === col) setSortDir(d => -d);
+    else { setSortBy(col); setSortDir(-1); }
+  };
+  const SortTh = ({ col, label, right }) => (
+    <th className={(right ? 'num' : '') + ' th-sort'} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }} onClick={() => handleSort(col)}>
+      {label}{sortBy === col ? (sortDir < 0 ? ' ↓' : ' ↑') : ''}
+    </th>
+  );
+  const sortedFiltered = sortBy ? [...filtered].sort((a, b) => {
+    const av = sortBy === 'sector' && isOther ? (a.type || '') : (a[sortBy] ?? '');
+    const bv = sortBy === 'sector' && isOther ? (b.type || '') : (b[sortBy] ?? '');
+    if (typeof av === 'string') return sortDir * bv.localeCompare(av);
+    return sortDir * (bv - av);
+  }) : filtered;
 
   return (
     <div className="page">
@@ -198,24 +217,25 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
         <span className="t-small">{filtered.length} of {positions.length}</span>
       </div>
 
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
       <table className="ptable">
         <thead>
           <tr>
-            <th>{isOther ? 'Name' : 'Ticker'}</th>
-            <th>{isOther ? 'Type' : 'Sector'}</th>
-            <th className="num">Units</th>
-            <th className="num">Avg cost</th>
-            <th className="num">Current</th>
-            <th className="num">Value</th>
-            <th className="num">P/L</th>
-            <th className="num">%</th>
+            <SortTh col="name" label={isOther ? 'Name' : 'Ticker'} />
+            <SortTh col="sector" label={isOther ? 'Type' : 'Sector'} />
+            <SortTh col="qty" label="Units" right />
+            <SortTh col="avgPrice" label="Avg cost" right />
+            <SortTh col="cur" label="Current" right />
+            <SortTh col="value" label="Value" right />
+            <SortTh col="profit" label="P/L" right />
+            <SortTh col="pct" label="%" right />
           </tr>
         </thead>
         <tbody>
-          {filtered.length === 0 && (
+          {sortedFiltered.length === 0 && (
             <tr><td colSpan={8}><div className="empty">No holdings yet. <a className="t-link" onClick={() => onAdd(classKey)}>Add your first one →</a></div></td></tr>
           )}
-          {filtered.map(p => {
+          {sortedFiltered.map(p => {
             const color = window.CLASS_COLORS[classKey];
             const open = !!expanded[p.name];
             return (
@@ -249,6 +269,7 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
           })}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
