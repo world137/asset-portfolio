@@ -41,7 +41,10 @@ async function sbGet(table, qs) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${qs}`, {
     headers: baseHeaders(),
   });
-  if (!r.ok) throw new Error(`sb-get-${table}-${r.status}`);
+  if (!r.ok) {
+    const body = await r.text().catch(() => '');
+    throw new Error(`sb-get-${table}-${r.status}: ${body}`);
+  }
   return r.json();
 }
 
@@ -50,7 +53,10 @@ async function sbDelete(table, qs) {
     method: 'DELETE',
     headers: baseHeaders({ Prefer: 'return=minimal' }),
   });
-  if (!r.ok) throw new Error(`sb-delete-${table}-${r.status}`);
+  if (!r.ok) {
+    const body = await r.text().catch(() => '');
+    throw new Error(`sb-delete-${table}-${r.status}: ${body}`);
+  }
 }
 
 async function sbUpsert(table, rows) {
@@ -60,7 +66,10 @@ async function sbUpsert(table, rows) {
     headers: baseHeaders({ Prefer: 'resolution=merge-duplicates,return=minimal' }),
     body: JSON.stringify(rows),
   });
-  if (!r.ok) throw new Error(`sb-upsert-${table}-${r.status}`);
+  if (!r.ok) {
+    const body = await r.text().catch(() => '');
+    throw new Error(`sb-upsert-${table}-${r.status}: ${body}`);
+  }
 }
 
 // ── Body parser (handles Vercel's various body modes) ─────────────────────────
@@ -171,7 +180,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ data: JSON.stringify(state) });
     } catch (e) {
       console.error('[portfolio] get error:', e.message);
-      return res.status(500).json({ error: 'read-failed' });
+      return res.status(500).json({ error: 'read-failed', detail: e.message });
     }
   }
 
@@ -273,7 +282,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     } catch (e) {
       console.error('[portfolio] save error:', e.message);
-      return res.status(500).json({ error: 'write-failed' });
+      return res.status(500).json({ error: 'write-failed', detail: e.message });
     }
   }
 

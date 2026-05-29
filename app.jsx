@@ -349,8 +349,8 @@ function App() {
 
   // Load from DB on mount. DB is the source of truth; localStorage is just a cache.
   React.useEffect(() => {
-    Store.loadFromCloud().then(() => {
-      Store.autoSnapshot();
+    Store.loadFromCloud().then(loaded => {
+      if (loaded) Store.autoSnapshot();
       setDbReady(true);
     });
   }, []);

@@ -147,6 +147,9 @@ begin
   end if;
 
   for r in select id, data from portfolios loop
+    -- Wrap each user in its own savepoint so a bad row never aborts the whole block.
+    begin
+
     begin
       portfolio := r.data::jsonb;
     exception when others then
@@ -266,5 +269,9 @@ begin
     end if;
 
     raise notice 'migrated user %', r.id;
+
+    exception when others then
+      raise notice 'error migrating user % — %', r.id, sqlerrm;
+    end; -- per-user savepoint
   end loop;
 end $$;
