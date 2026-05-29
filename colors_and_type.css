@@ -1,0 +1,186 @@
+/* =========================================================================
+   Product Setup — Design Tokens
+   Loan Origination Backoffice Web
+   ========================================================================= */
+
+/* IBM Plex via Google Fonts (CDN). If self-hosting, drop TTFs in /fonts and
+   replace this import with @font-face rules. */
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Serif:wght@400;500;600&display=swap");
+
+:root {
+  /* ---------- COLOR — Ink (cool neutral / primary) -------------------- */
+  --ink-950: #070d18;
+  --ink-900: #0e1726;   /* primary brand ink — headings, primary buttons */
+  --ink-800: #1b2638;
+  --ink-700: #2c3a52;
+  --ink-600: #44516a;
+  --ink-500: #5a6677;   /* secondary text */
+  --ink-400: #7a869a;   /* tertiary text, icons */
+  --ink-300: #a6b0bf;   /* disabled, placeholder */
+  --ink-200: #d5dae3;   /* dividers, strong borders */
+  --ink-150: #e3e7ee;
+  --ink-100: #e8ebf1;   /* default borders, table rules */
+  --ink-75:  #eef0f5;
+  --ink-50:  #f3f5f8;   /* subtle row hover / striping */
+
+  /* ---------- COLOR — Paper (warm surface) ---------------------------- */
+  --paper:   #faf9f6;   /* app background — slightly warm off-white */
+  --paper-2: #ffffff;   /* card / panel surface */
+  --paper-3: #f5f3ee;   /* sunken / inset surface */
+
+  /* ---------- COLOR — Copper (accent) --------------------------------- */
+  --copper-900: #4f3208;
+  --copper-700: #7a5012;
+  --copper-600: #9a6b1f;  /* PRIMARY accent — links, focus, key actions */
+  --copper-500: #b6862f;
+  --copper-300: #d9b677;
+  --copper-100: #f0e1bf;
+  --copper-50:  #f7eed7;
+  --copper-25:  #faf3e3;
+
+  /* ---------- COLOR — Semantic ---------------------------------------- */
+  --green-700: #155c3b;
+  --green-600: #1f7a4d;   /* approved / active / success */
+  --green-100: #d6ead9;
+  --green-50:  #ebf5ec;
+
+  --red-700:   #8c2828;
+  --red-600:   #b43a3a;    /* declined / error / danger */
+  --red-100:   #f4d6d6;
+  --red-50:    #faeaea;
+
+  --amber-700: #8a6310;
+  --amber-600: #b68a1f;    /* pending / warning */
+  --amber-100: #f3e3b5;
+  --amber-50:  #faf2d7;
+
+  --blue-700:  #1f4a85;
+  --blue-600:  #2962ab;    /* info / informational tag */
+  --blue-100:  #d4e0f0;
+  --blue-50:   #eaf0f8;
+
+  /* ---------- COLOR — Roles (semantic aliases) ------------------------ */
+  --bg-app:        var(--paper);
+  --bg-surface:    var(--paper-2);
+  --bg-sunken:     var(--paper-3);
+  --bg-hover:      var(--ink-50);
+  --bg-selected:   var(--copper-25);
+  --bg-overlay:    rgba(14, 23, 38, 0.40);
+
+  --fg-1: var(--ink-900);   /* primary text */
+  --fg-2: var(--ink-700);   /* secondary text */
+  --fg-3: var(--ink-500);   /* tertiary / meta */
+  --fg-4: var(--ink-400);   /* placeholder / icon-only */
+  --fg-disabled: var(--ink-300);
+  --fg-on-ink:    #fafaf7;
+  --fg-on-copper: #ffffff;
+  --fg-link:      var(--copper-700);
+
+  --border-1: var(--ink-100);   /* default hairline */
+  --border-2: var(--ink-200);   /* stronger divider */
+  --border-strong: var(--ink-700);
+  --border-focus:  var(--copper-600);
+
+  /* ---------- TYPE — Families ---------------------------------------- */
+  --font-sans:    "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono:    "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-serif:   "IBM Plex Serif", Georgia, serif;   /* used sparingly */
+
+  /* ---------- TYPE — Sizes (dense backoffice scale) ------------------ */
+  --fs-display-1: 40px;
+  --fs-display-2: 30px;
+  --fs-h1: 22px;
+  --fs-h2: 18px;
+  --fs-h3: 15px;
+  --fs-body-lg: 15px;
+  --fs-body:    13px;     /* UI default */
+  --fs-small:   12px;
+  --fs-micro:   11px;
+  --fs-code:    12.5px;
+
+  /* ---------- TYPE — Weights ----------------------------------------- */
+  --fw-regular: 400;
+  --fw-medium:  500;
+  --fw-semibold: 600;
+  --fw-bold:    700;
+
+  /* ---------- TYPE — Line height ------------------------------------- */
+  --lh-tight: 1.15;
+  --lh-snug:  1.3;
+  --lh-base:  1.45;
+  --lh-loose: 1.6;
+
+  /* ---------- TYPE — Tracking ---------------------------------------- */
+  --ls-tight: -0.015em;
+  --ls-base: 0;
+  --ls-wide: 0.02em;
+  --ls-caps: 0.06em;       /* uppercase eyebrows / table headers */
+
+  /* ---------- SPACING (4px base) ------------------------------------- */
+  --space-0:  0;
+  --space-1:  2px;
+  --space-2:  4px;
+  --space-3:  6px;
+  --space-4:  8px;
+  --space-5: 12px;
+  --space-6: 16px;
+  --space-7: 20px;
+  --space-8: 24px;
+  --space-9: 32px;
+  --space-10: 40px;
+  --space-11: 48px;
+  --space-12: 64px;
+  --space-13: 80px;
+
+  /* ---------- RADII --------------------------------------------------- */
+  --radius-xs: 2px;
+  --radius-sm: 3px;        /* inputs, chips */
+  --radius-md: 5px;        /* buttons, cards */
+  --radius-lg: 8px;        /* modals, drawers */
+  --radius-pill: 999px;
+
+  /* ---------- SHADOW / ELEVATION (used sparingly — prefer borders) --- */
+  --shadow-xs: 0 1px 0 rgba(14, 23, 38, 0.04);
+  --shadow-sm: 0 1px 2px rgba(14, 23, 38, 0.06), 0 0 0 1px rgba(14, 23, 38, 0.04);
+  --shadow-md: 0 4px 12px rgba(14, 23, 38, 0.08), 0 0 0 1px rgba(14, 23, 38, 0.05);
+  --shadow-lg: 0 16px 40px rgba(14, 23, 38, 0.14), 0 0 0 1px rgba(14, 23, 38, 0.06);
+  --shadow-focus: 0 0 0 3px rgba(154, 107, 31, 0.22);
+  --shadow-focus-danger: 0 0 0 3px rgba(180, 58, 58, 0.22);
+
+  /* ---------- MOTION -------------------------------------------------- */
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0.0, 0.2, 1);
+  --dur-1: 90ms;     /* hover / press feedback */
+  --dur-2: 160ms;    /* most UI transitions */
+  --dur-3: 240ms;    /* enters / exits */
+
+  /* ---------- LAYOUT -------------------------------------------------- */
+  --nav-width: 240px;
+  --nav-width-collapsed: 56px;
+  --topbar-height: 48px;
+  --section-max: 1120px;
+}
+
+/* =========================================================================
+   Semantic element styles — use these classes rather than redefining
+   per-component. Keeps the system consistent.
+   ========================================================================= */
+
+.t-display-1 { font: var(--fw-semibold) var(--fs-display-1)/var(--lh-tight) var(--font-sans); letter-spacing: var(--ls-tight); color: var(--fg-1); }
+.t-display-2 { font: var(--fw-semibold) var(--fs-display-2)/var(--lh-tight) var(--font-sans); letter-spacing: var(--ls-tight); color: var(--fg-1); }
+.t-h1        { font: var(--fw-semibold) var(--fs-h1)/var(--lh-snug)  var(--font-sans); letter-spacing: -0.01em; color: var(--fg-1); }
+.t-h2        { font: var(--fw-semibold) var(--fs-h2)/var(--lh-snug)  var(--font-sans); letter-spacing: -0.005em; color: var(--fg-1); }
+.t-h3        { font: var(--fw-semibold) var(--fs-h3)/var(--lh-snug)  var(--font-sans); color: var(--fg-1); }
+
+.t-body-lg   { font: var(--fw-regular) var(--fs-body-lg)/var(--lh-base) var(--font-sans); color: var(--fg-2); }
+.t-body      { font: var(--fw-regular) var(--fs-body)/var(--lh-base) var(--font-sans); color: var(--fg-1); }
+.t-body-soft { font: var(--fw-regular) var(--fs-body)/var(--lh-base) var(--font-sans); color: var(--fg-2); }
+.t-small     { font: var(--fw-regular) var(--fs-small)/var(--lh-base) var(--font-sans); color: var(--fg-3); }
+.t-micro     { font: var(--fw-medium)  var(--fs-micro)/var(--lh-snug) var(--font-sans);
+               letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--fg-3); }
+
+.t-mono      { font: var(--fw-regular) var(--fs-code)/var(--lh-base) var(--font-mono); color: var(--fg-1); }
+.t-mono-tabular { font-variant-numeric: tabular-nums; }
+
+.t-link      { color: var(--fg-link); text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+.t-link:hover { color: var(--copper-900); }
