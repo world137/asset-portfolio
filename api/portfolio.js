@@ -1,50 +1,69 @@
 /* ============================================================================
    api/portfolio.js — Vercel Serverless Function (Node 18+ runtime)
 
-   Persists portfolio data to Supabase (Postgres) via the Supabase REST API.
-   No npm package required — uses native fetch.
+   Persists portfolio data to Supabase (Postgres) via the Supabase REST API
+   using normalized tables (users, settings, holdings, sectors, snapshots,
+   fx_rates, sales).  No npm package required — uses native fetch.
 
-   GET  /api/portfolio?id=<portfolioId>     → { data: <string> | null }
+   GET  /api/portfolio?id=<portfolioId>     → { data: <json-string> | null }
    POST /api/portfolio  body: { id, data }  → { ok: true }
 
-   ── Supabase setup (one-time) ───────────────────────────────────────────────
-   1. Create a project at https://supabase.com
-   2. In SQL Editor run:
-
-        create table portfolios (
-          id          text        primary key,
-          data        text        not null,
-          updated_at  timestamptz default now()
-        );
-
-        -- Only service-role key has access (no public/anon exposure)
-        alter table portfolios enable row level security;
-
-   3. Add these env vars in Vercel → Project → Settings → Environment Variables:
-        SUPABASE_URL          → https://<project-ref>.supabase.co
-        SUPABASE_SERVICE_KEY  → Settings → API → service_role (secret)
+   ── Supabase setup ───────────────────────────────────────────────────────────
+   Run schema.sql in the Supabase SQL Editor, then add env vars:
+     SUPABASE_URL         → https://<project-ref>.supabase.co
+     SUPABASE_SERVICE_KEY → Settings → API → service_role (secret)
 
    ── Local dev ────────────────────────────────────────────────────────────────
-   Create a .env.local file in the project root:
-        SUPABASE_URL=https://<project-ref>.supabase.co
-        SUPABASE_SERVICE_KEY=<service_role_key>
-   Then run:  npx vercel dev
+   .env.local:
+     SUPABASE_URL=https://<project-ref>.supabase.co
+     SUPABASE_SERVICE_KEY=<service_role_key>
+   Then: npx vercel dev
    ============================================================================ */
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
 const ID_RE  = /^[a-zA-Z0-9_-]{6,64}$/;
-const MAX_LEN = 200 * 1024;
+const MAX_LEN = 500 * 1024;
 
-function sbHeaders() {
+// ── Supabase REST helpers ─────────────────────────────────────────────────────
+
+function baseHeaders(extra = {}) {
   return {
     apikey: SUPABASE_KEY,
     Authorization: `Bearer ${SUPABASE_KEY}`,
     'Content-Type': 'application/json',
-    Prefer: 'return=minimal',
+    ...extra,
   };
 }
+
+async function sbGet(table, qs) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${qs}`, {
+    headers: baseHeaders(),
+  });
+  if (!r.ok) throw new Error(`sb-get-${table}-${r.status}`);
+  return r.json();
+}
+
+async function sbDelete(table, qs) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${qs}`, {
+    method: 'DELETE',
+    headers: baseHeaders({ Prefer: 'return=minimal' }),
+  });
+  if (!r.ok) throw new Error(`sb-delete-${table}-${r.status}`);
+}
+
+async function sbUpsert(table, rows) {
+  if (!rows || !rows.length) return;
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method: 'POST',
+    headers: baseHeaders({ Prefer: 'resolution=merge-duplicates,return=minimal' }),
+    body: JSON.stringify(rows),
+  });
+  if (!r.ok) throw new Error(`sb-upsert-${table}-${r.status}`);
+}
+
+// ── Body parser (handles Vercel's various body modes) ─────────────────────────
 
 async function readBody(req) {
   if (req.body && typeof req.body === 'object') return req.body;
@@ -57,56 +76,203 @@ async function readBody(req) {
   });
 }
 
+// ── Shape helpers ─────────────────────────────────────────────────────────────
+
+// Reconstruct the JS state object (same shape store.js expects) from DB rows.
+function buildState(settingsRows, holdingRows, sectorRows, snapshotRows, saleRows, fxRows) {
+  const holdingsMap = {};
+  for (const lot of holdingRows) {
+    (holdingsMap[lot.class_key] ||= []).push({
+      id:    lot.id,
+      name:  lot.name,
+      type:  lot.type || undefined,
+      price: parseFloat(lot.price),
+      qty:   parseFloat(lot.qty),
+      cur:   lot.cur != null ? parseFloat(lot.cur) : undefined,
+    });
+  }
+
+  const sectorsMap = {};
+  for (const s of sectorRows) sectorsMap[`${s.class_key}:${s.name}`] = s.sector;
+
+  const fx = fxRows.length
+    ? { USDTHB: parseFloat(fxRows[0].rate), at: null }
+    : { USDTHB: null, at: null };
+
+  const s = settingsRows[0] || {};
+  const settings = {
+    displayCcy: s.display_ccy  || 'THB',
+    theme:      s.theme        || 'light',
+    chartStyle: s.chart_style  || 'donut',
+    palette:    s.palette      || 'class',
+    layout:     s.layout       || 'overview',
+    decimals:   s.decimals     ?? 2,
+  };
+
+  return {
+    holdings:      holdingsMap,
+    sectors:       sectorsMap,
+    fx,
+    settings,
+    snapshots:     snapshotRows.map(r => ({ date: r.date, value: parseFloat(r.value) })),
+    sales:         saleRows.map(r => ({
+      id:          r.id,
+      date:        r.date,
+      classKey:    r.class_key,
+      name:        r.name,
+      ccy:         r.ccy,
+      buyPrice:    parseFloat(r.buy_price),
+      sellPrice:   parseFloat(r.sell_price),
+      qty:         parseFloat(r.qty),
+      cost:        parseFloat(r.cost),
+      proceeds:    parseFloat(r.proceeds),
+      realizedPnl: parseFloat(r.realized_pnl),
+      pnlPct:      parseFloat(r.pnl_pct),
+    })),
+    lastPriceSync: null,
+    priceMode:     null,
+  };
+}
+
+// ── Handler ───────────────────────────────────────────────────────────────────
+
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
 
-  // Graceful no-op when Supabase is not yet configured
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     if (req.method === 'GET')  return res.status(200).json({ data: null, warn: 'supabase-not-configured' });
     if (req.method === 'POST') return res.status(200).json({ ok: true,  warn: 'supabase-not-configured' });
     return res.status(405).end();
   }
 
-  // ── GET ────────────────────────────────────────────────────────────────────
+  // ── GET ──────────────────────────────────────────────────────────────────────
   if (req.method === 'GET') {
     const id = (req.query || {}).id;
     if (!id || !ID_RE.test(id)) return res.status(400).json({ error: 'invalid-id' });
 
+    const uid = encodeURIComponent(id);
     try {
-      const r = await fetch(
-        `${SUPABASE_URL}/rest/v1/portfolios?id=eq.${encodeURIComponent(id)}&select=data`,
-        { headers: sbHeaders() }
-      );
-      if (!r.ok) throw new Error('sb-read-' + r.status);
-      const rows = await r.json();
-      const data = rows.length ? rows[0].data : null;
-      return res.status(200).json({ data });
-    } catch (_) {
+      const [settingsRows, holdingRows, sectorRows, snapshotRows, saleRows, fxRows] =
+        await Promise.all([
+          sbGet('settings',  `user_id=eq.${uid}&select=*`),
+          sbGet('holdings',  `user_id=eq.${uid}&select=*&order=created_at.asc`),
+          sbGet('sectors',   `user_id=eq.${uid}&select=*`),
+          sbGet('snapshots', `user_id=eq.${uid}&select=date,value&order=date.asc&limit=730`),
+          sbGet('sales',     `user_id=eq.${uid}&select=*&order=date.asc`),
+          sbGet('fx_rates',  `user_id=eq.${uid}&select=*`),
+        ]);
+
+      // No data at all → new user
+      const empty = !settingsRows.length && !holdingRows.length &&
+                    !snapshotRows.length && !saleRows.length;
+      if (empty) return res.status(200).json({ data: null });
+
+      const state = buildState(settingsRows, holdingRows, sectorRows, snapshotRows, saleRows, fxRows);
+      return res.status(200).json({ data: JSON.stringify(state) });
+    } catch (e) {
+      console.error('[portfolio] get error:', e.message);
       return res.status(500).json({ error: 'read-failed' });
     }
   }
 
-  // ── POST ───────────────────────────────────────────────────────────────────
+  // ── POST ─────────────────────────────────────────────────────────────────────
   if (req.method === 'POST') {
     const body = await readBody(req);
     const { id, data } = body || {};
-    if (!id   || !ID_RE.test(id))          return res.status(400).json({ error: 'invalid-id' });
+    if (!id   || !ID_RE.test(id))         return res.status(400).json({ error: 'invalid-id' });
     if (!data || typeof data !== 'string') return res.status(400).json({ error: 'invalid-data' });
     if (Buffer.byteLength(data, 'utf8') > MAX_LEN) return res.status(413).json({ error: 'too-large' });
 
+    let p;
+    try { p = JSON.parse(data); } catch (_) { return res.status(400).json({ error: 'invalid-json' }); }
+
+    const now = new Date().toISOString();
+    const uid = encodeURIComponent(id);
+
     try {
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/portfolios`, {
-        method: 'POST',
-        headers: {
-          ...sbHeaders(),
-          // Upsert: insert or update if id already exists
-          Prefer: 'resolution=merge-duplicates,return=minimal',
-        },
-        body: JSON.stringify({ id, data, updated_at: new Date().toISOString() }),
-      });
-      if (!r.ok) throw new Error('sb-write-' + r.status);
+      // 1. Ensure user row exists
+      await sbUpsert('users', [{ id, updated_at: now }]);
+
+      // 2. Settings (upsert single row)
+      const s = p.settings || {};
+      await sbUpsert('settings', [{
+        user_id:     id,
+        display_ccy: s.displayCcy  || 'THB',
+        theme:       s.theme       || 'light',
+        chart_style: s.chartStyle  || 'donut',
+        palette:     s.palette     || 'class',
+        layout:      s.layout      || 'overview',
+        decimals:    s.decimals    ?? 2,
+        updated_at:  now,
+      }]);
+
+      // 3. Holdings — full replace (delete then bulk insert)
+      await sbDelete('holdings', `user_id=eq.${uid}`);
+      const holdingRows = [];
+      for (const [classKey, lots] of Object.entries(p.holdings || {})) {
+        for (const lot of (lots || [])) {
+          holdingRows.push({
+            id:        lot.id,
+            user_id:   id,
+            class_key: classKey,
+            name:      lot.name,
+            type:      lot.type || null,
+            price:     lot.price,
+            qty:       lot.qty,
+            cur:       lot.cur != null ? lot.cur : null,
+          });
+        }
+      }
+      await sbUpsert('holdings', holdingRows);
+
+      // 4. Sectors — full replace
+      await sbDelete('sectors', `user_id=eq.${uid}`);
+      const sectorRows = [];
+      for (const [key, sector] of Object.entries(p.sectors || {})) {
+        const i = key.indexOf(':');
+        if (i < 0) continue;
+        sectorRows.push({ user_id: id, class_key: key.slice(0, i), name: key.slice(i + 1), sector });
+      }
+      await sbUpsert('sectors', sectorRows);
+
+      // 5. Snapshots — upsert by (user_id, date) to preserve history
+      const snapshotRows = (p.snapshots || []).map(s => ({
+        user_id: id, date: s.date, value: s.value,
+      }));
+      await sbUpsert('snapshots', snapshotRows);
+
+      // 6. Sales — full replace
+      await sbDelete('sales', `user_id=eq.${uid}`);
+      const saleRows = (p.sales || []).map(s => ({
+        id:          s.id,
+        user_id:     id,
+        date:        s.date,
+        class_key:   s.classKey,
+        name:        s.name,
+        ccy:         s.ccy || 'THB',
+        buy_price:   s.buyPrice,
+        sell_price:  s.sellPrice,
+        qty:         s.qty,
+        cost:        s.cost,
+        proceeds:    s.proceeds,
+        realized_pnl: s.realizedPnl,
+        pnl_pct:     s.pnlPct,
+      }));
+      await sbUpsert('sales', saleRows);
+
+      // 7. FX rate
+      if (p.fx?.USDTHB) {
+        await sbUpsert('fx_rates', [{
+          user_id:     id,
+          pair:        'USDTHB',
+          rate:        p.fx.USDTHB,
+          recorded_at: now,
+        }]);
+      }
+
       return res.status(200).json({ ok: true });
-    } catch (_) {
+    } catch (e) {
+      console.error('[portfolio] save error:', e.message);
       return res.status(500).json({ error: 'write-failed' });
     }
   }
