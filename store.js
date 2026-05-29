@@ -45,6 +45,7 @@
       lastPriceSync: null,
       priceMode: null,
       priceErrors: [],
+      snapshots: [],
     };
   }
 
@@ -64,6 +65,7 @@
         lastPriceSync: saved.lastPriceSync || null,
         priceMode: saved.priceMode || null,
         priceErrors: [],
+        snapshots: (saved.snapshots || []).slice(-730),
       };
     } catch (e) {
       return freshState();
@@ -86,6 +88,7 @@
       const data = JSON.stringify({
         holdings: state.holdings, sectors: state.sectors, fx: state.fx,
         settings: state.settings, lastPriceSync: state.lastPriceSync, priceMode: state.priceMode,
+        snapshots: state.snapshots,
       });
       await fetch('/api/portfolio', {
         method: 'POST',
@@ -119,6 +122,7 @@
         lastPriceSync: saved.lastPriceSync || null,
         priceMode: saved.priceMode || null,
         priceErrors: [],
+        snapshots: (saved.snapshots || []).slice(-730),
       };
       persist();
       subs.forEach(fn => fn()); // notify without triggering another cloud save
@@ -222,6 +226,29 @@
   }
 
   function classByKey(k) { return window.ASSET_CLASSES.find(c => c.key === k); }
+
+  // ---- portfolio value snapshot (daily) -----------------------------------
+  function grandTotalInTHB() {
+    const rate = state.fx.USDTHB || window.SEED_FX_USDTHB;
+    let value = 0;
+    for (const cls of window.ASSET_CLASSES) {
+      for (const lot of (state.holdings[cls.key] || [])) {
+        const m = lotMetrics(lot);
+        value += cls.ccy === 'USD' ? m.value * rate : m.value;
+      }
+    }
+    return value;
+  }
+
+  function takeSnapshot() {
+    const today = new Date().toISOString().slice(0, 10);
+    const value = grandTotalInTHB();
+    if (value <= 0) return;
+    const idx = state.snapshots.findIndex(s => s.date === today);
+    if (idx >= 0) state.snapshots[idx] = { date: today, value };
+    else state.snapshots.push({ date: today, value });
+    if (state.snapshots.length > 730) state.snapshots = state.snapshots.slice(-730);
+  }
 
   // ---- live-price plumbing -------------------------------------------------
   function uniqueNames(classKey) {
@@ -327,6 +354,8 @@
 
     // ---- read helpers ------------------------------------------------------
     positions, classTotals, grandTotals, sectorTotals, classByKey, toDisplay, lotMetrics,
+    getSnapshots: () => state.snapshots,
+    autoSnapshot() { takeSnapshot(); emit(); },
 
     // ---- cloud sync -------------------------------------------------------
     getPortfolioId: () => portfolioId,
@@ -354,12 +383,14 @@
         state.priceMode = 'api';
         state.priceErrors = data.errors || [];
         state.lastPriceSync = Date.now();
+        takeSnapshot();
         emit();
         return { mode: 'api', errors: data.errors || [] };
       } catch (e) {
         const res = await fallbackPrices();
         state.priceMode = 'fallback';
         state.lastPriceSync = Date.now();
+        takeSnapshot();
         emit();
         return { mode: 'fallback', ...res };
       }

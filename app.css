@@ -364,3 +364,23 @@ body { background: var(--bg-app); display: block; padding: 0; }
   transition: color var(--dur-1), background var(--dur-1);
 }
 .logout-btn:hover { color: rgba(255,255,255,0.85); background: rgba(255,255,255,0.08); }
+
+/* ============================================================================
+   Portfolio History Line Chart
+   ============================================================================ */
+.linechart-wrap { position: relative; }
+.linechart-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+.linechart-val { font: 600 22px/1 var(--font-sans); letter-spacing: -0.02em; color: var(--fg-1); font-variant-numeric: tabular-nums; }
+.linechart-chg { font: 600 13px/1.2 var(--font-mono); font-variant-numeric: tabular-nums; }
+.range-btns { display: inline-flex; border: 1px solid var(--border-2); border-radius: 8px; padding: 2px; background: var(--bg-sunken); flex-shrink: 0; gap: 1px; }
+.range-btns button { border: 0; background: transparent; padding: 5px 10px; font: 600 11px/1 var(--font-sans); color: var(--fg-3); border-radius: 6px; cursor: pointer; transition: background var(--dur-1), color var(--dur-1); }
+.range-btns button:hover { color: var(--fg-1); }
+.range-btns button.on { background: var(--bg-surface); color: var(--fg-1); box-shadow: var(--shadow-sm); }
+.linechart-svg { width: 100%; display: block; cursor: crosshair; overflow: visible; }
+.linechart-empty { text-align: center; padding: 40px 20px; font: 400 13px/1.6 var(--font-sans); color: var(--fg-3); }
+
+/* ============================================================================
+   Cost vs Price bar (SummaryView)
+   ============================================================================ */
+.costbar-wrap { display: flex; flex-direction: column; gap: 3px; padding: 2px 0; min-width: 80px; }
+.costbar { height: 5px; border-radius: 999px; min-width: 3px; transition: width var(--dur-2); }

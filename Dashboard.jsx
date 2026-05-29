@@ -1,6 +1,24 @@
 /* eslint-disable */
 /* Dashboard.jsx — KPIs, allocation chart, per-class summary. 3 layouts. */
 
+function PortfolioHistoryCard({ settings }) {
+  const snapshots = Store.getSnapshots();
+  const fxRate = Store.get().fx.USDTHB || window.SEED_FX_USDTHB;
+  return (
+    <div className="card" style={{ marginTop: 18 }}>
+      <div className="card-h">
+        <div>
+          <div className="t">Portfolio History</div>
+          <div className="s">Daily snapshots · valued in {settings.displayCcy} · snapshotted on price refresh</div>
+        </div>
+      </div>
+      <div className="card-b">
+        <PortfolioLineChart snapshots={snapshots} displayCcy={settings.displayCcy} fxRate={fxRate} />
+      </div>
+    </div>
+  );
+}
+
 function AllocChart({ totals, settings, hot, setHot, onOpenClass, size }) {
   const segs = totals.classes.map(c => ({ key: c.key, label: c.label, value: c.value, color: c.color }));
   const disp = settings.displayCcy;
@@ -180,6 +198,8 @@ function Dashboard({ onOpenClass }) {
           </div>
         </div>
       )}
+
+      <PortfolioHistoryCard settings={settings} />
     </div>
   );
 }

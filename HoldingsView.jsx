@@ -80,6 +80,61 @@ function LotRows({ position, classKey, ccy, onEdit }) {
   );
 }
 
+function ClassAnalysis({ classKey }) {
+  const settings = Store.settings();
+  const positions = Store.positions(classKey);
+  const cls = Store.classByKey(classKey);
+  const [hot, setHot] = React.useState(null);
+  const isOther = classKey === 'other';
+  const sym = window.ccySymbol(settings.displayCcy);
+
+  const palette = ['#9a6b1f','#2962ab','#1f7a4d','#b6862f','#3b8bd0','#c79a3a','#8a6310','#5a6677','#b43a3a','#2c3a52','#7a5012','#1f4a85'];
+  const map = new Map();
+  for (const p of positions) {
+    const key = isOther ? (p.type || '—') : (p.sector || '—');
+    const v = Store.toDisplay(p.value, cls.ccy);
+    map.set(key, (map.get(key) || 0) + v);
+  }
+  const segs = [...map.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([label, value], i) => ({ label, value, color: palette[i % palette.length] }));
+  const total = segs.reduce((a, s) => a + s.value, 0) || 1;
+
+  if (segs.length === 0) return null;
+
+  return (
+    <div className="card" style={{ marginBottom: 18 }}>
+      <div className="card-h">
+        <div>
+          <div className="t">{isOther ? 'By Type' : 'By Sector'}</div>
+          <div className="s">{segs.length} {isOther ? 'types' : 'sectors'} · valued in {settings.displayCcy}</div>
+        </div>
+      </div>
+      <div className="card-b">
+        <div className="chartwrap">
+          <Donut segments={segs} size={160} style={settings.chartStyle} hot={hot} onHover={setHot}
+                 center={
+                   <React.Fragment>
+                     <div className="c-lab">{isOther ? 'Types' : 'Sectors'}</div>
+                     <div className="c-val" style={{ fontSize: 18 }}>{segs.length}</div>
+                   </React.Fragment>
+                 } />
+          <div className="legend">
+            {segs.map((s, i) => (
+              <div className="row" key={s.label} onMouseEnter={() => setHot(i)} onMouseLeave={() => setHot(null)}>
+                <span className="sw" style={{ background: s.color }} />
+                <span className="nm">{s.label}</span>
+                <span className="vv">{sym}{window.fmtBig(s.value)}</span>
+                <span className="pc">{((s.value / total) * 100).toFixed(1)}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function HoldingsView({ classKey, onAdd, onEditLot }) {
   const cls = Store.classByKey(classKey);
   const settings = Store.settings();
@@ -131,6 +186,8 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
           <span>Live <b>{cls.srcLabel}</b> prices load from the bundled API once deployed to Vercel (browsers can't call {cls.srcLabel} directly). Showing your saved prices — click any current price to update it manually.</span>
         </div>
       )}
+
+      <ClassAnalysis classKey={classKey} />
 
       <div className="toolbar2">
         <div className="search-inp">
