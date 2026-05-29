@@ -32,6 +32,7 @@ function Nav({ route, setRoute, totals, open, onClose }) {
         <div className="grp-h">Analysis</div>
         {item('sectors', 'By Sector', 'sliders')}
         {item('summary', 'Cost vs Price', 'list')}
+        {item('selllog', 'Sell Log', 'trending-down')}
       </div>
       <div className="foot">
         <span className="av">PT</span>
@@ -63,6 +64,25 @@ function Nav({ route, setRoute, totals, open, onClose }) {
         </div>
       </div>
     </aside>
+  );
+}
+
+function DbStatusBadge() {
+  useStore();
+  const { status, savedAt } = Store.getDbStatus();
+  const label = status === 'pending' || status === 'saving' ? 'Saving…'
+    : status === 'saved'   ? 'DB saved'
+    : status === 'error'   ? 'DB error'
+    : null;
+  if (!label) return null;
+  const color = status === 'error' ? 'var(--red-600)' : status === 'saved' ? 'var(--green-600)' : 'var(--fg-3)';
+  return (
+    <span title={status === 'saved' && savedAt ? 'Saved ' + window.timeAgo(savedAt) : label}
+          style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color, fontWeight: 500, userSelect: 'none' }}>
+      <span style={{ width: 7, height: 7, borderRadius: '50%', background: color,
+                     animation: (status === 'pending' || status === 'saving') ? 'pulse 1s infinite' : 'none' }} />
+      {label}
+    </span>
   );
 }
 
@@ -347,7 +367,7 @@ function App() {
     setSyncing(false);
   };
 
-  const title = route === 'dashboard' ? 'Dashboard' : route === 'sectors' ? 'Analysis' : route === 'summary' ? 'Cost & Price Summary' : (Store.classByKey(route) || {}).label;
+  const title = route === 'dashboard' ? 'Dashboard' : route === 'sectors' ? 'Analysis' : route === 'summary' ? 'Cost & Price Summary' : route === 'selllog' ? 'Sell Log' : (Store.classByKey(route) || {}).label;
 
   return (
     <div className="shell">
@@ -358,6 +378,7 @@ function App() {
           <button className="icon-toggle menu" onClick={() => setDrawer(true)}><Icon name="list" size={17} /></button>
           <h2>{title}</h2>
           <div className="grow" />
+          <DbStatusBadge />
           <span className="sync">{syncing ? 'Syncing…' : <React.Fragment>{Store.get().priceMode === 'api' ? 'Live' : 'Crypto+FX'} · <b>{window.timeAgo(Store.get().lastPriceSync)}</b></React.Fragment>}</span>
           <Button variant="secondary" size="sm" icon="history" onClick={refresh} disabled={syncing}>{syncing ? 'Syncing' : 'Refresh'}</Button>
           <div className="pill-toggle">
@@ -372,6 +393,7 @@ function App() {
           {route === 'dashboard' && <Dashboard onOpenClass={setRoute} />}
           {route === 'sectors' && <SectorView onOpenClass={setRoute} />}
           {route === 'summary' && <SummaryView />}
+          {route === 'selllog' && <SellLogView />}
           {Store.classByKey(route) && <HoldingsView classKey={route} onAdd={openAdd} onEditLot={openEdit} />}
         </div>
       </div>

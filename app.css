@@ -399,3 +399,5 @@ body { background: var(--bg-app); display: block; padding: 0; }
    ============================================================================ */
 .costbar-wrap { display: flex; flex-direction: column; gap: 3px; padding: 2px 0; min-width: 80px; }
 .costbar { height: 5px; border-radius: 999px; min-width: 3px; transition: width var(--dur-2); }
+
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
