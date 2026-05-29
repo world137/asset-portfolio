@@ -2,7 +2,7 @@
 /* Login.jsx — login gate; renders before App if not authenticated */
 
 // Change this password to whatever you want.
-const LOGIN_PASSWORD = 'portfolio2024';
+const LOGIN_PASSWORD = 'world';
 const AUTH_KEY = 'ptf_auth';
 
 function checkAuth() {
