@@ -56,6 +56,10 @@
 
   let _dbStatus = 'idle'; // 'idle' | 'pending' | 'saving' | 'saved' | 'error'
   let _dbSavedAt = null;
+  // Guard: never write to DB before loadFromCloud has run at least once.
+  // Prevents autoSnapshot (or any early emit) from overwriting DB data with
+  // an empty freshState before we know what's actually stored.
+  let _initialized = false;
 
   // ── Supabase sync (via /api/portfolio) ───────────────────────────────────
   let _saveTimer = null;
@@ -91,6 +95,7 @@
   }
 
   async function doCloudSave() {
+    if (!_initialized) { _dbStatus = 'idle'; subs.forEach(fn => fn()); return; }
     _dbStatus = 'saving';
     subs.forEach(fn => fn());
     try {
@@ -105,7 +110,7 @@
         _dbSavedAt = Date.now();
       } else {
         _dbStatus = 'error';
-        console.warn('[portfolio] db save failed:', r.status);
+        r.json().then(j => console.warn('[portfolio] db save failed:', r.status, j?.detail || j?.error || '')).catch(() => {});
       }
     } catch (e) {
       _dbStatus = 'error';
@@ -128,16 +133,16 @@
 
   async function loadFromCloud(overrideId) {
     const id = overrideId || portfolioId;
-    if (!/^[a-zA-Z0-9_-]{6,64}$/.test(id)) return false;
+    if (!/^[a-zA-Z0-9_-]{6,64}$/.test(id)) { _initialized = true; return false; }
     try {
       const r = await fetch('/api/portfolio?id=' + encodeURIComponent(id));
-      if (!r.ok) return false;
+      if (!r.ok) { _initialized = true; return false; }
       const j = await r.json();
 
-      if (!j || !j.data) return false;
+      if (!j || !j.data) { _initialized = true; return false; }
 
       const saved = JSON.parse(j.data);
-      if (!saved || typeof saved !== 'object') return false;
+      if (!saved || typeof saved !== 'object') { _initialized = true; return false; }
 
       if (overrideId && overrideId !== portfolioId) {
         portfolioId = overrideId;
@@ -145,9 +150,11 @@
       }
 
       state = restoreFromSaved(saved);
+      _initialized = true;
       subs.forEach(fn => fn());
       return true;
     } catch (_) {
+      _initialized = true;
       return false;
     }
   }
