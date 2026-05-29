@@ -2,13 +2,17 @@
 /* ============================================================================
    store.js — App state, persistence, calculations, live prices.
    Plain JS singleton with a tiny pub/sub. UI subscribes via Store.subscribe.
+
+   DATA SOURCE PRIORITY:
+   1. Supabase (via /api/portfolio) — authoritative, shared across all devices
+   2. localStorage                  — disaster-recovery write-back only; never
+                                      used as a startup data source
    ============================================================================ */
 (function () {
   const LS_KEY      = 'portfolio.v1';
-  const USER_ID_KEY  = 'portfolio.userId';
+  const USER_ID_KEY = 'portfolio.userId';
   const uid = () => Math.random().toString(36).slice(2, 9);
 
-  // Stable per-browser ID used as the KV key for cloud sync.
   function getOrCreateUserId() {
     try {
       let id = localStorage.getItem(USER_ID_KEY);
@@ -24,18 +28,18 @@
   let portfolioId = getOrCreateUserId();
 
   const DEFAULT_SETTINGS = {
-    displayCcy: 'THB',     // 'THB' | 'USD'
-    theme: 'light',        // 'light' | 'dark'
-    chartStyle: 'donut',   // 'donut' | 'pie'
-    palette: 'class',      // 'class' | 'warm' | 'cool'
-    layout: 'overview',    // 'overview' | 'compact' | 'visual'
+    displayCcy: 'THB',
+    theme: 'light',
+    chartStyle: 'donut',
+    palette: 'class',
+    layout: 'overview',
     decimals: 2,
   };
 
   function freshState() {
     const holdings = {};
     for (const cls of window.ASSET_CLASSES) {
-      holdings[cls.key] = (window.SEED_HOLDINGS[cls.key] || []).map(l => ({ id: uid(), ...l }));
+      holdings[cls.key] = [];          // start empty — data comes from DB
     }
     return {
       holdings,
@@ -50,52 +54,51 @@
     };
   }
 
-  let state = load();
+  // Always start empty — never read from localStorage on startup.
+  // loadFromCloud() (called in App on mount) will populate state from DB.
+  let state = freshState();
+
   let _dbStatus = 'idle'; // 'idle' | 'pending' | 'saving' | 'saved' | 'error'
   let _dbSavedAt = null;
 
-  function load() {
-    try {
-      const raw = localStorage.getItem(LS_KEY);
-      if (!raw) return freshState();
-      const saved = JSON.parse(raw);
-      const base = freshState();
-      return {
-        holdings: saved.holdings || base.holdings,
-        sectors: { ...base.sectors, ...(saved.sectors || {}) },
-        fx: saved.fx || base.fx,
-        settings: { ...base.settings, ...(saved.settings || {}) },
-        lastPriceSync: saved.lastPriceSync || null,
-        priceMode: saved.priceMode || null,
-        priceErrors: [],
-        snapshots: (saved.snapshots || []).slice(-730),
-        sales: saved.sales || [],
-      };
-    } catch (e) {
-      return freshState();
-    }
-  }
-
+  // Write-back to localStorage only as a disaster-recovery cache.
+  // This is NEVER read on startup; it exists so that if the DB is down for
+  // an extended time, the user's last-known data is not completely lost.
   function persist() {
     try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {}
   }
 
-  // ---- cloud sync (Supabase via /api/portfolio) ----------------------------
+  // ── Supabase sync (via /api/portfolio) ───────────────────────────────────
   let _saveTimer = null;
 
   function buildSavePayload() {
     return JSON.stringify({
       holdings: state.holdings, sectors: state.sectors, fx: state.fx,
-      settings: state.settings, lastPriceSync: state.lastPriceSync, priceMode: state.priceMode,
-      snapshots: state.snapshots, sales: state.sales,
+      settings: state.settings, lastPriceSync: state.lastPriceSync,
+      priceMode: state.priceMode, snapshots: state.snapshots, sales: state.sales,
     });
+  }
+
+  function restoreFromSaved(saved) {
+    const base = freshState();
+    return {
+      holdings: saved.holdings || base.holdings,
+      sectors: { ...base.sectors, ...(saved.sectors || {}) },
+      fx: saved.fx || base.fx,
+      settings: { ...base.settings, ...(saved.settings || {}) },
+      lastPriceSync: saved.lastPriceSync || null,
+      priceMode: saved.priceMode || null,
+      priceErrors: [],
+      snapshots: (saved.snapshots || []).slice(-730),
+      sales: saved.sales || [],
+    };
   }
 
   function scheduleCloudSave() {
     clearTimeout(_saveTimer);
     _dbStatus = 'pending';
-    subs.forEach(fn => fn()); // notify toolbar immediately
-    _saveTimer = setTimeout(doCloudSave, 700);
+    subs.forEach(fn => fn());
+    _saveTimer = setTimeout(doCloudSave, 500);
   }
 
   async function doCloudSave() {
@@ -109,7 +112,9 @@
         body: JSON.stringify({ id: portfolioId, data }),
       });
       if (r.ok) {
-        _dbStatus = 'saved'; _dbSavedAt = Date.now();
+        _dbStatus = 'saved';
+        _dbSavedAt = Date.now();
+        persist(); // write-back cache after confirmed DB save
       } else {
         _dbStatus = 'error';
         console.warn('[portfolio] db save failed:', r.status);
@@ -121,17 +126,20 @@
     subs.forEach(fn => fn());
   }
 
-  // Flush any pending save when the tab is closed (sendBeacon survives page unload).
+  // Flush any pending save when the tab closes.
   window.addEventListener('beforeunload', () => {
     if (_dbStatus !== 'pending' && _dbStatus !== 'saving') return;
     clearTimeout(_saveTimer);
     try {
       const data = buildSavePayload();
-      const payload = JSON.stringify({ id: portfolioId, data });
-      navigator.sendBeacon('/api/portfolio', new Blob([payload], { type: 'application/json' }));
+      navigator.sendBeacon('/api/portfolio', new Blob([
+        JSON.stringify({ id: portfolioId, data }),
+      ], { type: 'application/json' }));
     } catch (_) {}
   });
 
+  // Load from DB. If DB has no entry for this ID yet, attempt a one-time
+  // migration from localStorage (covers users who had data before this change).
   async function loadFromCloud(overrideId) {
     const id = overrideId || portfolioId;
     if (!/^[a-zA-Z0-9_-]{6,64}$/.test(id)) return false;
@@ -139,43 +147,49 @@
       const r = await fetch('/api/portfolio?id=' + encodeURIComponent(id));
       if (!r.ok) return false;
       const j = await r.json();
+
       if (!j || !j.data) {
-        // Database has no record yet — migrate localStorage state to DB now.
-        if (localStorage.getItem(LS_KEY)) await doCloudSave();
+        // DB has no record for this ID. Try one-time migration from localStorage.
+        const raw = localStorage.getItem(LS_KEY);
+        if (raw) {
+          try {
+            const local = JSON.parse(raw);
+            if (local && typeof local === 'object') {
+              state = restoreFromSaved(local);
+              await doCloudSave();         // push to DB
+              localStorage.removeItem(LS_KEY); // clear after successful migration
+              subs.forEach(fn => fn());
+              return true;
+            }
+          } catch (_) {}
+        }
         return false;
       }
+
       const saved = JSON.parse(j.data);
       if (!saved || typeof saved !== 'object') return false;
-      // Switch active portfolio ID when loading from a different device
+
       if (overrideId && overrideId !== portfolioId) {
         portfolioId = overrideId;
         try { localStorage.setItem(USER_ID_KEY, overrideId); } catch (_) {}
       }
-      const base = freshState();
-      state = {
-        holdings: saved.holdings || base.holdings,
-        sectors: { ...base.sectors, ...(saved.sectors || {}) },
-        fx: saved.fx || base.fx,
-        settings: { ...base.settings, ...(saved.settings || {}) },
-        lastPriceSync: saved.lastPriceSync || null,
-        priceMode: saved.priceMode || null,
-        priceErrors: [],
-        snapshots: (saved.snapshots || []).slice(-730),
-        sales: saved.sales || [],
-      };
-      persist();
-      subs.forEach(fn => fn()); // notify without triggering another cloud save
+
+      state = restoreFromSaved(saved);
+      persist(); // update write-back cache
+      subs.forEach(fn => fn());
       return true;
     } catch (_) {
       return false;
     }
   }
 
-  // ---- pub/sub -------------------------------------------------------------
+  // ── pub/sub ───────────────────────────────────────────────────────────────
   const subs = new Set();
-  function emit() { persist(); scheduleCloudSave(); subs.forEach(fn => fn()); }
+  // emit() no longer calls persist() directly — persist() is only called after
+  // a confirmed DB save, keeping localStorage and DB in sync.
+  function emit() { scheduleCloudSave(); subs.forEach(fn => fn()); }
 
-  // ---- currency conversion -------------------------------------------------
+  // ── Currency conversion ───────────────────────────────────────────────────
   function toDisplay(amount, nativeCcy) {
     const disp = state.settings.displayCcy;
     if (nativeCcy === disp) return amount;
@@ -185,7 +199,7 @@
     return amount;
   }
 
-  // ---- lot maths -----------------------------------------------------------
+  // ── Lot maths ─────────────────────────────────────────────────────────────
   function lotMetrics(lot) {
     const cost = lot.price * lot.qty;
     const value = (lot.cur != null ? lot.cur : lot.price) * lot.qty;
@@ -194,7 +208,6 @@
     return { cost, value, profit, pct };
   }
 
-  // Aggregate lots of a class into net positions keyed by name.
   function positions(classKey) {
     const cls = classByKey(classKey);
     const lots = state.holdings[classKey] || [];
@@ -222,7 +235,6 @@
     return out;
   }
 
-  // Totals per class, converted to display currency.
   function classTotals(classKey) {
     const cls = classByKey(classKey);
     let cost = 0, value = 0;
@@ -244,13 +256,9 @@
     const classes = window.ASSET_CLASSES.map(c => classTotals(c.key)).filter(t => t.value > 0 || (state.holdings[t.key] || []).length);
     let cost = 0, value = 0;
     for (const t of classes) { cost += t.cost; value += t.value; }
-    return {
-      classes, cost, value, profit: value - cost,
-      pct: cost ? ((value - cost) / cost) * 100 : 0,
-    };
+    return { classes, cost, value, profit: value - cost, pct: cost ? ((value - cost) / cost) * 100 : 0 };
   }
 
-  // Sector breakdown across all classes (display ccy).
   function sectorTotals() {
     const map = new Map();
     for (const cls of window.ASSET_CLASSES) {
@@ -266,7 +274,6 @@
 
   function classByKey(k) { return window.ASSET_CLASSES.find(c => c.key === k); }
 
-  // ---- portfolio value snapshot (daily) -----------------------------------
   function grandTotalInTHB() {
     const rate = state.fx.USDTHB || window.SEED_FX_USDTHB;
     let value = 0;
@@ -289,12 +296,11 @@
     if (state.snapshots.length > 730) state.snapshots = state.snapshots.slice(-730);
   }
 
-  // ---- live-price plumbing -------------------------------------------------
+  // ── Live price plumbing ───────────────────────────────────────────────────
   function uniqueNames(classKey) {
     return [...new Set((state.holdings[classKey] || []).map(l => l.name))];
   }
 
-  // Build the POST payload for /api/prices from current holdings.
   function buildApiRequest() {
     const yahoo = [], funds = [], crypto = [];
     for (const cls of window.ASSET_CLASSES) {
@@ -314,7 +320,6 @@
     return { yahoo, funds, crypto, fx: true };
   }
 
-  // Apply { "<classKey>:<name>": price } to every matching lot's current price.
   function applyPrices(map) {
     for (const k in map) {
       const i = k.indexOf(':');
@@ -325,7 +330,6 @@
     }
   }
 
-  // Browser-only fallback when the serverless API isn't reachable.
   async function fallbackPrices() {
     const errors = []; let crypto = false, fx = false;
     try {
@@ -344,7 +348,7 @@
     return { crypto, fx, errors };
   }
 
-  // ---- mutations -----------------------------------------------------------
+  // ── Mutations ─────────────────────────────────────────────────────────────
   const Store = {
     subscribe(fn) { subs.add(fn); return () => subs.delete(fn); },
     get() { return state; },
@@ -355,8 +359,11 @@
 
     addLot(classKey, lot) {
       state.holdings[classKey] = state.holdings[classKey] || [];
-      state.holdings[classKey].push({ id: uid(), name: lot.name, type: lot.type || undefined,
-        price: +lot.price, qty: +lot.qty, cur: lot.cur != null && lot.cur !== '' ? +lot.cur : +lot.price });
+      state.holdings[classKey].push({
+        id: uid(), name: lot.name, type: lot.type || undefined,
+        price: +lot.price, qty: +lot.qty,
+        cur: lot.cur != null && lot.cur !== '' ? +lot.cur : +lot.price,
+      });
       if (lot.sector) state.sectors[classKey + ':' + lot.name] = lot.sector;
       emit();
     },
@@ -365,11 +372,11 @@
       const i = arr.findIndex(l => l.id === id);
       if (i >= 0) {
         const next = { ...arr[i] };
-        if (patch.name != null) next.name = patch.name;
-        if (patch.type != null) next.type = patch.type;
+        if (patch.name  != null) next.name  = patch.name;
+        if (patch.type  != null) next.type  = patch.type;
         if (patch.price != null && patch.price !== '') next.price = +patch.price;
-        if (patch.qty != null && patch.qty !== '') next.qty = +patch.qty;
-        if (patch.cur != null && patch.cur !== '') next.cur = +patch.cur;
+        if (patch.qty   != null && patch.qty   !== '') next.qty   = +patch.qty;
+        if (patch.cur   != null && patch.cur   !== '') next.cur   = +patch.cur;
         arr[i] = next;
         if (patch.sector != null) state.sectors[classKey + ':' + next.name] = patch.sector;
         emit();
@@ -379,36 +386,26 @@
       state.holdings[classKey] = (state.holdings[classKey] || []).filter(l => l.id !== id);
       emit();
     },
-    // Update current price for ALL lots of a ticker (manual classes).
     setCurrentPrice(classKey, name, cur) {
       (state.holdings[classKey] || []).forEach(l => { if (l.name === name) l.cur = +cur; });
       emit();
     },
-    setSector(classKey, name, sector) {
-      state.sectors[classKey + ':' + name] = sector; emit();
-    },
-    resetAll() {
-      state = freshState(); emit();
-    },
+    setSector(classKey, name, sector) { state.sectors[classKey + ':' + name] = sector; emit(); },
+    resetAll() { state = freshState(); emit(); },
 
-    // ---- sell log -----------------------------------------------------------
+    // ── Sell log ─────────────────────────────────────────────────────────────
     recordSale(classKey, { date, name, ccy, buyPrice, sellPrice, qty }) {
       const cost = +buyPrice * +qty;
       const proceeds = +sellPrice * +qty;
       const realizedPnl = proceeds - cost;
       const pnlPct = cost ? (realizedPnl / cost) * 100 : 0;
       state.sales = state.sales || [];
-      state.sales.push({
-        id: uid(), date, classKey, name, ccy,
+      state.sales.push({ id: uid(), date, classKey, name, ccy,
         buyPrice: +buyPrice, sellPrice: +sellPrice, qty: +qty,
-        cost, proceeds, realizedPnl, pnlPct,
-      });
+        cost, proceeds, realizedPnl, pnlPct });
       emit();
     },
-    deleteSale(id) {
-      state.sales = (state.sales || []).filter(s => s.id !== id);
-      emit();
-    },
+    deleteSale(id) { state.sales = (state.sales || []).filter(s => s.id !== id); emit(); },
     getSales() { return state.sales || []; },
     salesSummary() {
       const sales = state.sales || [];
@@ -419,24 +416,20 @@
         const toTHB = v => s.ccy === 'USD' ? v * rate : v;
         if (!map.has(year)) map.set(year, { year, cost: 0, proceeds: 0, pnl: 0, count: 0 });
         const y = map.get(year);
-        y.cost += toTHB(s.cost);
-        y.proceeds += toTHB(s.proceeds);
-        y.pnl += toTHB(s.realizedPnl);
-        y.count += 1;
+        y.cost += toTHB(s.cost); y.proceeds += toTHB(s.proceeds); y.pnl += toTHB(s.realizedPnl); y.count++;
       }
       return [...map.values()]
         .map(y => ({ ...y, pnlPct: y.cost ? (y.pnl / y.cost) * 100 : 0 }))
         .sort((a, b) => b.year.localeCompare(a.year));
     },
 
-    // ---- read helpers ------------------------------------------------------
+    // ── Read helpers ──────────────────────────────────────────────────────────
     positions, classTotals, grandTotals, sectorTotals, classByKey, toDisplay, lotMetrics,
     getSnapshots: () => state.snapshots,
     autoSnapshot() { takeSnapshot(); emit(); },
 
-    // ---- cloud sync -------------------------------------------------------
+    // ── DB sync ───────────────────────────────────────────────────────────────
     getPortfolioId: () => portfolioId,
-    // Override the in-memory portfolio ID (called from Login.jsx with stable derived ID).
     setPrimaryId(newId) {
       if (!newId || !/^[a-zA-Z0-9_-]{6,64}$/.test(newId)) return;
       portfolioId = newId;
@@ -447,10 +440,7 @@
     getDbStatus:    () => ({ status: _dbStatus, savedAt: _dbSavedAt }),
     forceSave:      () => { clearTimeout(_saveTimer); return doCloudSave(); },
 
-    // ---- live prices -------------------------------------------------------
-    // Try the deployed serverless API first (handles every class). If it isn't
-    // reachable (static hosting / this preview), fall back to the two
-    // CORS-friendly browser sources: CoinGecko (crypto) + Frankfurter (FX).
+    // ── Live prices ───────────────────────────────────────────────────────────
     async refreshPrices() {
       const apiReq = buildApiRequest();
       try {
