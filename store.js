@@ -46,10 +46,13 @@
       priceMode: null,
       priceErrors: [],
       snapshots: [],
+      sales: [],
     };
   }
 
   let state = load();
+  let _dbStatus = 'idle'; // 'idle' | 'pending' | 'saving' | 'saved' | 'error'
+  let _dbSavedAt = null;
 
   function load() {
     try {
@@ -66,6 +69,7 @@
         priceMode: saved.priceMode || null,
         priceErrors: [],
         snapshots: (saved.snapshots || []).slice(-730),
+        sales: saved.sales || [],
       };
     } catch (e) {
       return freshState();
@@ -76,27 +80,57 @@
     try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {}
   }
 
-  // ---- cloud sync (Vercel KV) ----------------------------------------------
+  // ---- cloud sync (Supabase via /api/portfolio) ----------------------------
   let _saveTimer = null;
+
+  function buildSavePayload() {
+    return JSON.stringify({
+      holdings: state.holdings, sectors: state.sectors, fx: state.fx,
+      settings: state.settings, lastPriceSync: state.lastPriceSync, priceMode: state.priceMode,
+      snapshots: state.snapshots, sales: state.sales,
+    });
+  }
+
   function scheduleCloudSave() {
     clearTimeout(_saveTimer);
-    _saveTimer = setTimeout(doCloudSave, 2000); // debounce 2 s
+    _dbStatus = 'pending';
+    subs.forEach(fn => fn()); // notify toolbar immediately
+    _saveTimer = setTimeout(doCloudSave, 700);
   }
 
   async function doCloudSave() {
+    _dbStatus = 'saving';
+    subs.forEach(fn => fn());
     try {
-      const data = JSON.stringify({
-        holdings: state.holdings, sectors: state.sectors, fx: state.fx,
-        settings: state.settings, lastPriceSync: state.lastPriceSync, priceMode: state.priceMode,
-        snapshots: state.snapshots,
-      });
-      await fetch('/api/portfolio', {
+      const data = buildSavePayload();
+      const r = await fetch('/api/portfolio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: portfolioId, data }),
       });
-    } catch (_) {} // localStorage remains source of truth on failure
+      if (r.ok) {
+        _dbStatus = 'saved'; _dbSavedAt = Date.now();
+      } else {
+        _dbStatus = 'error';
+        console.warn('[portfolio] db save failed:', r.status);
+      }
+    } catch (e) {
+      _dbStatus = 'error';
+      console.warn('[portfolio] db save error:', e.message);
+    }
+    subs.forEach(fn => fn());
   }
+
+  // Flush any pending save when the tab is closed (sendBeacon survives page unload).
+  window.addEventListener('beforeunload', () => {
+    if (_dbStatus !== 'pending' && _dbStatus !== 'saving') return;
+    clearTimeout(_saveTimer);
+    try {
+      const data = buildSavePayload();
+      const payload = JSON.stringify({ id: portfolioId, data });
+      navigator.sendBeacon('/api/portfolio', new Blob([payload], { type: 'application/json' }));
+    } catch (_) {}
+  });
 
   async function loadFromCloud(overrideId) {
     const id = overrideId || portfolioId;
@@ -105,7 +139,11 @@
       const r = await fetch('/api/portfolio?id=' + encodeURIComponent(id));
       if (!r.ok) return false;
       const j = await r.json();
-      if (!j || !j.data) return false;
+      if (!j || !j.data) {
+        // Database has no record yet — migrate localStorage state to DB now.
+        if (localStorage.getItem(LS_KEY)) await doCloudSave();
+        return false;
+      }
       const saved = JSON.parse(j.data);
       if (!saved || typeof saved !== 'object') return false;
       // Switch active portfolio ID when loading from a different device
@@ -123,6 +161,7 @@
         priceMode: saved.priceMode || null,
         priceErrors: [],
         snapshots: (saved.snapshots || []).slice(-730),
+        sales: saved.sales || [],
       };
       persist();
       subs.forEach(fn => fn()); // notify without triggering another cloud save
@@ -352,6 +391,44 @@
       state = freshState(); emit();
     },
 
+    // ---- sell log -----------------------------------------------------------
+    recordSale(classKey, { date, name, ccy, buyPrice, sellPrice, qty }) {
+      const cost = +buyPrice * +qty;
+      const proceeds = +sellPrice * +qty;
+      const realizedPnl = proceeds - cost;
+      const pnlPct = cost ? (realizedPnl / cost) * 100 : 0;
+      state.sales = state.sales || [];
+      state.sales.push({
+        id: uid(), date, classKey, name, ccy,
+        buyPrice: +buyPrice, sellPrice: +sellPrice, qty: +qty,
+        cost, proceeds, realizedPnl, pnlPct,
+      });
+      emit();
+    },
+    deleteSale(id) {
+      state.sales = (state.sales || []).filter(s => s.id !== id);
+      emit();
+    },
+    getSales() { return state.sales || []; },
+    salesSummary() {
+      const sales = state.sales || [];
+      const rate = state.fx.USDTHB || window.SEED_FX_USDTHB;
+      const map = new Map();
+      for (const s of sales) {
+        const year = s.date.slice(0, 4);
+        const toTHB = v => s.ccy === 'USD' ? v * rate : v;
+        if (!map.has(year)) map.set(year, { year, cost: 0, proceeds: 0, pnl: 0, count: 0 });
+        const y = map.get(year);
+        y.cost += toTHB(s.cost);
+        y.proceeds += toTHB(s.proceeds);
+        y.pnl += toTHB(s.realizedPnl);
+        y.count += 1;
+      }
+      return [...map.values()]
+        .map(y => ({ ...y, pnlPct: y.cost ? (y.pnl / y.cost) * 100 : 0 }))
+        .sort((a, b) => b.year.localeCompare(a.year));
+    },
+
     // ---- read helpers ------------------------------------------------------
     positions, classTotals, grandTotals, sectorTotals, classByKey, toDisplay, lotMetrics,
     getSnapshots: () => state.snapshots,
@@ -361,6 +438,8 @@
     getPortfolioId: () => portfolioId,
     loadFromCloud:  (id) => loadFromCloud(id),
     setPortfolioId: (newId) => loadFromCloud(newId),
+    getDbStatus:    () => ({ status: _dbStatus, savedAt: _dbSavedAt }),
+    forceSave:      () => { clearTimeout(_saveTimer); return doCloudSave(); },
 
     // ---- live prices -------------------------------------------------------
     // Try the deployed serverless API first (handles every class). If it isn't

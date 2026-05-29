@@ -1,42 +1,49 @@
 /* ============================================================================
    api/portfolio.js — Vercel Serverless Function (Node 18+ runtime)
 
-   Persists portfolio data to Vercel KV (Upstash Redis via REST API).
-   No npm package required — communicates with KV through native fetch.
+   Persists portfolio data to Supabase (Postgres) via the Supabase REST API.
+   No npm package required — uses native fetch.
 
-   GET  /api/portfolio?id=<portfolioId>          → { data: <string> | null }
-   POST /api/portfolio  body: { id, data }       → { ok: true }
+   GET  /api/portfolio?id=<portfolioId>     → { data: <string> | null }
+   POST /api/portfolio  body: { id, data }  → { ok: true }
 
-   Environment variables (auto-set by Vercel when KV store is linked):
-     KV_REST_API_URL   — e.g. https://xxx.kv.vercel-storage.com
-     KV_REST_API_TOKEN — bearer token
+   ── Supabase setup (one-time) ───────────────────────────────────────────────
+   1. Create a project at https://supabase.com
+   2. In SQL Editor run:
+
+        create table portfolios (
+          id          text        primary key,
+          data        text        not null,
+          updated_at  timestamptz default now()
+        );
+
+        -- Only service-role key has access (no public/anon exposure)
+        alter table portfolios enable row level security;
+
+   3. Add these env vars in Vercel → Project → Settings → Environment Variables:
+        SUPABASE_URL          → https://<project-ref>.supabase.co
+        SUPABASE_SERVICE_KEY  → Settings → API → service_role (secret)
+
+   ── Local dev ────────────────────────────────────────────────────────────────
+   Create a .env.local file in the project root:
+        SUPABASE_URL=https://<project-ref>.supabase.co
+        SUPABASE_SERVICE_KEY=<service_role_key>
+   Then run:  npx vercel dev
    ============================================================================ */
 
-const KV_URL   = process.env.KV_REST_API_URL;
-const KV_TOKEN = process.env.KV_REST_API_TOKEN;
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
-// Valid portfolio ID: alphanumeric + hyphens/underscores, 6–64 chars
 const ID_RE  = /^[a-zA-Z0-9_-]{6,64}$/;
-// Max portfolio payload: 200 KB
 const MAX_LEN = 200 * 1024;
-// Key TTL: 180 days, refreshed on every write
-const TTL     = 15_552_000;
 
-function kvKey(id) { return `pf:v1:${id}`; }
-
-// Execute a single Redis command against the Upstash REST API.
-async function kvCmd(...args) {
-  const r = await fetch(KV_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${KV_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(args),
-  });
-  if (!r.ok) throw new Error('kv-' + r.status);
-  const j = await r.json();
-  return j.result;
+function sbHeaders() {
+  return {
+    apikey: SUPABASE_KEY,
+    Authorization: `Bearer ${SUPABASE_KEY}`,
+    'Content-Type': 'application/json',
+    Prefer: 'return=minimal',
+  };
 }
 
 async function readBody(req) {
@@ -53,36 +60,51 @@ async function readBody(req) {
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
 
-  // Graceful no-op when KV is not yet configured (lets localStorage keep working)
-  if (!KV_URL || !KV_TOKEN) {
-    if (req.method === 'GET')  return res.status(200).json({ data: null, warn: 'kv-not-configured' });
-    if (req.method === 'POST') return res.status(200).json({ ok: true,   warn: 'kv-not-configured' });
+  // Graceful no-op when Supabase is not yet configured
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    if (req.method === 'GET')  return res.status(200).json({ data: null, warn: 'supabase-not-configured' });
+    if (req.method === 'POST') return res.status(200).json({ ok: true,  warn: 'supabase-not-configured' });
     return res.status(405).end();
   }
 
-  // ---------- GET -----------------------------------------------------------
+  // ── GET ────────────────────────────────────────────────────────────────────
   if (req.method === 'GET') {
     const id = (req.query || {}).id;
     if (!id || !ID_RE.test(id)) return res.status(400).json({ error: 'invalid-id' });
+
     try {
-      const data = await kvCmd('GET', kvKey(id));
-      // Refresh TTL passively on read so active portfolios never expire
-      if (data != null) kvCmd('EXPIRE', kvKey(id), String(TTL)).catch(() => {});
-      return res.status(200).json({ data: data ?? null });
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/portfolios?id=eq.${encodeURIComponent(id)}&select=data`,
+        { headers: sbHeaders() }
+      );
+      if (!r.ok) throw new Error('sb-read-' + r.status);
+      const rows = await r.json();
+      const data = rows.length ? rows[0].data : null;
+      return res.status(200).json({ data });
     } catch (_) {
       return res.status(500).json({ error: 'read-failed' });
     }
   }
 
-  // ---------- POST ----------------------------------------------------------
+  // ── POST ───────────────────────────────────────────────────────────────────
   if (req.method === 'POST') {
     const body = await readBody(req);
     const { id, data } = body || {};
-    if (!id   || !ID_RE.test(id))              return res.status(400).json({ error: 'invalid-id' });
-    if (!data || typeof data !== 'string')      return res.status(400).json({ error: 'invalid-data' });
+    if (!id   || !ID_RE.test(id))          return res.status(400).json({ error: 'invalid-id' });
+    if (!data || typeof data !== 'string') return res.status(400).json({ error: 'invalid-data' });
     if (Buffer.byteLength(data, 'utf8') > MAX_LEN) return res.status(413).json({ error: 'too-large' });
+
     try {
-      await kvCmd('SET', kvKey(id), data, 'EX', String(TTL));
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/portfolios`, {
+        method: 'POST',
+        headers: {
+          ...sbHeaders(),
+          // Upsert: insert or update if id already exists
+          Prefer: 'resolution=merge-duplicates,return=minimal',
+        },
+        body: JSON.stringify({ id, data, updated_at: new Date().toISOString() }),
+      });
+      if (!r.ok) throw new Error('sb-write-' + r.status);
       return res.status(200).json({ ok: true });
     } catch (_) {
       return res.status(500).json({ error: 'write-failed' });

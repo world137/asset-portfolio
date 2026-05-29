@@ -32,6 +32,7 @@ function Nav({ route, setRoute, totals, open, onClose }) {
         <div className="grp-h">Analysis</div>
         {item('sectors', 'By Sector', 'sliders')}
         {item('summary', 'Cost vs Price', 'list')}
+        {item('selllog', 'Sell Log', 'trending-down')}
       </div>
       <div className="foot">
         <span className="av">PT</span>
@@ -63,6 +64,25 @@ function Nav({ route, setRoute, totals, open, onClose }) {
         </div>
       </div>
     </aside>
+  );
+}
+
+function DbStatusBadge() {
+  useStore();
+  const { status, savedAt } = Store.getDbStatus();
+  const label = status === 'pending' || status === 'saving' ? 'Saving…'
+    : status === 'saved'   ? 'DB saved'
+    : status === 'error'   ? 'DB error'
+    : null;
+  if (!label) return null;
+  const color = status === 'error' ? 'var(--red-600)' : status === 'saved' ? 'var(--green-600)' : 'var(--fg-3)';
+  return (
+    <span title={status === 'saved' && savedAt ? 'Saved ' + window.timeAgo(savedAt) : label}
+          style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color, fontWeight: 500, userSelect: 'none' }}>
+      <span style={{ width: 7, height: 7, borderRadius: '50%', background: color,
+                     animation: (status === 'pending' || status === 'saving') ? 'pulse 1s infinite' : 'none' }} />
+      {label}
+    </span>
   );
 }
 
@@ -245,9 +265,26 @@ function SectorView({ onOpenClass }) {
   const secs = Store.sectorTotals();
   const total = secs.reduce((a, s) => a + s.value, 0) || 1;
   const palette = ['#9a6b1f', '#2962ab', '#1f7a4d', '#b6862f', '#3b8bd0', '#c79a3a', '#8a6310', '#5a6677', '#b43a3a', '#2c3a52', '#7a5012', '#1f4a85'];
-  const segs = secs.map((s, i) => ({ label: s.sector, value: s.value, color: palette[i % palette.length] }));
+  const segs = secs.map((s, i) => ({ label: s.sector, value: s.value, color: palette[i % palette.length], alloc: (s.value / total) * 100, origIdx: i }));
   const [hot, setHot] = React.useState(null);
   const sym = window.ccySymbol(settings.displayCcy);
+  const [sortBy, setSortBy] = React.useState(null);
+  const [sortDir, setSortDir] = React.useState(-1);
+  const handleSort = (col) => {
+    if (sortBy === col) setSortDir(d => -d);
+    else { setSortBy(col); setSortDir(-1); }
+  };
+  const SortTh = ({ col, label, right, width }) => (
+    <th className={(right ? 'num' : '') + ' th-sort'} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', ...(width ? { width } : {}) }} onClick={() => handleSort(col)}>
+      {label}{sortBy === col ? (sortDir < 0 ? ' ↓' : ' ↑') : ''}
+    </th>
+  );
+  const sortedSegs = sortBy ? [...segs].sort((a, b) => {
+    const av = a[sortBy], bv = b[sortBy];
+    if (typeof av === 'string') return sortDir * bv.localeCompare(av);
+    return sortDir * (bv - av);
+  }) : segs;
+
   return (
     <div className="page">
       <h1 className="t-h1" style={{ margin: '0 0 2px' }}>Allocation by Sector</h1>
@@ -264,26 +301,32 @@ function SectorView({ onOpenClass }) {
                     <span className="sw" style={{ background: s.color }} />
                     <span className="nm">{s.label}</span>
                     <span className="vv">{sym}{window.fmtBig(s.value)}</span>
-                    <span className="pc">{((s.value / total) * 100).toFixed(1)}%</span>
+                    <span className="pc">{s.alloc.toFixed(1)}%</span>
                   </div>
                 ))}
               </div>
             </div>
           </div>
         </div>
-        <div className="card"><div className="card-h"><div className="t">Sector Breakdown</div></div>
+        <div className="card"><div className="card-h"><div className="t">Sector Breakdown</div><div className="s">Click headers to sort</div></div>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <table className="ptable">
-            <thead><tr><th>Sector</th><th style={{ width: 160 }}>Weight</th><th className="num">Value</th></tr></thead>
+            <thead><tr>
+              <SortTh col="label" label="Sector" />
+              <SortTh col="alloc" label="Weight" width={160} />
+              <SortTh col="value" label="Value" right />
+            </tr></thead>
             <tbody>
-              {segs.map((s, i) => (
-                <tr key={s.label} onMouseEnter={() => setHot(i)} onMouseLeave={() => setHot(null)}>
+              {sortedSegs.map((s) => (
+                <tr key={s.label} onMouseEnter={() => setHot(s.origIdx)} onMouseLeave={() => setHot(null)}>
                   <td><span className="tk"><span className="d" style={{ width: 10, height: 10, borderRadius: 3, background: s.color, display: 'inline-block' }} />{s.label}</span></td>
-                  <td><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><div className="minibar" style={{ flex: 1 }}><span style={{ width: ((s.value / total) * 100) + '%', background: s.color }} /></div><span style={{ font: '500 11.5px/1 var(--font-mono)', color: 'var(--fg-3)', minWidth: 38, textAlign: 'right' }}>{((s.value / total) * 100).toFixed(1)}%</span></div></td>
+                  <td><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><div className="minibar" style={{ flex: 1 }}><span style={{ width: s.alloc + '%', background: s.color }} /></div><span style={{ font: '500 11.5px/1 var(--font-mono)', color: 'var(--fg-3)', minWidth: 38, textAlign: 'right' }}>{s.alloc.toFixed(1)}%</span></div></td>
                   <td className="num">{sym}{window.fmtBig(s.value)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
     </div>
@@ -324,7 +367,7 @@ function App() {
     setSyncing(false);
   };
 
-  const title = route === 'dashboard' ? 'Dashboard' : route === 'sectors' ? 'Analysis' : route === 'summary' ? 'Cost & Price Summary' : (Store.classByKey(route) || {}).label;
+  const title = route === 'dashboard' ? 'Dashboard' : route === 'sectors' ? 'Analysis' : route === 'summary' ? 'Cost & Price Summary' : route === 'selllog' ? 'Sell Log' : (Store.classByKey(route) || {}).label;
 
   return (
     <div className="shell">
@@ -335,6 +378,7 @@ function App() {
           <button className="icon-toggle menu" onClick={() => setDrawer(true)}><Icon name="list" size={17} /></button>
           <h2>{title}</h2>
           <div className="grow" />
+          <DbStatusBadge />
           <span className="sync">{syncing ? 'Syncing…' : <React.Fragment>{Store.get().priceMode === 'api' ? 'Live' : 'Crypto+FX'} · <b>{window.timeAgo(Store.get().lastPriceSync)}</b></React.Fragment>}</span>
           <Button variant="secondary" size="sm" icon="history" onClick={refresh} disabled={syncing}>{syncing ? 'Syncing' : 'Refresh'}</Button>
           <div className="pill-toggle">
@@ -349,6 +393,7 @@ function App() {
           {route === 'dashboard' && <Dashboard onOpenClass={setRoute} />}
           {route === 'sectors' && <SectorView onOpenClass={setRoute} />}
           {route === 'summary' && <SummaryView />}
+          {route === 'selllog' && <SellLogView />}
           {Store.classByKey(route) && <HoldingsView classKey={route} onAdd={openAdd} onEditLot={openEdit} />}
         </div>
       </div>
