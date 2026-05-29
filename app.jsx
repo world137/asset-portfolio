@@ -126,7 +126,7 @@ function App() {
 
   React.useEffect(() => { document.documentElement.setAttribute('data-theme', settings.theme); }, [settings.theme]);
   // Load cloud state on mount; falls back silently to localStorage if KV is unavailable.
-  React.useEffect(() => { Store.loadFromCloud(); }, []);
+  React.useEffect(() => { Store.loadFromCloud().then(() => Store.autoSnapshot()); }, []);
 
   const openAdd = (classKey) => setModal({ open: true, classKey, lot: null });
   const openEdit = (lot) => setModal({ open: true, classKey: route, lot });
