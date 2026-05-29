@@ -20,8 +20,8 @@
    Then: npx vercel dev
    ============================================================================ */
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_POSTGRES_DATABASE_SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.POSTGRES_DATABASE_SUPABASE_SERVICE_ROLE_KEY;
 
 const ID_RE  = /^[a-zA-Z0-9_-]{6,64}$/;
 const MAX_LEN = 500 * 1024;
