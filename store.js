@@ -436,6 +436,12 @@
 
     // ---- cloud sync -------------------------------------------------------
     getPortfolioId: () => portfolioId,
+    // Override the in-memory portfolio ID (called from Login.jsx with stable derived ID).
+    setPrimaryId(newId) {
+      if (!newId || !/^[a-zA-Z0-9_-]{6,64}$/.test(newId)) return;
+      portfolioId = newId;
+      try { localStorage.setItem(USER_ID_KEY, newId); } catch (_) {}
+    },
     loadFromCloud:  (id) => loadFromCloud(id),
     setPortfolioId: (newId) => loadFromCloud(newId),
     getDbStatus:    () => ({ status: _dbStatus, savedAt: _dbSavedAt }),
