@@ -35,7 +35,11 @@ function Nav({ route, setRoute, totals, open, onClose }) {
       <div className="foot">
         <span className="av">PT</span>
         <div>
-          <div className="who">My Portfolio</div>
+          <div className="who" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>My Portfolio
+            <span className="logout-btn" title="Sign out" onClick={window._ptfLogout}>
+              <Icon name="log-out" size={13} />
+            </span>
+          </div>
           <div className="sub" style={{ display: 'flex', gap: 6 }}>
             <span style={{ cursor: 'pointer' }}
               title={'Sync ID: ' + Store.getPortfolioId() + '\nClick to copy'}
@@ -165,4 +169,6 @@ function App() {
   );
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <AuthGate><App /></AuthGate>
+);
