@@ -1,0 +1,42 @@
+user_id,class_key,name,sector
+cHRmOndvcmxk,etf,QQQM,Technology
+cHRmOndvcmxk,etf,SMH,Semiconductor
+cHRmOndvcmxk,etf,VOO,S&P 500
+cHRmOndvcmxk,fund,A-GRID,Infrastructure
+cHRmOndvcmxk,fund,A-SLVP,Commodity
+cHRmOndvcmxk,fund,ASP-S&P500-A,S&P 500
+cHRmOndvcmxk,fund,DAOL-DEFENSE,Defense
+cHRmOndvcmxk,fund,DAOL-KOREAEQ,Korea
+cHRmOndvcmxk,fund,ES-GTECH,Technology
+cHRmOndvcmxk,fund,K-GOLD-A(A),Commodity
+cHRmOndvcmxk,fund,ONE-RAREEARTH,Materials
+cHRmOndvcmxk,fund,PRINCIPAL GCLOUD-A,Technology
+cHRmOndvcmxk,fund,SCBSEMI(A),Semiconductor
+cHRmOndvcmxk,fund,TEMxCH,China
+cHRmOndvcmxk,fund,TLNDQINCOME-UH-X,Income
+cHRmOndvcmxk,gold,GOLD,Commodity
+cHRmOndvcmxk,thaiStock,KKP,Financials
+cHRmOndvcmxk,thaiStock,SCB,Financials
+cHRmOndvcmxk,usaStock,AAOI,Semiconductor
+cHRmOndvcmxk,usaStock,AAPL,Technology
+cHRmOndvcmxk,usaStock,AMZN,Consumer
+cHRmOndvcmxk,usaStock,ASTS,Aerospace
+cHRmOndvcmxk,usaStock,GEV,Industrials
+cHRmOndvcmxk,usaStock,GOOGL,Technology
+cHRmOndvcmxk,usaStock,JNJ,Healthcare
+cHRmOndvcmxk,usaStock,JPM,Financials
+cHRmOndvcmxk,usaStock,LITE,Semiconductor
+cHRmOndvcmxk,usaStock,MRVL,Semiconductor
+cHRmOndvcmxk,usaStock,MSFT,Technology
+cHRmOndvcmxk,usaStock,NOK,Technology
+cHRmOndvcmxk,usaStock,ONDS,Aerospace
+cHRmOndvcmxk,usaStock,PRME,Healthcare
+cHRmOndvcmxk,usaStock,RBRK,Technology
+cHRmOndvcmxk,usaStock,RKLB,Aerospace
+cHRmOndvcmxk,usaStock,SNDK,Technology
+cHRmOndvcmxk,usaStock,STX,Technology
+cHRmOndvcmxk,usaStock,TSM,Semiconductor
+cHRmOndvcmxk,usaStock,UNH,Healthcare
+cHRmOndvcmxk,usaStock,WMT,Consumer
+cHRmOndvcmxk,usaStock,XBI,Healthcare
+cHRmOndvcmxk,usaStock,XOM,Energy
