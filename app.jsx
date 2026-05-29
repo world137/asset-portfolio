@@ -14,7 +14,7 @@ function Nav({ route, setRoute, totals, open, onClose }) {
     <div key={key} className={'item' + (route === key ? ' active' : '')} onClick={() => { setRoute(key); onClose(); }}>
       {color ? <span className="dot" style={{ background: color }} /> : <span className="ic"><Icon name={icon} size={16} /></span>}
       <span>{label}</span>
-      {key !== 'dashboard' && <span className="val">{sym}{window.fmtBig((totals.classes.find(c => c.key === key) || {}).value || 0)}</span>}
+      {key !== 'dashboard' && key !== 'summary' && <span className="val">{sym}{window.fmtBig((totals.classes.find(c => c.key === key) || {}).value || 0)}</span>}
     </div>
   );
   return (
@@ -31,6 +31,7 @@ function Nav({ route, setRoute, totals, open, onClose }) {
         {window.ASSET_CLASSES.map(c => item(c.key, c.label, null, window.CLASS_COLORS[c.key]))}
         <div className="grp-h">Analysis</div>
         {item('sectors', 'By Sector', 'sliders')}
+        {item('summary', 'Cost vs Price', 'list')}
       </div>
       <div className="foot">
         <span className="av">PT</span>
@@ -62,6 +63,180 @@ function Nav({ route, setRoute, totals, open, onClose }) {
         </div>
       </div>
     </aside>
+  );
+}
+
+function SummaryView() {
+  const settings = Store.settings();
+  const disp = settings.displayCcy;
+  const sym = window.ccySymbol(disp);
+  const totals = Store.grandTotals();
+  const [sortBy, setSortBy] = React.useState('value');
+  const [sortDir, setSortDir] = React.useState(-1);
+  const [filterClass, setFilterClass] = React.useState('all');
+
+  const rows = [];
+  for (const cls of window.ASSET_CLASSES) {
+    for (const p of Store.positions(cls.key)) {
+      const value = Store.toDisplay(p.value, cls.ccy);
+      const cost  = Store.toDisplay(p.cost,  cls.ccy);
+      const curDisp = disp === 'USD' && cls.ccy === 'THB'
+        ? p.cur / (Store.get().fx.USDTHB || window.SEED_FX_USDTHB)
+        : disp === 'THB' && cls.ccy === 'USD'
+        ? p.cur * (Store.get().fx.USDTHB || window.SEED_FX_USDTHB)
+        : p.cur;
+      const avgDisp = disp === 'USD' && cls.ccy === 'THB'
+        ? p.avgPrice / (Store.get().fx.USDTHB || window.SEED_FX_USDTHB)
+        : disp === 'THB' && cls.ccy === 'USD'
+        ? p.avgPrice * (Store.get().fx.USDTHB || window.SEED_FX_USDTHB)
+        : p.avgPrice;
+      rows.push({
+        classKey: cls.key, classLabel: cls.label, classColor: window.CLASS_COLORS[cls.key],
+        name: p.name, sector: p.sector, ccy: cls.ccy,
+        qty: p.qty, avgPrice: p.avgPrice, avgPriceDisp: avgDisp, cur: p.cur, curDisp: curDisp,
+        cost, value, profit: value - cost,
+        pct: cost ? ((value - cost) / cost) * 100 : 0,
+        priceChg: p.avgPrice ? ((p.cur - p.avgPrice) / p.avgPrice) * 100 : 0,
+      });
+    }
+  }
+
+  const filtered = filterClass === 'all' ? rows : rows.filter(r => r.classKey === filterClass);
+  const sorted = [...filtered].sort((a, b) => sortDir * (b[sortBy] - a[sortBy]));
+
+  const handleSort = (col) => {
+    if (sortBy === col) setSortDir(d => -d);
+    else { setSortBy(col); setSortDir(-1); }
+  };
+  const SortTh = ({ col, label, right }) => (
+    <th className={right ? 'num' : ''} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
+        onClick={() => handleSort(col)}>
+      {label}{sortBy === col ? (sortDir < 0 ? ' ↓' : ' ↑') : ''}
+    </th>
+  );
+
+  const filtTotals = sorted.reduce((a, r) => ({ cost: a.cost + r.cost, value: a.value + r.value, profit: a.profit + r.profit }), { cost: 0, value: 0, profit: 0 });
+  const filtPct = filtTotals.cost ? (filtTotals.profit / filtTotals.cost) * 100 : 0;
+
+  return (
+    <div className="page">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+        <div>
+          <h1 className="t-h1" style={{ margin: '0 0 2px' }}>Cost &amp; Price Summary</h1>
+          <div className="t-small">{rows.length} positions across all asset classes · valued in {disp}</div>
+        </div>
+        <div className="layoutseg">
+          <button className={filterClass === 'all' ? 'on' : ''} onClick={() => setFilterClass('all')}>All</button>
+          {window.ASSET_CLASSES.map(c => (
+            <button key={c.key} className={filterClass === c.key ? 'on' : ''} onClick={() => setFilterClass(c.key)}>{c.short}</button>
+          ))}
+        </div>
+      </div>
+
+      <div className="kpis" style={{ marginBottom: 22 }}>
+        <div className="kpi accent">
+          <div className="lab">Current Value</div>
+          <div className="big"><span className="ccy">{sym}</span>{window.fmtBig(filtTotals.value)}</div>
+          <div className={'delta ' + (filtPct >= 0 ? 'up' : 'down')}>{window.fmtPct(filtPct)} all-time</div>
+        </div>
+        <div className="kpi">
+          <div className="lab">Total Cost</div>
+          <div className="big"><span className="ccy">{sym}</span>{window.fmtBig(filtTotals.cost)}</div>
+          <div className="delta" style={{ color: 'var(--fg-3)' }}>{sorted.length} positions shown</div>
+        </div>
+        <div className="kpi">
+          <div className="lab">Unrealized P/L</div>
+          <div className={'big ' + (filtTotals.profit >= 0 ? 'up' : 'down')}>
+            <span className="ccy">{sym}</span>{(filtTotals.profit >= 0 ? '+' : '−') + window.fmtBig(Math.abs(filtTotals.profit))}
+          </div>
+          <div className={'delta ' + (filtPct >= 0 ? 'up' : 'down')}>{window.fmtPct(filtPct)}</div>
+        </div>
+        <div className="kpi">
+          <div className="lab">Best Performer</div>
+          {(() => {
+            const best = sorted.length ? [...sorted].sort((a, b) => b.pct - a.pct)[0] : null;
+            return best
+              ? <React.Fragment>
+                  <div className="big" style={{ fontSize: 20 }}>{best.name.replace(/THB$/,'')}</div>
+                  <div className="delta up">{window.fmtPct(best.pct)}</div>
+                </React.Fragment>
+              : <div className="big">—</div>;
+          })()}
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-h">
+          <div><div className="t">All Positions</div><div className="s">Click column headers to sort</div></div>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table className="ptable" style={{ minWidth: 900 }}>
+            <thead>
+              <tr>
+                <th>Class</th>
+                <th>Ticker / Name</th>
+                <th>Sector / Type</th>
+                <SortTh col="qty" label="Units" right />
+                <SortTh col="avgPriceDisp" label="Avg Cost" right />
+                <SortTh col="curDisp" label="Current" right />
+                <th className="num" style={{ width: 120 }}>Cost vs Price</th>
+                <SortTh col="cost" label="Total Cost" right />
+                <SortTh col="value" label="Value" right />
+                <SortTh col="profit" label="P/L" right />
+                <SortTh col="pct" label="%" right />
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.length === 0 && (
+                <tr><td colSpan={11}><div className="empty">No holdings found.</div></td></tr>
+              )}
+              {sorted.map((r, i) => {
+                const barMax = Math.max(r.cost, r.value) || 1;
+                const costW  = (r.cost  / barMax) * 100;
+                const valW   = (r.value / barMax) * 100;
+                const isUp   = r.profit >= 0;
+                return (
+                  <tr key={r.classKey + ':' + r.name + ':' + i} className="pos" style={{ cursor: 'default' }}>
+                    <td>
+                      <span className="tk">
+                        <span className="av" style={{ background: r.classColor, borderRadius: 7 }}>{r.classLabel.slice(0,2).toUpperCase()}</span>
+                        <span style={{ color: 'var(--fg-3)', fontSize: 12 }}>{r.classLabel}</span>
+                      </span>
+                    </td>
+                    <td><span style={{ font: '600 13px/1 var(--font-sans)', color: 'var(--fg-1)' }}>{r.name.replace(/THB$/,'')}</span></td>
+                    <td><span className="sectorchip" style={{ cursor: 'default' }}>{r.sector}</span></td>
+                    <td className="num">{window.fmtQty(r.qty)}</td>
+                    <td className="num" style={{ color: 'var(--fg-3)' }}>
+                      {sym}{window.fmtBig(r.avgPriceDisp)}
+                    </td>
+                    <td className="num">
+                      <span className={r.priceChg >= 0 ? 'up' : 'down'} style={{ fontWeight: 600 }}>
+                        {sym}{window.fmtBig(r.curDisp)}
+                      </span>
+                      <span style={{ display: 'block', font: '500 10.5px/1 var(--font-mono)', color: r.priceChg >= 0 ? 'var(--green-600)' : 'var(--red-600)', marginTop: 3 }}>
+                        {r.priceChg >= 0 ? '▲' : '▼'} {Math.abs(r.priceChg).toFixed(1)}%
+                      </span>
+                    </td>
+                    <td>
+                      <div className="costbar-wrap">
+                        <div className="costbar" title={`Cost: ${sym}${window.fmtBig(r.cost)}`} style={{ width: costW + '%', background: 'var(--fg-4)' }} />
+                        <div className="costbar" title={`Value: ${sym}${window.fmtBig(r.value)}`} style={{ width: valW + '%', background: isUp ? 'var(--green-600)' : 'var(--red-600)', opacity: 0.7 }} />
+                      </div>
+                    </td>
+                    <td className="num" style={{ color: 'var(--fg-3)' }}>{sym}{window.fmtBig(r.cost)}</td>
+                    <td className="num">{sym}{window.fmtBig(r.value)}</td>
+                    <td className={'num ' + (r.profit >= 0 ? 'up' : 'down')}>
+                      {(r.profit >= 0 ? '+' : '−') + sym + window.fmtBig(Math.abs(r.profit))}
+                    </td>
+                    <td className={'num ' + (r.pct >= 0 ? 'up' : 'down')}>{window.fmtPct(r.pct)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -128,6 +303,18 @@ function App() {
   // Load cloud state on mount; falls back silently to localStorage if KV is unavailable.
   React.useEffect(() => { Store.loadFromCloud().then(() => Store.autoSnapshot()); }, []);
 
+  // Auto-refresh prices every 12 hours; also refresh immediately on mount if stale.
+  const TWELVE_HR = 12 * 60 * 60 * 1000;
+  React.useEffect(() => {
+    const maybeRefresh = () => {
+      const last = Store.get().lastPriceSync;
+      if (!last || Date.now() - last >= TWELVE_HR) refresh();
+    };
+    maybeRefresh();
+    const timer = setInterval(refresh, TWELVE_HR);
+    return () => clearInterval(timer);
+  }, []);
+
   const openAdd = (classKey) => setModal({ open: true, classKey, lot: null });
   const openEdit = (lot) => setModal({ open: true, classKey: route, lot });
 
@@ -137,7 +324,7 @@ function App() {
     setSyncing(false);
   };
 
-  const title = route === 'dashboard' ? 'Dashboard' : route === 'sectors' ? 'Analysis' : (Store.classByKey(route) || {}).label;
+  const title = route === 'dashboard' ? 'Dashboard' : route === 'sectors' ? 'Analysis' : route === 'summary' ? 'Cost & Price Summary' : (Store.classByKey(route) || {}).label;
 
   return (
     <div className="shell">
@@ -161,6 +348,7 @@ function App() {
         <div className="scrollarea" key={route}>
           {route === 'dashboard' && <Dashboard onOpenClass={setRoute} />}
           {route === 'sectors' && <SectorView onOpenClass={setRoute} />}
+          {route === 'summary' && <SummaryView />}
           {Store.classByKey(route) && <HoldingsView classKey={route} onAdd={openAdd} onEditLot={openEdit} />}
         </div>
       </div>
