@@ -341,14 +341,26 @@ function App() {
   const [drawer, setDrawer] = React.useState(false);
   const [modal, setModal] = React.useState({ open: false, classKey: null, lot: null });
   const [syncing, setSyncing] = React.useState(false);
+  // DB-first: block rendering until the database responds so stale localStorage
+  // is never shown on a different device.
+  const [dbReady, setDbReady] = React.useState(false);
 
   React.useEffect(() => { document.documentElement.setAttribute('data-theme', settings.theme); }, [settings.theme]);
-  // Load cloud state on mount; falls back silently to localStorage if KV is unavailable.
-  React.useEffect(() => { Store.loadFromCloud().then(() => Store.autoSnapshot()); }, []);
 
-  // Auto-refresh prices every 12 hours; also refresh immediately on mount if stale.
+  // Load from DB on mount. DB is the source of truth; localStorage is just a cache.
+  React.useEffect(() => {
+    Store.loadFromCloud().then(() => {
+      Store.autoSnapshot();
+      setDbReady(true);
+    });
+  }, []);
+
+  // Auto-refresh prices every 12 hours; also refresh on mount if stale.
+  // After a price refresh the updated prices are saved to DB automatically
+  // (refreshPrices calls emit() internally which triggers scheduleCloudSave).
   const TWELVE_HR = 12 * 60 * 60 * 1000;
   React.useEffect(() => {
+    if (!dbReady) return; // wait until DB data is loaded before refreshing prices
     const maybeRefresh = () => {
       const last = Store.get().lastPriceSync;
       if (!last || Date.now() - last >= TWELVE_HR) refresh();
@@ -356,7 +368,7 @@ function App() {
     maybeRefresh();
     const timer = setInterval(refresh, TWELVE_HR);
     return () => clearInterval(timer);
-  }, []);
+  }, [dbReady]);
 
   const openAdd = (classKey) => setModal({ open: true, classKey, lot: null });
   const openEdit = (lot) => setModal({ open: true, classKey: route, lot });
@@ -364,8 +376,21 @@ function App() {
   const refresh = async () => {
     setSyncing(true);
     await Store.refreshPrices();
+    // Price refresh updates cur prices on lots → emit() already schedules a DB save.
     setSyncing(false);
   };
+
+  // Show a brief loading screen while fetching from Supabase.
+  if (!dbReady) {
+    return (
+      <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 14 }}>
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 19V9M10 19V5M16 19v-7M22 19H2" />
+        </svg>
+        <div style={{ color: 'var(--fg-2)', fontSize: 14, fontWeight: 500 }}>Loading portfolio…</div>
+      </div>
+    );
+  }
 
   const title = route === 'dashboard' ? 'Dashboard' : route === 'sectors' ? 'Analysis' : route === 'summary' ? 'Cost & Price Summary' : route === 'selllog' ? 'Sell Log' : (Store.classByKey(route) || {}).label;
 
