@@ -3,13 +3,11 @@
    store.js — App state, persistence, calculations, live prices.
    Plain JS singleton with a tiny pub/sub. UI subscribes via Store.subscribe.
 
-   DATA SOURCE PRIORITY:
-   1. Supabase (via /api/portfolio) — authoritative, shared across all devices
-   2. localStorage                  — disaster-recovery write-back only; never
-                                      used as a startup data source
+   DATA SOURCE: Supabase only (via /api/portfolio).
+   portfolioId is kept in localStorage solely as an identity token — no
+   portfolio data is ever read from or written to localStorage.
    ============================================================================ */
 (function () {
-  const LS_KEY      = 'portfolio.v1';
   const USER_ID_KEY = 'portfolio.userId';
   const uid = () => Math.random().toString(36).slice(2, 9);
 
@@ -39,7 +37,7 @@
   function freshState() {
     const holdings = {};
     for (const cls of window.ASSET_CLASSES) {
-      holdings[cls.key] = [];          // start empty — data comes from DB
+      holdings[cls.key] = [];
     }
     return {
       holdings,
@@ -54,19 +52,10 @@
     };
   }
 
-  // Always start empty — never read from localStorage on startup.
-  // loadFromCloud() (called in App on mount) will populate state from DB.
   let state = freshState();
 
   let _dbStatus = 'idle'; // 'idle' | 'pending' | 'saving' | 'saved' | 'error'
   let _dbSavedAt = null;
-
-  // Write-back to localStorage only as a disaster-recovery cache.
-  // This is NEVER read on startup; it exists so that if the DB is down for
-  // an extended time, the user's last-known data is not completely lost.
-  function persist() {
-    try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {}
-  }
 
   // ── Supabase sync (via /api/portfolio) ───────────────────────────────────
   let _saveTimer = null;
@@ -114,7 +103,6 @@
       if (r.ok) {
         _dbStatus = 'saved';
         _dbSavedAt = Date.now();
-        persist(); // write-back cache after confirmed DB save
       } else {
         _dbStatus = 'error';
         console.warn('[portfolio] db save failed:', r.status);
@@ -138,8 +126,6 @@
     } catch (_) {}
   });
 
-  // Load from DB. If DB has no entry for this ID yet, attempt a one-time
-  // migration from localStorage (covers users who had data before this change).
   async function loadFromCloud(overrideId) {
     const id = overrideId || portfolioId;
     if (!/^[a-zA-Z0-9_-]{6,64}$/.test(id)) return false;
@@ -148,23 +134,7 @@
       if (!r.ok) return false;
       const j = await r.json();
 
-      if (!j || !j.data) {
-        // DB has no record for this ID. Try one-time migration from localStorage.
-        const raw = localStorage.getItem(LS_KEY);
-        if (raw) {
-          try {
-            const local = JSON.parse(raw);
-            if (local && typeof local === 'object') {
-              state = restoreFromSaved(local);
-              await doCloudSave();         // push to DB
-              localStorage.removeItem(LS_KEY); // clear after successful migration
-              subs.forEach(fn => fn());
-              return true;
-            }
-          } catch (_) {}
-        }
-        return false;
-      }
+      if (!j || !j.data) return false;
 
       const saved = JSON.parse(j.data);
       if (!saved || typeof saved !== 'object') return false;
@@ -175,7 +145,6 @@
       }
 
       state = restoreFromSaved(saved);
-      persist(); // update write-back cache
       subs.forEach(fn => fn());
       return true;
     } catch (_) {
@@ -185,8 +154,6 @@
 
   // ── pub/sub ───────────────────────────────────────────────────────────────
   const subs = new Set();
-  // emit() no longer calls persist() directly — persist() is only called after
-  // a confirmed DB save, keeping localStorage and DB in sync.
   function emit() { scheduleCloudSave(); subs.forEach(fn => fn()); }
 
   // ── Currency conversion ───────────────────────────────────────────────────
