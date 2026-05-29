@@ -5,6 +5,14 @@
 const LOGIN_PASSWORD = 'world';
 const AUTH_KEY = 'ptf_auth';
 
+// Derive a stable, deterministic portfolio ID from the password so every device
+// that knows the password always points to the same Supabase row.
+// btoa('ptf:world') → 'cHRmOndvcmxk' — alphanumeric, consistent across devices.
+(function () {
+  const stableId = btoa('ptf:' + LOGIN_PASSWORD).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32);
+  if (window.Store) Store.setPrimaryId(stableId);
+})();
+
 function checkAuth() {
   return sessionStorage.getItem(AUTH_KEY) === '1';
 }
