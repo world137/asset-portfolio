@@ -209,7 +209,9 @@ export default async function handler(req, res) {
       }]);
 
       // 3. Holdings — full replace (delete then bulk insert)
-      await sbDelete('holdings', `user_id=eq.${uid}`);
+      // Guard: never wipe existing holdings unless we have new rows to write.
+      // An empty holdings object is a symptom of a client-side loading race,
+      // not a deliberate "delete everything" action.
       const holdingRows = [];
       for (const [classKey, lots] of Object.entries(p.holdings || {})) {
         for (const lot of (lots || [])) {
@@ -225,7 +227,10 @@ export default async function handler(req, res) {
           });
         }
       }
-      await sbUpsert('holdings', holdingRows);
+      if (holdingRows.length > 0) {
+        await sbDelete('holdings', `user_id=eq.${uid}`);
+        await sbUpsert('holdings', holdingRows);
+      }
 
       // 4. Sectors — full replace
       await sbDelete('sectors', `user_id=eq.${uid}`);

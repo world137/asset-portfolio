@@ -249,7 +249,7 @@ function SummaryView() {
         <div className="card-h">
           <div><div className="t">All Positions</div><div className="s">Click column headers to sort</div></div>
         </div>
-        <div style={{ overflowX: 'auto' }}>
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
           <table className="ptable" style={{ minWidth: 700 }}>
             <thead>
               <tr>
@@ -424,6 +424,38 @@ function SectorView() {
   );
 }
 
+// ── Bottom Tab Navigation (mobile only, ≤760px) ───────────────────────────────
+function BottomNav({ route, setRoute, onOpenDrawer }) {
+  const tabs = [
+    { key: 'dashboard', label: 'Home',     icon: 'home'      },
+    { key: 'networth',  label: 'Net Worth',icon: 'shield'    },
+    { key: 'wallet',    label: 'Wallet',   icon: 'wallet'    },
+    { key: 'summary',   label: 'Analysis', icon: 'pie-chart' },
+    { key: '__more__',  label: 'More',     icon: 'grid'      },
+  ];
+
+  const isActive = (key) => {
+    if (key === '__more__') return false;
+    return route === key;
+  };
+
+  return (
+    <nav className="bottom-nav" aria-label="Main navigation">
+      {tabs.map(t => (
+        <button
+          key={t.key}
+          className={'bottom-tab' + (isActive(t.key) ? ' active' : '')}
+          onClick={() => t.key === '__more__' ? onOpenDrawer() : setRoute(t.key)}
+          aria-label={t.label}
+        >
+          <Icon name={t.icon} size={24} stroke={isActive(t.key) ? 2.2 : 1.7} />
+          <span className="tab-label">{t.label}</span>
+        </button>
+      ))}
+    </nav>
+  );
+}
+
 // ── App root ──────────────────────────────────────────────────────────────────
 function App() {
   useStore();
@@ -469,10 +501,12 @@ function App() {
   if (!dbReady) {
     return (
       <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 14 }}>
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M4 19V9M10 19V5M16 19v-7M22 19H2" />
-        </svg>
-        <div style={{ color: 'var(--fg-2)', fontSize: 14, fontWeight: 500 }}>Loading portfolio…</div>
+        <div style={{ width: 52, height: 52, borderRadius: 14, background: 'linear-gradient(135deg, #5e5ce6, #bf5af2)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 28px rgba(94,92,230,0.45)', animation: 'pulse 1.5s infinite' }}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 19V9M10 19V5M16 19v-7M22 19H2" />
+          </svg>
+        </div>
+        <div style={{ color: 'var(--fg-2)', fontSize: 15, fontWeight: 600, letterSpacing: '-0.01em' }}>Loading portfolio…</div>
       </div>
     );
   }
@@ -528,6 +562,7 @@ function App() {
         </div>
       </div>
       <HoldingModal open={modal.open} classKey={modal.classKey} lot={modal.lot} onClose={closeModal} />
+      <BottomNav route={route} setRoute={setRoute} onOpenDrawer={() => setDrawer(true)} />
     </div>
   );
 }
