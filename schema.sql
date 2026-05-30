@@ -174,6 +174,7 @@ create table if not exists wallet_debts (
   note         text,
   settled      boolean       not null default false,
   settled_date date,
+  installment  jsonb,                    -- { months, interestRate, paidMonths }
   created_at   timestamptz   not null default now()
 );
 
@@ -344,4 +345,16 @@ begin
       raise notice 'error migrating user % — %', r.id, sqlerrm;
     end; -- per-user savepoint
   end loop;
+end $$;
+
+
+-- ── 5. MIGRATIONS (run against existing databases) ───────────────────────────
+-- Add installment column to wallet_debts if it doesn't exist yet.
+do $$ begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_name = 'wallet_debts' and column_name = 'installment'
+  ) then
+    alter table wallet_debts add column installment jsonb;
+  end if;
 end $$;
