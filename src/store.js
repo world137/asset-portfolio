@@ -356,6 +356,14 @@
   function classByKey(k) { return window.ASSET_CLASSES.find(c => c.key === k); }
 
   // Private balance helper — reused by netWorthSummary without going through the public API.
+  function _debtRemainingAmount(d) {
+    if (!d.installment) return d.amount;
+    const { months, interestRate, paidMonths } = d.installment;
+    const totalInterest = d.amount * ((interestRate || 0) / 100) * (months / 12);
+    const monthlyPayment = (d.amount + totalInterest) / months;
+    return monthlyPayment * (months - (paidMonths || 0));
+  }
+
   function _accBal(accountId) {
     const acc = wallet.accounts.find(a => a.id === accountId);
     if (!acc) return 0;
@@ -636,14 +644,21 @@
     },
 
     debtSummary() {
-      let totalLent = 0, totalBorrowed = 0;
+      let totalLent = 0, totalBorrowed = 0, monthlyInstallment = 0;
       for (const d of wallet.debts) {
         if (d.settled) continue;
-        const inDisp = walletToDisplay(d.amount, d.currency);
+        const inDisp = walletToDisplay(_debtRemainingAmount(d), d.currency);
         if (d.direction === 'lent')     totalLent     += inDisp;
         if (d.direction === 'borrowed') totalBorrowed += inDisp;
+        if (d.installment) {
+          const remaining = d.installment.months - (d.installment.paidMonths || 0);
+          if (remaining > 0) {
+            const ti = d.amount * ((d.installment.interestRate || 0) / 100) * (d.installment.months / 12);
+            monthlyInstallment += walletToDisplay((d.amount + ti) / d.installment.months, d.currency);
+          }
+        }
       }
-      return { totalLent, totalBorrowed };
+      return { totalLent, totalBorrowed, monthlyInstallment };
     },
 
     // Net worth: portfolio + cash + credit card debt + borrowed debts
@@ -661,7 +676,7 @@
       }
       for (const d of wallet.debts) {
         if (!d.settled && d.direction === 'borrowed') {
-          borrowedDebt += walletToDisplay(d.amount, d.currency);
+          borrowedDebt += walletToDisplay(_debtRemainingAmount(d), d.currency);
         }
       }
 
@@ -772,6 +787,7 @@
         amount: +data.amount, currency: data.currency || 'THB',
         dateStart: data.dateStart, dateDue: data.dateDue || null,
         note: data.note || '', settled: false, settledDate: null,
+        installment: data.installment || null,
       });
       subs.forEach(fn => fn()); scheduleWalletSave();
     },
@@ -789,6 +805,21 @@
     },
     deleteDebt(id) {
       wallet.debts = wallet.debts.filter(d => d.id !== id);
+      subs.forEach(fn => fn()); scheduleWalletSave();
+    },
+    payInstallmentMonth(id) {
+      const i = wallet.debts.findIndex(d => d.id === id);
+      if (i < 0) return;
+      const debt = wallet.debts[i];
+      if (!debt.installment) return;
+      const paid = (debt.installment.paidMonths || 0) + 1;
+      const done = paid >= debt.installment.months;
+      wallet.debts[i] = {
+        ...debt,
+        installment: { ...debt.installment, paidMonths: paid },
+        settled: done || debt.settled,
+        settledDate: done && !debt.settled ? new Date().toISOString().slice(0, 10) : debt.settledDate,
+      };
       subs.forEach(fn => fn()); scheduleWalletSave();
     },
 

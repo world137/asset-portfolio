@@ -89,20 +89,22 @@ function TransactionLog() {
       </div>
 
       {/* Filters */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-        <div className="layoutseg">
-          {['all', 'income', 'expense', 'transfer'].map(fl => (
-            <button key={fl} className={filterFlow === fl ? 'on' : ''} onClick={() => setFilterFlow(fl)}>
-              {fl.charAt(0).toUpperCase() + fl.slice(1)}
-            </button>
-          ))}
+      <div className="filter-row" style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', flexShrink: 0, maxWidth: '100%' }}>
+          <div className="layoutseg" style={{ whiteSpace: 'nowrap' }}>
+            {['all', 'income', 'expense', 'transfer'].map(fl => (
+              <button key={fl} className={filterFlow === fl ? 'on' : ''} onClick={() => setFilterFlow(fl)}>
+                {fl.charAt(0).toUpperCase() + fl.slice(1)}
+              </button>
+            ))}
+          </div>
         </div>
-        <select className="input" style={{ height: 32, fontSize: 12, padding: '0 8px', minWidth: 140 }}
+        <select className="input" style={{ height: 32, fontSize: 12, padding: '0 8px', minWidth: 120, flex: '1 1 120px' }}
                 value={filterAccount} onChange={e => setFilterAccount(e.target.value)}>
           <option value="all">All accounts</option>
           {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
         </select>
-        <select className="input" style={{ height: 32, fontSize: 12, padding: '0 8px', minWidth: 120 }}
+        <select className="input" style={{ height: 32, fontSize: 12, padding: '0 8px', minWidth: 100, flex: '1 1 100px' }}
                 value={filterMonth} onChange={e => setFilterMonth(e.target.value)}>
           <option value="">All time</option>
           {months.map(m => <option key={m} value={m}>{m}</option>)}

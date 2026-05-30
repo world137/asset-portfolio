@@ -155,16 +155,18 @@ function SummaryView() {
 
   return (
     <div className="page">
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         <div>
           <h1 className="t-h1" style={{ margin: '0 0 2px' }}>Cost &amp; Price Summary</h1>
           <div className="t-small">{rows.length} positions across all asset classes · valued in {disp}</div>
         </div>
-        <div className="layoutseg">
-          <button className={filterClass === 'all' ? 'on' : ''} onClick={() => setFilterClass('all')}>All</button>
-          {window.ASSET_CLASSES.map(c => (
-            <button key={c.key} className={filterClass === c.key ? 'on' : ''} onClick={() => setFilterClass(c.key)}>{c.short}</button>
-          ))}
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', maxWidth: '100%' }}>
+          <div className="layoutseg" style={{ whiteSpace: 'nowrap' }}>
+            <button className={filterClass === 'all' ? 'on' : ''} onClick={() => setFilterClass('all')}>All</button>
+            {window.ASSET_CLASSES.map(c => (
+              <button key={c.key} className={filterClass === c.key ? 'on' : ''} onClick={() => setFilterClass(c.key)}>{c.short}</button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -248,7 +250,7 @@ function SummaryView() {
           <div><div className="t">All Positions</div><div className="s">Click column headers to sort</div></div>
         </div>
         <div style={{ overflowX: 'auto' }}>
-          <table className="ptable" style={{ minWidth: 900 }}>
+          <table className="ptable" style={{ minWidth: 700 }}>
             <thead>
               <tr>
                 <th>Class</th>
@@ -502,7 +504,7 @@ function App() {
               : <React.Fragment>{Store.get().priceMode === 'api' ? 'Live' : 'Crypto+FX'} · <b>{window.timeAgo(Store.get().lastPriceSync)}</b></React.Fragment>}
           </span>
           <Button variant="secondary" size="sm" icon="history" onClick={refresh} disabled={syncing}>
-            {syncing ? 'Syncing' : 'Refresh'}
+            <span className="tb-refresh-text">{syncing ? 'Syncing' : 'Refresh'}</span>
           </Button>
           <div className="pill-toggle">
             <button className={settings.displayCcy === 'THB' ? 'on' : ''} onClick={() => Store.setSetting('displayCcy', 'THB')}>฿ THB</button>

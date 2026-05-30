@@ -1,6 +1,14 @@
 /* eslint-disable */
 /* DebtTracker.jsx — Lend & Borrow tracker */
 
+function calcInstallment(amount, months, annualRate) {
+  const a = +amount, m = +months, r = +annualRate;
+  if (!a || a <= 0 || !m || m <= 0) return null;
+  const totalInterest = a * (r / 100) * (m / 12);
+  const monthlyPayment = (a + totalInterest) / m;
+  return { monthlyPayment, totalInterest, totalPayable: a + totalInterest };
+}
+
 function DebtTracker() {
   useStore();
   const settings = Store.settings();
@@ -20,8 +28,9 @@ function DebtTracker() {
 
   const net = summary.totalLent - summary.totalBorrowed;
 
-  // Check overdue
   const today = new Date().toISOString().slice(0, 10);
+
+  const hasInstallments = outstanding.some(d => d.installment);
 
   return (
     <div className="page">
@@ -56,9 +65,9 @@ function DebtTracker() {
           </div>
         </div>
         <div className="kpi">
-          <div className="lab">Outstanding</div>
-          <div className="big">{outstanding.length}</div>
-          <div className="delta" style={{ color: 'var(--fg-3)' }}>{settled.length} settled</div>
+          <div className="lab">Monthly Installment</div>
+          <div className="big"><span className="ccy">{sym}</span>{window.fmtBig(summary.monthlyInstallment)}</div>
+          <div className="delta" style={{ color: 'var(--fg-3)' }}>{outstanding.length} outstanding · {settled.length} settled</div>
         </div>
       </div>
 
@@ -77,13 +86,13 @@ function DebtTracker() {
           <table className="ptable">
             <thead>
               <tr>
-                <th style={{ width: 80 }}>Type</th>
+                <th style={{ width: 88 }}>Type</th>
                 <th>Person</th>
                 <th className="num">Amount</th>
                 <th style={{ width: 90 }}>Start</th>
-                <th style={{ width: 90 }}>Due / Settled</th>
-                <th>Note</th>
-                <th style={{ width: 32 }} />
+                <th style={{ width: 100 }}>Due / Settled</th>
+                <th>Note {hasInstallments && tab === 'outstanding' ? '/ Progress' : ''}</th>
+                <th style={{ width: 64 }} />
               </tr>
             </thead>
             <tbody>
@@ -99,6 +108,10 @@ function DebtTracker() {
               {displayed.map(d => {
                 const isLent    = d.direction === 'lent';
                 const isOverdue = !d.settled && d.dateDue && d.dateDue < today;
+                const instCalc  = d.installment ? calcInstallment(d.amount, d.installment.months, d.installment.interestRate) : null;
+                const paidMo    = d.installment ? (d.installment.paidMonths || 0) : 0;
+                const totalMo   = d.installment ? d.installment.months : 0;
+                const canPay    = d.installment && !d.settled && paidMo < totalMo;
                 return (
                   <tr key={d.id} onClick={() => { setEditDebt(d); setModalOpen(true); }} style={{ cursor: 'pointer' }}>
                     <td>
@@ -109,10 +122,18 @@ function DebtTracker() {
                             }}>
                         {isLent ? 'Lent' : 'Borrowed'}
                       </span>
+                      {d.installment && (
+                        <div style={{ fontSize: 10, color: 'var(--fg-4)', marginTop: 3 }}>Installment</div>
+                      )}
                     </td>
                     <td style={{ fontWeight: 500 }}>{d.counterparty}</td>
                     <td className="num" style={{ fontWeight: 600, color: isLent ? 'var(--green-600)' : 'var(--red-600)' }}>
                       {window.fmtCcy(d.amount, d.currency)}
+                      {instCalc && (
+                        <div style={{ fontWeight: 400, fontSize: 11, color: 'var(--fg-3)', marginTop: 2 }}>
+                          {window.fmtCcy(instCalc.monthlyPayment, d.currency)}/mo
+                        </div>
+                      )}
                     </td>
                     <td style={{ color: 'var(--fg-3)', fontSize: 12 }}>{d.dateStart}</td>
                     <td style={{ fontSize: 12 }}>
@@ -126,10 +147,41 @@ function DebtTracker() {
                         <span style={{ color: 'var(--fg-4)' }}>—</span>
                       )}
                     </td>
-                    <td style={{ color: 'var(--fg-3)', fontSize: 12 }}>{d.note || ''}</td>
-                    <td>
-                      <Button variant="ghost" size="sm" icon="edit"
-                              onClick={e => { e.stopPropagation(); setEditDebt(d); setModalOpen(true); }} />
+                    <td style={{ color: 'var(--fg-3)', fontSize: 12 }}>
+                      {d.note || ''}
+                      {d.installment && (
+                        <div style={{ marginTop: d.note ? 4 : 0 }}>
+                          <div style={{ fontSize: 11, color: 'var(--fg-4)', marginBottom: 3 }}>
+                            {paidMo}/{totalMo} months paid
+                          </div>
+                          <div style={{ height: 4, background: 'var(--bg-3)', borderRadius: 2, width: 72, overflow: 'hidden' }}>
+                            <div style={{
+                              height: '100%',
+                              width: totalMo > 0 ? `${(paidMo / totalMo) * 100}%` : '0%',
+                              background: isLent ? 'var(--green-600)' : 'var(--red-600)',
+                              borderRadius: 2,
+                            }} />
+                          </div>
+                        </div>
+                      )}
+                    </td>
+                    <td onClick={e => e.stopPropagation()}>
+                      <div style={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
+                        {canPay && (
+                          <Button variant="ghost" size="sm"
+                                  title={`Pay month ${paidMo + 1} of ${totalMo}`}
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    if (confirm(`Record payment ${paidMo + 1}/${totalMo} for ${d.counterparty}?`)) {
+                                      Store.payInstallmentMonth(d.id);
+                                    }
+                                  }}>
+                            Pay
+                          </Button>
+                        )}
+                        <Button variant="ghost" size="sm" icon="edit"
+                                onClick={e => { e.stopPropagation(); setEditDebt(d); setModalOpen(true); }} />
+                      </div>
                     </td>
                   </tr>
                 );

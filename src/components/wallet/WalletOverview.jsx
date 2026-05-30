@@ -114,7 +114,7 @@ function WalletOverview() {
           {regularAccounts.length > 0 && (
             <div style={{ marginBottom: 20 }}>
               <div className="grp-h" style={{ marginBottom: 10 }}>Bank, Cash &amp; E-Wallet</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(260px, 100%), 1fr))', gap: 14 }}>
                 {regularAccounts.map(a => (
                   <AccountCard key={a.id} account={a} balance={a.balance} onEdit={() => setEditAcc(a)} />
                 ))}
@@ -124,7 +124,7 @@ function WalletOverview() {
           {creditCards.length > 0 && (
             <div>
               <div className="grp-h" style={{ marginBottom: 10 }}>Credit Cards</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(260px, 100%), 1fr))', gap: 14 }}>
                 {creditCards.map(a => (
                   <AccountCard key={a.id} account={a} balance={a.balance} onEdit={() => setEditAcc(a)} />
                 ))}

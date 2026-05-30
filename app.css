@@ -239,6 +239,7 @@ body { background: var(--bg-app); display: block; padding: 0; }
   .tb .menu { display: inline-flex; }
   .tb { padding: 0 12px; gap: 6px; }
   .tb .sync { display: none; }
+  .tb h2 { font-size: 15px; flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .page { padding: 16px 14px 90px; }
   .kpis { grid-template-columns: repeat(2, 1fr); gap: 10px; }
   .kpi { padding: 13px 14px; }
@@ -247,19 +248,36 @@ body { background: var(--bg-app); display: block; padding: 0; }
   .donut { align-self: center; }
   .ptable { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap; }
   .mgrid { grid-template-columns: 1fr; }
-  .tb h2 { font-size: 15px; }
   .pill-toggle button { padding: 5px 9px; font-size: 11px; }
   .lotinner { padding: 4px 10px 10px 16px; }
   .classgrid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
   .search-inp { min-width: 0; flex: 1; }
+  /* Scrollable segmented controls when many buttons */
+  .layoutseg { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; flex-shrink: 1; }
+  /* Card headers wrap on small screens */
+  .card-h { flex-wrap: wrap; row-gap: 8px; }
+  /* Toolbar2 wraps cleanly */
+  .toolbar2 { flex-wrap: wrap; }
+}
+/* ── 600px: compact topbar ───────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .tb-refresh-text { display: none; }
+  .tb { gap: 4px; }
 }
 @media (max-width: 480px) {
   .kpis { grid-template-columns: repeat(2, 1fr); }
   .kpi .big { font-size: 18px; }
+  .kpi .lab { letter-spacing: 0.04em; }
   .pill-toggle { display: none; }
+  /* Stack filter rows on very small screens */
+  .filter-row { flex-direction: column !important; align-items: stretch !important; }
+  .filter-row > * { width: 100%; }
+  .filter-row .layoutseg { width: 100%; justify-content: stretch; }
+  .filter-row .layoutseg button { flex: 1; }
 }
 @media (max-width: 420px) {
   .kpis { grid-template-columns: 1fr; }
+  .page { padding: 12px 10px 90px; }
 }
 
 /* ============================================================================
