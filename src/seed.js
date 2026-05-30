@@ -64,5 +64,36 @@ window.SEED_SECTORS = {
   'gold:GOLD': 'Commodity',
 };
 
-// ── Seed FX rate: 1 USD = N THB (overwritten by live refresh) ─────────────────
+// ── Seed FX rates (overwritten by live refresh) ───────────────────────────────
 window.SEED_FX_USDTHB = 34.5;
+window.SEED_FX_JPYTHB = 0.23;   // approx 1 JPY ≈ 0.23 THB
+window.SEED_FX_KRWTHB = 0.026;  // approx 1 KRW ≈ 0.026 THB
+
+// ── Wallet: account types ─────────────────────────────────────────────────────
+window.ACCOUNT_TYPES = [
+  { key: 'bank',        label: 'Bank Account' },
+  { key: 'cash',        label: 'Cash' },
+  { key: 'credit_card', label: 'Credit Card' },
+  { key: 'ewallet',     label: 'E-Wallet' },
+];
+
+// ── Wallet: supported currencies ──────────────────────────────────────────────
+window.WALLET_CURRENCIES = ['THB', 'USD', 'JPY', 'KRW'];
+
+// ── Wallet: default account colors ───────────────────────────────────────────
+window.ACCOUNT_COLORS = ['#2962ab', '#1f7a4d', '#9a6b1f', '#7c3aed', '#0891b2', '#db2777'];
+
+// ── Wallet: default categories ────────────────────────────────────────────────
+window.DEFAULT_WALLET_CATEGORIES = [
+  { id: 'cat_food',      name: 'Food & Drink',  flow: 'expense', icon: 'layers',        color: '#f59e0b' },
+  { id: 'cat_transport', name: 'Transport',     flow: 'expense', icon: 'trending-down', color: '#3b82f6' },
+  { id: 'cat_shopping',  name: 'Shopping',      flow: 'expense', icon: 'list',          color: '#ec4899' },
+  { id: 'cat_bills',     name: 'Bills',         flow: 'expense', icon: 'file',          color: '#ef4444' },
+  { id: 'cat_health',    name: 'Health',        flow: 'expense', icon: 'shield',        color: '#10b981' },
+  { id: 'cat_travel',    name: 'Travel',        flow: 'expense', icon: 'layers',        color: '#8b5cf6' },
+  { id: 'cat_other_exp', name: 'Other',         flow: 'expense', icon: 'dot',           color: '#6b7280' },
+  { id: 'cat_salary',    name: 'Salary',        flow: 'income',  icon: 'check',         color: '#10b981' },
+  { id: 'cat_invest_in', name: 'Investment',    flow: 'income',  icon: 'trending-down', color: '#2962ab' },
+  { id: 'cat_gift',      name: 'Gift',          flow: 'income',  icon: 'success',       color: '#f59e0b' },
+  { id: 'cat_other_inc', name: 'Other Income',  flow: 'income',  icon: 'dot',           color: '#6b7280' },
+];

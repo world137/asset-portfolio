@@ -94,9 +94,12 @@ function buildState(settingsRows, holdingRows, sectorRows, snapshotRows, saleRow
   const sectorsMap = {};
   for (const s of sectorRows) sectorsMap[`${s.class_key}:${s.name}`] = s.sector;
 
-  const fx = fxRows.length
-    ? { USDTHB: parseFloat(fxRows[0].rate), at: null }
-    : { USDTHB: null, at: null };
+  const fx = { USDTHB: null, JPYTHB: null, KRWTHB: null, at: null };
+  for (const row of fxRows) {
+    if (row.pair === 'USDTHB') fx.USDTHB = parseFloat(row.rate);
+    else if (row.pair === 'JPYTHB') fx.JPYTHB = parseFloat(row.rate);
+    else if (row.pair === 'KRWTHB') fx.KRWTHB = parseFloat(row.rate);
+  }
 
   const s = settingsRows[0] || {};
   const settings = {
@@ -259,15 +262,12 @@ export default async function handler(req, res) {
       }));
       await sbUpsert('sales', saleRows);
 
-      // 7. FX rate
-      if (p.fx?.USDTHB) {
-        await sbUpsert('fx_rates', [{
-          user_id:     id,
-          pair:        'USDTHB',
-          rate:        p.fx.USDTHB,
-          recorded_at: now,
-        }]);
-      }
+      // 7. FX rates (USDTHB, JPYTHB, KRWTHB)
+      const fxPairs = ['USDTHB', 'JPYTHB', 'KRWTHB'];
+      const fxRows = fxPairs.filter(pair => p.fx?.[pair]).map(pair => ({
+        user_id: id, pair, rate: p.fx[pair], recorded_at: now,
+      }));
+      if (fxRows.length) await sbUpsert('fx_rates', fxRows);
 
       return res.status(200).json({ ok: true });
     } catch (e) {

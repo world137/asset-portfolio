@@ -38,6 +38,14 @@ window.fmtPrice = (n, ccy) => {
   return (window.ccySymbol(ccy) || '') + n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
 };
 
+// Multi-currency formatter — 0 decimals for JPY/KRW, 2 for THB/USD.
+window.fmtCcy = (n, ccy) => {
+  if (n == null || isNaN(n)) return '—';
+  const dec = (ccy === 'JPY' || ccy === 'KRW') ? 0 : 2;
+  const sym = ccy === 'USD' ? '$' : ccy === 'JPY' ? '¥' : ccy === 'KRW' ? '₩' : '฿';
+  return sym + n.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+};
+
 window.timeAgo = (ts) => {
   if (!ts) return 'never';
   const s = Math.floor((Date.now() - ts) / 1000);

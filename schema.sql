@@ -123,6 +123,76 @@ create policy "deny anon" on fx_rates   for all using (false);
 create policy "deny anon" on sales      for all using (false);
 
 
+-- ── WALLET TABLES ────────────────────────────────────────────────────────────
+
+create table if not exists wallet_accounts (
+  id           text          primary key,
+  user_id      text          not null references users(id) on delete cascade,
+  name         text          not null,
+  type         text          not null default 'bank',  -- 'bank' | 'cash' | 'credit_card' | 'ewallet'
+  currency     text          not null default 'THB',   -- 'THB' | 'USD' | 'JPY' | 'KRW'
+  color        text,
+  initial_bal  numeric(18,2) not null default 0,
+  credit_limit numeric(18,2),
+  sort_order   int           not null default 0,
+  archived     boolean       not null default false,
+  created_at   timestamptz   not null default now()
+);
+
+create table if not exists wallet_categories (
+  id       text primary key,
+  user_id  text not null references users(id) on delete cascade,
+  name     text not null,
+  flow     text not null,   -- 'income' | 'expense'
+  icon     text,
+  color    text
+);
+
+create table if not exists wallet_transactions (
+  id            text          primary key,
+  user_id       text          not null references users(id) on delete cascade,
+  account_id    text          not null,
+  date          date          not null,
+  amount        numeric(18,2) not null,
+  flow          text          not null,  -- 'income' | 'expense' | 'transfer'
+  category_id   text,
+  note          text,
+  to_account_id text,
+  fx_rate       numeric(12,6),
+  created_at    timestamptz   not null default now()
+);
+
+create table if not exists wallet_debts (
+  id           text          primary key,
+  user_id      text          not null references users(id) on delete cascade,
+  direction    text          not null,   -- 'lent' | 'borrowed'
+  counterparty text          not null,
+  amount       numeric(18,2) not null,
+  currency     text          not null default 'THB',
+  date_start   date          not null,
+  date_due     date,
+  note         text,
+  settled      boolean       not null default false,
+  settled_date date,
+  created_at   timestamptz   not null default now()
+);
+
+create index if not exists wallet_accounts_user_idx     on wallet_accounts     (user_id);
+create index if not exists wallet_categories_user_idx   on wallet_categories   (user_id);
+create index if not exists wallet_txn_user_date_idx     on wallet_transactions (user_id, date);
+create index if not exists wallet_debts_user_idx        on wallet_debts        (user_id);
+
+alter table wallet_accounts     enable row level security;
+alter table wallet_categories   enable row level security;
+alter table wallet_transactions enable row level security;
+alter table wallet_debts        enable row level security;
+
+create policy "deny anon" on wallet_accounts     for all using (false);
+create policy "deny anon" on wallet_categories   for all using (false);
+create policy "deny anon" on wallet_transactions for all using (false);
+create policy "deny anon" on wallet_debts        for all using (false);
+
+
 -- ── 4. MIGRATION from old blob table ─────────────────────────────────────────
 -- Run this block AFTER the tables above are created and ONLY if you had the
 -- old `portfolios` table with a single `data text` column.
