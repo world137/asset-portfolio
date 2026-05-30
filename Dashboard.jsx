@@ -53,6 +53,40 @@ function AllocChart({ totals, settings, hot, setHot, onOpenClass, size }) {
   );
 }
 
+function CostChart({ totals, settings, hot, setHot, onOpenClass, size }) {
+  const segs = totals.classes.map(c => ({ key: c.key, label: c.label, value: c.cost, color: c.color }));
+  const disp = settings.displayCcy;
+  const sym = window.ccySymbol(disp);
+  return (
+    <div className="chartwrap">
+      <Donut
+        segments={segs} size={size || 196} style={settings.chartStyle} hot={hot} onHover={setHot}
+        center={
+          <React.Fragment>
+            <div className="c-lab">Total Cost</div>
+            <div className="c-val">{sym}{window.fmtBig(totals.cost)}</div>
+          </React.Fragment>
+        }
+      />
+      <div className="legend">
+        {segs.map((s, i) => {
+          const pc = totals.cost ? (s.value / totals.cost) * 100 : 0;
+          return (
+            <div className="row" key={s.key}
+                 onMouseEnter={() => setHot(i)} onMouseLeave={() => setHot(null)}
+                 onClick={() => onOpenClass(s.key)}>
+              <span className="sw" style={{ background: s.color }} />
+              <span className="nm">{s.label}</span>
+              <span className="vv">{sym}{window.fmtBig(s.value)}</span>
+              <span className="pc">{pc.toFixed(1)}%</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function KpiRow({ totals, settings }) {
   const disp = settings.displayCcy;
   const sym = window.ccySymbol(disp);
@@ -172,16 +206,22 @@ function Dashboard({ onOpenClass }) {
       <KpiRow totals={totals} settings={settings} />
 
       {layout === 'overview' && (
-        <div className="dash dash-2col">
-          <div className="card">
-            <div className="card-h"><div><div className="t">Asset Allocation</div></div></div>
-            <div className="card-b"><AllocChart totals={totals} settings={settings} hot={hot} setHot={setHot} onOpenClass={onOpenClass} /></div>
+        <React.Fragment>
+          <div className="dash dash-2col">
+            <div className="card">
+              <div className="card-h"><div><div className="t">Cost by Asset Type</div><div className="s">Total invested</div></div></div>
+              <div className="card-b"><CostChart totals={totals} settings={settings} hot={hot} setHot={setHot} onOpenClass={onOpenClass} /></div>
+            </div>
+            <div className="card">
+              <div className="card-h"><div><div className="t">Current Value by Asset Type</div><div className="s">Market value today</div></div></div>
+              <div className="card-b"><AllocChart totals={totals} settings={settings} hot={hot} setHot={setHot} onOpenClass={onOpenClass} /></div>
+            </div>
           </div>
-          <div className="card">
-            <div className="card-h"><div><div className="t">By Asset Class</div></div></div>
+          <div className="card" style={{ marginTop: 16 }}>
+            <div className="card-h"><div><div className="t">By Asset Class</div><div className="s">Click a row to open holdings</div></div></div>
             <ClassTable totals={totals} settings={settings} onOpenClass={onOpenClass} hot={hot} setHot={setHot} />
           </div>
-        </div>
+        </React.Fragment>
       )}
 
       {layout === 'compact' && (
@@ -227,3 +267,4 @@ function Dashboard({ onOpenClass }) {
 
 window.Dashboard = Dashboard;
 window.AllocChart = AllocChart;
+window.CostChart = CostChart;

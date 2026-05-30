@@ -94,6 +94,7 @@ function SummaryView() {
   const [sortBy, setSortBy] = React.useState('value');
   const [sortDir, setSortDir] = React.useState(-1);
   const [filterClass, setFilterClass] = React.useState('all');
+  const [hot, setHot] = React.useState(null);
 
   const rows = [];
   for (const cls of window.ASSET_CLASSES) {
@@ -137,6 +138,26 @@ function SummaryView() {
 
   const filtTotals = sorted.reduce((a, r) => ({ cost: a.cost + r.cost, value: a.value + r.value, profit: a.profit + r.profit }), { cost: 0, value: 0, profit: 0 });
   const filtPct = filtTotals.cost ? (filtTotals.profit / filtTotals.cost) * 100 : 0;
+
+  const secPalette = ['#9a6b1f', '#2962ab', '#1f7a4d', '#b6862f', '#3b8bd0', '#c79a3a', '#8a6310', '#5a6677', '#b43a3a', '#2c3a52', '#7a5012', '#1f4a85'];
+  const secMap = new Map();
+  for (const r of filtered) {
+    const key = r.sector || '—';
+    const e = secMap.get(key) || { cost: 0, value: 0 };
+    e.cost  += r.cost;
+    e.value += r.value;
+    secMap.set(key, e);
+  }
+  const secEntries = [...secMap.entries()].sort((a, b) => b[1].value - a[1].value);
+  const totalSecValue = secEntries.reduce((a, [, e]) => a + e.value, 0) || 1;
+  const totalSecCost  = secEntries.reduce((a, [, e]) => a + e.cost,  0) || 1;
+  const secSegs = secEntries.map(([label, e], i) => ({
+    label, value: e.value, cost: e.cost,
+    color: secPalette[i % secPalette.length],
+    alloc: (e.value / totalSecValue) * 100,
+    costAlloc: (e.cost / totalSecCost) * 100,
+  }));
+  const secCostSegs = secSegs.map(s => ({ ...s, value: s.cost }));
 
   return (
     <div className="page">
@@ -184,6 +205,49 @@ function SummaryView() {
           })()}
         </div>
       </div>
+
+      {secSegs.length > 0 && (
+      <div className="dash dash-2col" style={{ marginBottom: 16 }}>
+        <div className="card">
+          <div className="card-h"><div><div className="t">Cost by Sector</div><div className="s">{filterClass === 'all' ? 'All classes' : (window.ASSET_CLASSES.find(c => c.key === filterClass) || {}).label} · total invested</div></div></div>
+          <div className="card-b">
+            <div className="chartwrap">
+              <Donut segments={secCostSegs} size={196} style={settings.chartStyle} hot={hot} onHover={setHot}
+                     center={<React.Fragment><div className="c-lab">Cost</div><div className="c-val">{sym}{window.fmtBig(totalSecCost)}</div></React.Fragment>} />
+              <div className="legend">
+                {secSegs.map((s, i) => (
+                  <div className="row" key={s.label} onMouseEnter={() => setHot(i)} onMouseLeave={() => setHot(null)}>
+                    <span className="sw" style={{ background: s.color }} />
+                    <span className="nm">{s.label}</span>
+                    <span className="vv">{sym}{window.fmtBig(s.cost)}</span>
+                    <span className="pc">{s.costAlloc.toFixed(1)}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="card">
+          <div className="card-h"><div><div className="t">Current Value by Sector</div><div className="s">Market value today</div></div></div>
+          <div className="card-b">
+            <div className="chartwrap">
+              <Donut segments={secSegs} size={196} style={settings.chartStyle} hot={hot} onHover={setHot}
+                     center={<React.Fragment><div className="c-lab">Value</div><div className="c-val">{sym}{window.fmtBig(totalSecValue)}</div></React.Fragment>} />
+              <div className="legend">
+                {secSegs.map((s, i) => (
+                  <div className="row" key={s.label} onMouseEnter={() => setHot(i)} onMouseLeave={() => setHot(null)}>
+                    <span className="sw" style={{ background: s.color }} />
+                    <span className="nm">{s.label}</span>
+                    <span className="vv">{sym}{window.fmtBig(s.value)}</span>
+                    <span className="pc">{s.alloc.toFixed(1)}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      )}
 
       <div className="card">
         <div className="card-h">
@@ -263,9 +327,19 @@ function SummaryView() {
 function SectorView({ onOpenClass }) {
   const settings = Store.settings();
   const secs = Store.sectorTotals();
-  const total = secs.reduce((a, s) => a + s.value, 0) || 1;
+  const totalValue = secs.reduce((a, s) => a + s.value, 0) || 1;
+  const totalCost = secs.reduce((a, s) => a + s.cost, 0) || 1;
   const palette = ['#9a6b1f', '#2962ab', '#1f7a4d', '#b6862f', '#3b8bd0', '#c79a3a', '#8a6310', '#5a6677', '#b43a3a', '#2c3a52', '#7a5012', '#1f4a85'];
-  const segs = secs.map((s, i) => ({ label: s.sector, value: s.value, color: palette[i % palette.length], alloc: (s.value / total) * 100, origIdx: i }));
+  const segs = secs.map((s, i) => ({
+    label: s.sector, value: s.value, cost: s.cost,
+    color: palette[i % palette.length],
+    alloc: (s.value / totalValue) * 100,
+    costAlloc: (s.cost / totalCost) * 100,
+    profit: s.value - s.cost,
+    pct: s.cost ? ((s.value - s.cost) / s.cost) * 100 : 0,
+    origIdx: i,
+  }));
+  const costSegs = segs.map(s => ({ ...s, value: s.cost }));
   const [hot, setHot] = React.useState(null);
   const sym = window.ccySymbol(settings.displayCcy);
   const [sortBy, setSortBy] = React.useState(null);
@@ -290,11 +364,29 @@ function SectorView({ onOpenClass }) {
       <h1 className="t-h1" style={{ margin: '0 0 2px' }}>Allocation by Sector</h1>
       <div className="t-small" style={{ marginBottom: 20 }}>Across every asset class, valued in {settings.displayCcy}. Edit a holding's sector from its class page.</div>
       <div className="dash dash-2col">
-        <div className="card"><div className="card-h"><div className="t">Sector Mix</div></div>
+        <div className="card"><div className="card-h"><div className="t">Cost by Sector</div><div className="s">Total invested</div></div>
+          <div className="card-b">
+            <div className="chartwrap">
+              <Donut segments={costSegs} size={196} style={settings.chartStyle} hot={hot} onHover={setHot}
+                     center={<React.Fragment><div className="c-lab">Cost</div><div className="c-val">{sym}{window.fmtBig(totalCost)}</div></React.Fragment>} />
+              <div className="legend">
+                {segs.map((s, i) => (
+                  <div className="row" key={s.label} onMouseEnter={() => setHot(i)} onMouseLeave={() => setHot(null)}>
+                    <span className="sw" style={{ background: s.color }} />
+                    <span className="nm">{s.label}</span>
+                    <span className="vv">{sym}{window.fmtBig(s.cost)}</span>
+                    <span className="pc">{s.costAlloc.toFixed(1)}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="card"><div className="card-h"><div className="t">Current Value by Sector</div><div className="s">Market value today</div></div>
           <div className="card-b">
             <div className="chartwrap">
               <Donut segments={segs} size={196} style={settings.chartStyle} hot={hot} onHover={setHot}
-                     center={<React.Fragment><div className="c-lab">Sectors</div><div className="c-val">{secs.length}</div></React.Fragment>} />
+                     center={<React.Fragment><div className="c-lab">Value</div><div className="c-val">{sym}{window.fmtBig(totalValue)}</div></React.Fragment>} />
               <div className="legend">
                 {segs.map((s, i) => (
                   <div className="row" key={s.label} onMouseEnter={() => setHot(i)} onMouseLeave={() => setHot(null)}>
@@ -308,25 +400,31 @@ function SectorView({ onOpenClass }) {
             </div>
           </div>
         </div>
-        <div className="card"><div className="card-h"><div className="t">Sector Breakdown</div><div className="s">Click headers to sort</div></div>
-          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-          <table className="ptable">
-            <thead><tr>
-              <SortTh col="label" label="Sector" />
-              <SortTh col="alloc" label="Weight" width={160} />
-              <SortTh col="value" label="Value" right />
-            </tr></thead>
-            <tbody>
-              {sortedSegs.map((s) => (
-                <tr key={s.label} onMouseEnter={() => setHot(s.origIdx)} onMouseLeave={() => setHot(null)}>
-                  <td><span className="tk"><span className="d" style={{ width: 10, height: 10, borderRadius: 3, background: s.color, display: 'inline-block' }} />{s.label}</span></td>
-                  <td><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><div className="minibar" style={{ flex: 1 }}><span style={{ width: s.alloc + '%', background: s.color }} /></div><span style={{ font: '500 11.5px/1 var(--font-mono)', color: 'var(--fg-3)', minWidth: 38, textAlign: 'right' }}>{s.alloc.toFixed(1)}%</span></div></td>
-                  <td className="num">{sym}{window.fmtBig(s.value)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          </div>
+      </div>
+      <div className="card" style={{ marginTop: 16 }}><div className="card-h"><div className="t">Sector Breakdown</div><div className="s">Click headers to sort</div></div>
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <table className="ptable">
+          <thead><tr>
+            <SortTh col="label" label="Sector" />
+            <SortTh col="alloc" label="Weight" width={140} />
+            <SortTh col="cost" label="Cost" right />
+            <SortTh col="value" label="Value" right />
+            <SortTh col="profit" label="Gain/Loss" right />
+            <SortTh col="pct" label="Return" right />
+          </tr></thead>
+          <tbody>
+            {sortedSegs.map((s) => (
+              <tr key={s.label} onMouseEnter={() => setHot(s.origIdx)} onMouseLeave={() => setHot(null)}>
+                <td><span className="tk"><span className="d" style={{ width: 10, height: 10, borderRadius: 3, background: s.color, display: 'inline-block' }} />{s.label}</span></td>
+                <td><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><div className="minibar" style={{ flex: 1 }}><span style={{ width: s.alloc + '%', background: s.color }} /></div><span style={{ font: '500 11.5px/1 var(--font-mono)', color: 'var(--fg-3)', minWidth: 38, textAlign: 'right' }}>{s.alloc.toFixed(1)}%</span></div></td>
+                <td className="num">{sym}{window.fmtBig(s.cost)}</td>
+                <td className="num">{sym}{window.fmtBig(s.value)}</td>
+                <td className="num" style={{ color: s.profit >= 0 ? 'var(--green)' : 'var(--red)' }}>{s.profit >= 0 ? '+' : ''}{sym}{window.fmtBig(s.profit)}</td>
+                <td className="num" style={{ color: s.pct >= 0 ? 'var(--green)' : 'var(--red)' }}>{s.pct >= 0 ? '+' : ''}{s.pct.toFixed(2)}%</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
         </div>
       </div>
     </div>

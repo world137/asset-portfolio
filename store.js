@@ -239,11 +239,15 @@
       for (const p of positions(cls.key)) {
         const sec = p.sector || '—';
         const v = toDisplay(p.value, cls.ccy);
-        map.set(sec, (map.get(sec) || 0) + v);
+        const c = toDisplay(p.cost, cls.ccy);
+        const entry = map.get(sec) || { value: 0, cost: 0 };
+        entry.value += v;
+        entry.cost += c;
+        map.set(sec, entry);
       }
     }
-    return [...map.entries()].map(([sector, value]) => ({ sector, value }))
-      .filter(s => s.value > 0).sort((a, b) => b.value - a.value);
+    return [...map.entries()].map(([sector, e]) => ({ sector, value: e.value, cost: e.cost }))
+      .filter(s => s.value > 0 || s.cost > 0).sort((a, b) => b.value - a.value);
   }
 
   function classByKey(k) { return window.ASSET_CLASSES.find(c => c.key === k); }
