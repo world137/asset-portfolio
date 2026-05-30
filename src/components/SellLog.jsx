@@ -3,39 +3,36 @@
 
 function SellLogView() {
   useStore();
-  const settings = Store.settings();
-  const disp = settings.displayCcy;
-  const sym = window.ccySymbol(disp);
+  const settings  = Store.settings();
+  const disp      = settings.displayCcy;
+  const sym       = window.ccySymbol(disp);
 
-  // ── form state ──────────────────────────────────────────────────────────
-  const [classKey, setClassKey] = React.useState(window.ASSET_CLASSES[0].key);
-  const [name, setName]         = React.useState('');
-  const [buyPrice, setBuyPrice] = React.useState('');
-  const [sellPrice, setSellPrice] = React.useState('');
-  const [qty, setQty]           = React.useState('');
-  const today = new Date().toISOString().slice(0, 10);
-  const [date, setDate]         = React.useState(today);
-  const [saved, setSaved]       = React.useState(false);
+  // ── Form state ────────────────────────────────────────────────────────────
+  const [classKey,   setClassKey]   = React.useState(window.ASSET_CLASSES[0].key);
+  const [name,       setName]       = React.useState('');
+  const [buyPrice,   setBuyPrice]   = React.useState('');
+  const [sellPrice,  setSellPrice]  = React.useState('');
+  const [qty,        setQty]        = React.useState('');
+  const [date,       setDate]       = React.useState(new Date().toISOString().slice(0, 10));
+  const [saved,      setSaved]      = React.useState(false);
 
-  const cls = Store.classByKey(classKey);
-  const posInClass = Store.positions(classKey);
+  const cls         = Store.classByKey(classKey);
+  const posInClass  = Store.positions(classKey);
   const selectedPos = posInClass.find(p => p.name === name);
   const availableQty = selectedPos ? selectedPos.qty : 0;
   const avgCost      = selectedPos ? selectedPos.avgPrice : 0;
 
-  // Reset name/prices when class changes
   React.useEffect(() => {
     setName(''); setBuyPrice(''); setSellPrice(''); setQty('');
   }, [classKey]);
 
-  // Auto-fill buy price from avg cost when ticker is selected
   React.useEffect(() => {
     if (selectedPos) setBuyPrice(String(+avgCost.toFixed(6)));
   }, [name, classKey]);
 
-  const buyN  = parseFloat(buyPrice)  || 0;
-  const sellN = parseFloat(sellPrice) || 0;
-  const qtyN  = parseFloat(qty)       || 0;
+  const buyN     = parseFloat(buyPrice)  || 0;
+  const sellN    = parseFloat(sellPrice) || 0;
+  const qtyN     = parseFloat(qty)       || 0;
   const cost     = buyN  * qtyN;
   const proceeds = sellN * qtyN;
   const pnl      = proceeds - cost;
@@ -45,34 +42,30 @@ function SellLogView() {
 
   const handleSubmit = () => {
     if (!valid) return;
-    Store.recordSale(classKey, {
-      date, name: name.trim(), ccy: cls.ccy,
-      buyPrice: buyN, sellPrice: sellN, qty: qtyN,
-    });
+    Store.recordSale(classKey, { date, name: name.trim(), ccy: cls.ccy, buyPrice: buyN, sellPrice: sellN, qty: qtyN });
     setName(''); setBuyPrice(''); setSellPrice(''); setQty('');
     setDate(new Date().toISOString().slice(0, 10));
     setSaved(true);
     setTimeout(() => setSaved(false), 2200);
   };
 
-  // ── summary data ─────────────────────────────────────────────────────────
-  const sales   = Store.getSales();
-  const summary = Store.salesSummary();
+  // ── Summary data ──────────────────────────────────────────────────────────
+  const sales       = Store.getSales();
+  const summary     = Store.salesSummary();
   const currentYear = new Date().getFullYear().toString();
-  const thisYear = summary.find(s => s.year === currentYear) || { year: currentYear, cost: 0, proceeds: 0, pnl: 0, pnlPct: 0, count: 0 };
+  const thisYear    = summary.find(s => s.year === currentYear) || { year: currentYear, cost: 0, proceeds: 0, pnl: 0, pnlPct: 0, count: 0 };
   const allTimePnl  = summary.reduce((a, s) => a + s.pnl,  0);
   const allTimeCost = summary.reduce((a, s) => a + s.cost, 0);
   const allTimePct  = allTimeCost ? (allTimePnl / allTimeCost) * 100 : 0;
 
-  // ── history filters ───────────────────────────────────────────────────────
+  // ── History filters ───────────────────────────────────────────────────────
   const [filterYear, setFilterYear] = React.useState('all');
-  const years = [...new Set(sales.map(s => s.date.slice(0, 4)))].sort((a, b) => b.localeCompare(a));
-
+  const years    = [...new Set(sales.map(s => s.date.slice(0, 4)))].sort((a, b) => b.localeCompare(a));
   const filtered = sales
     .filter(s => filterYear === 'all' || s.date.slice(0, 4) === filterYear)
     .sort((a, b) => b.date.localeCompare(a.date));
 
-  // Convert summary THB totals → display ccy
+  // salesSummary stores values in THB; convert to display currency.
   const cvt = v => Store.toDisplay(v, 'THB');
 
   return (
@@ -82,7 +75,7 @@ function SellLogView() {
         <div className="t-small">Record realized sales and track your profit/loss history.</div>
       </div>
 
-      {/* ── KPIs ─────────────────────────────────────────────────────────── */}
+      {/* KPIs */}
       <div className="kpis" style={{ marginBottom: 22 }}>
         <div className="kpi accent">
           <div className="lab">{currentYear} Realized P/L</div>
@@ -112,10 +105,8 @@ function SellLogView() {
         </div>
       </div>
 
-      {/* ── Two-column: form + yearly summary ────────────────────────────── */}
+      {/* Form + yearly summary side-by-side */}
       <div className="dash dash-2col" style={{ alignItems: 'start' }}>
-
-        {/* Form */}
         <div className="card">
           <div className="card-h">
             <div className="t">Record a Sale</div>
@@ -123,7 +114,6 @@ function SellLogView() {
           </div>
           <div className="card-b">
             <div className="mgrid">
-
               <div>
                 <label className="flabel">Asset Class</label>
                 <select className="input" value={classKey} onChange={e => setClassKey(e.target.value)}>
@@ -138,8 +128,8 @@ function SellLogView() {
               <div className="full">
                 <label className="flabel">Ticker / Asset Name</label>
                 <input className="input" value={name} onChange={e => setName(e.target.value)}
-                  list="sell-ticker-list"
-                  placeholder={posInClass[0] ? 'e.g. ' + posInClass[0].name : 'e.g. AAPL'} />
+                       list="sell-ticker-list"
+                       placeholder={posInClass[0] ? 'e.g. ' + posInClass[0].name : 'e.g. AAPL'} />
                 <datalist id="sell-ticker-list">
                   {posInClass.map(p => <option key={p.name} value={p.name} />)}
                 </datalist>
@@ -158,18 +148,18 @@ function SellLogView() {
               <div>
                 <label className="flabel">Buy Price ({cls?.ccy})</label>
                 <input className="input" type="number" step="any" value={buyPrice}
-                  onChange={e => setBuyPrice(e.target.value)} placeholder="Cost per unit" />
+                       onChange={e => setBuyPrice(e.target.value)} placeholder="Cost per unit" />
               </div>
               <div>
                 <label className="flabel">Sell Price ({cls?.ccy})</label>
                 <input className="input" type="number" step="any" value={sellPrice}
-                  onChange={e => setSellPrice(e.target.value)} placeholder="Sale price per unit" />
+                       onChange={e => setSellPrice(e.target.value)} placeholder="Sale price per unit" />
               </div>
 
               <div className="full">
                 <label className="flabel">Quantity / Units Sold</label>
                 <input className="input" type="number" step="any" value={qty}
-                  onChange={e => setQty(e.target.value)} placeholder="Number of units sold" />
+                       onChange={e => setQty(e.target.value)} placeholder="Number of units sold" />
                 {overQty && (
                   <div className="t-small" style={{ marginTop: 5, color: '#f59e0b' }}>
                     Warning: exceeds current holding of {window.fmtQty(availableQty)} units.
@@ -193,16 +183,9 @@ function SellLogView() {
               )}
 
               <div className="full" style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, paddingTop: 4 }}>
-                {saved && (
-                  <span style={{ color: 'var(--green-600)', fontWeight: 600, fontSize: 13 }}>
-                    ✓ Sale recorded
-                  </span>
-                )}
-                <Button variant="accent" icon="trending-down" onClick={handleSubmit} disabled={!valid}>
-                  Record Sale
-                </Button>
+                {saved && <span style={{ color: 'var(--green-600)', fontWeight: 600, fontSize: 13 }}>✓ Sale recorded</span>}
+                <Button variant="accent" icon="trending-down" onClick={handleSubmit} disabled={!valid}>Record Sale</Button>
               </div>
-
             </div>
           </div>
         </div>
@@ -231,9 +214,7 @@ function SellLogView() {
                     <tr key={s.year}>
                       <td>
                         <strong>{s.year}</strong>
-                        {s.year === currentYear && (
-                          <span className="sectorchip" style={{ marginLeft: 7 }}>This year</span>
-                        )}
+                        {s.year === currentYear && <span className="sectorchip" style={{ marginLeft: 7 }}>This year</span>}
                       </td>
                       <td className="num">{s.count}</td>
                       <td className="num" style={{ color: 'var(--fg-3)' }}>{sym}{window.fmtBig(cvt(s.cost))}</td>
@@ -249,10 +230,9 @@ function SellLogView() {
             </div>
           )}
         </div>
-
       </div>
 
-      {/* ── Sale History table ────────────────────────────────────────────── */}
+      {/* Sale history table */}
       <div className="card" style={{ marginTop: 20 }}>
         <div className="card-h">
           <div>
@@ -288,7 +268,7 @@ function SellLogView() {
               </tr></thead>
               <tbody>
                 {filtered.map(s => {
-                  const saleCls = Store.classByKey(s.classKey);
+                  const saleCls    = Store.classByKey(s.classKey);
                   const dispPnl      = Store.toDisplay(s.realizedPnl, s.ccy);
                   const dispProceeds = Store.toDisplay(s.proceeds, s.ccy);
                   const dispCost     = Store.toDisplay(s.cost, s.ccy);
@@ -315,9 +295,9 @@ function SellLogView() {
                       <td className={'num ' + (s.pnlPct >= 0 ? 'up' : 'down')}>{window.fmtPct(s.pnlPct)}</td>
                       <td>
                         <button className="icon-toggle" style={{ color: 'var(--red-600)', opacity: 0.7 }}
-                          title="Delete this sale record"
-                          onClick={() => { if (window.confirm('Delete this sale record?')) Store.deleteSale(s.id); }}>
-                          <Icon name="trash-2" size={14} />
+                                title="Delete this sale record"
+                                onClick={() => { if (window.confirm('Delete this sale record?')) Store.deleteSale(s.id); }}>
+                          <Icon name="trash" size={14} />
                         </button>
                       </td>
                     </tr>
