@@ -106,6 +106,7 @@ function buildWalletState(accountRows, categoryRows, txnRows, debtRows) {
       note:         r.note || '',
       settled:      r.settled,
       settledDate:  r.settled_date || null,
+      installment:  r.installment || null,
     })),
   };
 }
@@ -223,6 +224,7 @@ export default async function handler(req, res) {
         note:         d.note || null,
         settled:      d.settled ?? false,
         settled_date: d.settledDate || null,
+        installment:  d.installment || null,
       }));
       await sbUpsert('wallet_debts', debtRows);
 

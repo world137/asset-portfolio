@@ -297,7 +297,7 @@
       p.avgPrice = p.qty ? p.cost / p.qty : 0;
       p.profit   = p.value - p.cost;
       p.pct      = p.cost ? (p.profit / p.cost) * 100 : 0;
-      p.sector   = state.sectors[classKey + ':' + p.name] || (p.type || '—');
+      p.sector   = classKey === 'crypto' ? 'Crypto' : (state.sectors[classKey + ':' + p.name] || (p.type || '—'));
       p.classKey = classKey;
       out.push(p);
     }

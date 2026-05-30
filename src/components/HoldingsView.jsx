@@ -150,7 +150,8 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
   const { sortBy, sortDir, handleSort } = useSortState();
 
   const isLive  = !!cls.live;
-  const isOther = classKey === 'other';
+  const isOther  = classKey === 'other';
+  const isCrypto = classKey === 'crypto';
   const liveNow = cls.live === 'crypto' || (isLive && Store.get().priceMode === 'api');
 
   const filtered = positions.filter(p =>
@@ -250,7 +251,7 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
                       </span>
                     </td>
                     <td onClick={e => e.stopPropagation()}>
-                      {isOther ? <span className="tag">{p.type || '—'}</span> : <SectorChip position={p} classKey={classKey} />}
+                      {isOther ? <span className="tag">{p.type || '—'}</span> : isCrypto ? <span className="tag">Crypto</span> : <SectorChip position={p} classKey={classKey} />}
                     </td>
                     <td className="num">{window.fmtQty(p.qty)}</td>
                     <td className="num" style={{ color: 'var(--fg-3)' }}>{window.fmtPrice(p.avgPrice, cls.ccy)}</td>

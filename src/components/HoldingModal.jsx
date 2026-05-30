@@ -119,13 +119,15 @@ function HoldingModal({ open, onClose, classKey, lot }) {
           <input className="input" type="number" step="any" value={f.cur} onChange={set('cur')} placeholder="defaults to purchase" />
           {cls.live && <div className="t-small" style={{ marginTop: 5 }}>Auto-updated from {cls.srcLabel} on refresh.</div>}
         </div>
-        <div>
-          <label className="flabel">Sector / Tag</label>
-          <input className="input" value={f.sector} onChange={set('sector')} placeholder="e.g. Technology" list="sectorlist" />
-          <datalist id="sectorlist">
-            {window.SECTOR_TAGS.map(s => <option key={s} value={s} />)}
-          </datalist>
-        </div>
+        {!isCrypto && (
+          <div>
+            <label className="flabel">Sector / Tag</label>
+            <input className="input" value={f.sector} onChange={set('sector')} placeholder="e.g. Technology" list="sectorlist" />
+            <datalist id="sectorlist">
+              {window.SECTOR_TAGS.map(s => <option key={s} value={s} />)}
+            </datalist>
+          </div>
+        )}
 
         <div className="full computed">
           <div className="c"><small>Cost</small>{window.fmtMoney(cost, cls.ccy, 2)}</div>
