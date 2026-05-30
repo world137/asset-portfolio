@@ -215,7 +215,7 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
         <span className="t-small">{filtered.length} of {positions.length}</span>
       </div>
 
-      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
         <table className="ptable">
           <thead>
             <tr>
