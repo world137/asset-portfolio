@@ -109,7 +109,7 @@ body { background: var(--bg-app); display: block; padding: 0; }
    Dashboard grids
    ============================================================================ */
 .dash { display: grid; gap: 18px; }
-.dash-2col { grid-template-columns: minmax(320px, 0.9fr) 1.4fr; }
+.dash-2col { grid-template-columns: 1fr 1fr; }
 .dash-visual { grid-template-columns: 1fr; }
 
 .card { background: var(--bg-surface); border: 1px solid var(--border-1); border-radius: var(--radius-md); }

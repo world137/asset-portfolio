@@ -1,9 +1,9 @@
 /* eslint-disable */
-/* Dashboard.jsx — KPIs, allocation chart, per-class summary. 3 layouts. */
+/* Dashboard.jsx — KPIs, allocation charts, per-class table. Three layouts. */
 
 function PortfolioHistoryCard({ settings }) {
   const snapshots = Store.getSnapshots();
-  const fxRate = Store.get().fx.USDTHB || window.SEED_FX_USDTHB;
+  const fxRate    = Store.get().fx.USDTHB || window.SEED_FX_USDTHB;
   return (
     <div className="card" style={{ marginTop: 18 }}>
       <div className="card-h">
@@ -20,8 +20,8 @@ function PortfolioHistoryCard({ settings }) {
 }
 
 function AllocChart({ totals, settings, hot, setHot, onOpenClass, size }) {
-  const segs = totals.classes.map(c => ({ key: c.key, label: c.label, value: c.value, color: c.color }));
   const disp = settings.displayCcy;
+  const segs = totals.classes.map(c => ({ key: c.key, label: c.label, value: c.value, color: c.color }));
   return (
     <div className="chartwrap">
       <Donut
@@ -53,9 +53,42 @@ function AllocChart({ totals, settings, hot, setHot, onOpenClass, size }) {
   );
 }
 
-function KpiRow({ totals, settings }) {
+function CostChart({ totals, settings, hot, setHot, onOpenClass, size }) {
   const disp = settings.displayCcy;
-  const sym = window.ccySymbol(disp);
+  const sym  = window.ccySymbol(disp);
+  const segs = totals.classes.map(c => ({ key: c.key, label: c.label, value: c.cost, color: c.color }));
+  return (
+    <div className="chartwrap">
+      <Donut
+        segments={segs} size={size || 196} style={settings.chartStyle} hot={hot} onHover={setHot}
+        center={
+          <React.Fragment>
+            <div className="c-lab">Total Cost</div>
+            <div className="c-val">{sym}{window.fmtBig(totals.cost)}</div>
+          </React.Fragment>
+        }
+      />
+      <div className="legend">
+        {segs.map((s, i) => {
+          const pc = totals.cost ? (s.value / totals.cost) * 100 : 0;
+          return (
+            <div className="row" key={s.key}
+                 onMouseEnter={() => setHot(i)} onMouseLeave={() => setHot(null)}
+                 onClick={() => onOpenClass(s.key)}>
+              <span className="sw" style={{ background: s.color }} />
+              <span className="nm">{s.label}</span>
+              <span className="vv">{sym}{window.fmtBig(s.value)}</span>
+              <span className="pc">{pc.toFixed(1)}%</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function KpiRow({ totals, settings }) {
+  const sym = window.ccySymbol(settings.displayCcy);
   return (
     <div className="kpis">
       <div className="kpi accent">
@@ -89,17 +122,8 @@ function KpiRow({ totals, settings }) {
 
 function ClassTable({ totals, settings, onOpenClass, hot, setHot }) {
   const disp = settings.displayCcy;
-  const [sortBy, setSortBy] = React.useState(null);
-  const [sortDir, setSortDir] = React.useState(-1);
-  const handleSort = (col) => {
-    if (sortBy === col) setSortDir(d => -d);
-    else { setSortBy(col); setSortDir(-1); }
-  };
-  const SortTh = ({ col, label, right, width }) => (
-    <th className={(right ? 'num' : '') + ' th-sort'} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', ...(width ? { width } : {}) }} onClick={() => handleSort(col)}>
-      {label}{sortBy === col ? (sortDir < 0 ? ' ↓' : ' ↑') : ''}
-    </th>
-  );
+  const { sortBy, sortDir, handleSort } = useSortState();
+
   const classesWithData = totals.classes.map((c, i) => ({
     ...c,
     alloc: totals.value ? (c.value / totals.value) * 100 : 0,
@@ -113,45 +137,48 @@ function ClassTable({ totals, settings, onOpenClass, hot, setHot }) {
 
   return (
     <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-    <table className="ptable">
-      <thead>
-        <tr>
-          <SortTh col="label" label="Asset Class" />
-          <SortTh col="alloc" label="Allocation" width={150} />
-          <SortTh col="value" label="Value" right />
-          <SortTh col="cost" label="Cost" right />
-          <SortTh col="profit" label="P/L" right />
-          <SortTh col="pct" label="%" right />
-        </tr>
-      </thead>
-      <tbody>
-        {sortedClasses.map((c) => (
-          <tr className="pos" key={c.key} onClick={() => onOpenClass(c.key)}
-              onMouseEnter={() => setHot(c.origIdx)} onMouseLeave={() => setHot(null)}>
-            <td>
-              <span className="tk"><span className="av" style={{ background: c.color, borderRadius: 7 }}>{c.label.slice(0, 2).toUpperCase()}</span>{c.label}</span>
-            </td>
-            <td>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div className="minibar" style={{ flex: 1 }}><span style={{ width: c.alloc + '%', background: c.color }} /></div>
-                <span style={{ font: '500 11.5px/1 var(--font-mono)', color: 'var(--fg-3)', minWidth: 38, textAlign: 'right' }}>{c.alloc.toFixed(1)}%</span>
-              </div>
-            </td>
-            <td className="num">{window.ccySymbol(disp)}{window.fmtBig(c.value)}</td>
-            <td className="num" style={{ color: 'var(--fg-3)' }}>{window.ccySymbol(disp)}{window.fmtBig(c.cost)}</td>
-            <td className={'num ' + (c.profit >= 0 ? 'up' : 'down')}>{(c.profit >= 0 ? '+' : '−') + window.ccySymbol(disp) + window.fmtBig(Math.abs(c.profit))}</td>
-            <td className={'num ' + (c.profit >= 0 ? 'up' : 'down')}>{window.fmtPct(c.pct)}</td>
+      <table className="ptable">
+        <thead>
+          <tr>
+            <SortTh col="label"  label="Asset Class"  sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+            <SortTh col="alloc"  label="Allocation"   sortBy={sortBy} sortDir={sortDir} onSort={handleSort} width={150} />
+            <SortTh col="value"  label="Value"  right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+            <SortTh col="cost"   label="Cost"   right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+            <SortTh col="profit" label="P/L"    right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+            <SortTh col="pct"    label="%"      right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {sortedClasses.map((c) => (
+            <tr className="pos" key={c.key} onClick={() => onOpenClass(c.key)}
+                onMouseEnter={() => setHot(c.origIdx)} onMouseLeave={() => setHot(null)}>
+              <td>
+                <span className="tk">
+                  <span className="av" style={{ background: c.color, borderRadius: 7 }}>{c.label.slice(0, 2).toUpperCase()}</span>
+                  {c.label}
+                </span>
+              </td>
+              <td>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div className="minibar" style={{ flex: 1 }}><span style={{ width: c.alloc + '%', background: c.color }} /></div>
+                  <span style={{ font: '500 11.5px/1 var(--font-mono)', color: 'var(--fg-3)', minWidth: 38, textAlign: 'right' }}>{c.alloc.toFixed(1)}%</span>
+                </div>
+              </td>
+              <td className="num">{window.ccySymbol(disp)}{window.fmtBig(c.value)}</td>
+              <td className="num" style={{ color: 'var(--fg-3)' }}>{window.ccySymbol(disp)}{window.fmtBig(c.cost)}</td>
+              <td className={'num ' + (c.profit >= 0 ? 'up' : 'down')}>{(c.profit >= 0 ? '+' : '−') + window.ccySymbol(disp) + window.fmtBig(Math.abs(c.profit))}</td>
+              <td className={'num ' + (c.profit >= 0 ? 'up' : 'down')}>{window.fmtPct(c.pct)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
 
 function Dashboard({ onOpenClass }) {
   const settings = Store.settings();
-  const totals = Store.grandTotals();
+  const totals   = Store.grandTotals();
   const [hot, setHot] = React.useState(null);
   const layout = settings.layout;
 
@@ -163,7 +190,7 @@ function Dashboard({ onOpenClass }) {
           <div className="t-small">All holdings, valued in {settings.displayCcy}. Click any class to manage holdings.</div>
         </div>
         <div className="layoutseg">
-          {[['overview', 'Overview'], ['compact', 'Compact'], ['visual', 'Visual']].map(([v, l]) => (
+          {window.LAYOUT_OPTIONS.map(([v, l]) => (
             <button key={v} className={layout === v ? 'on' : ''} onClick={() => Store.setSetting('layout', v)}>{l}</button>
           ))}
         </div>
@@ -172,16 +199,22 @@ function Dashboard({ onOpenClass }) {
       <KpiRow totals={totals} settings={settings} />
 
       {layout === 'overview' && (
-        <div className="dash dash-2col">
-          <div className="card">
-            <div className="card-h"><div><div className="t">Asset Allocation</div></div></div>
-            <div className="card-b"><AllocChart totals={totals} settings={settings} hot={hot} setHot={setHot} onOpenClass={onOpenClass} /></div>
+        <React.Fragment>
+          <div className="dash dash-2col">
+            <div className="card">
+              <div className="card-h"><div><div className="t">Cost by Asset Type</div><div className="s">Total invested</div></div></div>
+              <div className="card-b"><CostChart totals={totals} settings={settings} hot={hot} setHot={setHot} onOpenClass={onOpenClass} /></div>
+            </div>
+            <div className="card">
+              <div className="card-h"><div><div className="t">Current Value by Asset Type</div><div className="s">Market value today</div></div></div>
+              <div className="card-b"><AllocChart totals={totals} settings={settings} hot={hot} setHot={setHot} onOpenClass={onOpenClass} /></div>
+            </div>
           </div>
-          <div className="card">
-            <div className="card-h"><div><div className="t">By Asset Class</div></div></div>
+          <div className="card" style={{ marginTop: 16 }}>
+            <div className="card-h"><div><div className="t">By Asset Class</div><div className="s">Click a row to open holdings</div></div></div>
             <ClassTable totals={totals} settings={settings} onOpenClass={onOpenClass} hot={hot} setHot={setHot} />
           </div>
-        </div>
+        </React.Fragment>
       )}
 
       {layout === 'compact' && (
@@ -226,4 +259,3 @@ function Dashboard({ onOpenClass }) {
 }
 
 window.Dashboard = Dashboard;
-window.AllocChart = AllocChart;
