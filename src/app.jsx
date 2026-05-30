@@ -16,7 +16,7 @@ function Nav({ route, setRoute, totals, open, onClose }) {
     <div key={key} className={'item' + (route === key ? ' active' : '')} onClick={() => { setRoute(key); onClose(); }}>
       {color ? <span className="dot" style={{ background: color }} /> : <span className="ic"><Icon name={icon} size={16} /></span>}
       <span>{label}</span>
-      {key !== 'dashboard' && key !== 'summary' && key !== 'wallet' && key !== 'transactions' && key !== 'debts' && (
+      {key !== 'dashboard' && key !== 'summary' && key !== 'networth' && key !== 'wallet' && key !== 'transactions' && key !== 'debts' && key !== 'walletsummary' && (
         <span className="val">{sym}{window.fmtBig((totals.classes.find(c => c.key === key) || {}).value || 0)}</span>
       )}
     </div>
@@ -32,6 +32,7 @@ function Nav({ route, setRoute, totals, open, onClose }) {
       </div>
       <div className="scroll">
         {item('dashboard', 'Dashboard', 'layers')}
+        {item('networth',  'Net Worth', 'shield')}
         <div className="grp-h">Holdings</div>
         {window.ASSET_CLASSES.map(c => item(c.key, c.label, null, window.CLASS_COLORS[c.key]))}
         <div className="grp-h">Analysis</div>
@@ -39,9 +40,10 @@ function Nav({ route, setRoute, totals, open, onClose }) {
         {item('summary', 'Cost vs Price', 'list')}
         {item('selllog', 'Sell Log', 'trending-down')}
         <div className="grp-h">Wallet</div>
-        {item('wallet',       'Accounts',     'layers')}
-        {item('transactions', 'Transactions', 'list')}
-        {item('debts',        'Debts',        'history')}
+        {item('wallet',         'Accounts',     'layers')}
+        {item('transactions',   'Transactions', 'list')}
+        {item('debts',          'Debts',        'history')}
+        {item('walletsummary',  'Summary',      'sliders')}
       </div>
       <div className="foot">
         <span className="av">PT</span>
@@ -474,12 +476,14 @@ function App() {
   }
 
   const title = route === 'dashboard'    ? 'Dashboard'
-    : route === 'sectors'      ? 'Analysis'
-    : route === 'summary'      ? 'Cost & Price Summary'
-    : route === 'selllog'      ? 'Sell Log'
-    : route === 'wallet'       ? 'Accounts'
-    : route === 'transactions' ? 'Transactions'
-    : route === 'debts'        ? 'Debts'
+    : route === 'networth'      ? 'Net Worth'
+    : route === 'sectors'       ? 'Analysis'
+    : route === 'summary'       ? 'Cost & Price Summary'
+    : route === 'selllog'       ? 'Sell Log'
+    : route === 'wallet'        ? 'Accounts'
+    : route === 'transactions'  ? 'Transactions'
+    : route === 'debts'         ? 'Debts'
+    : route === 'walletsummary' ? 'Wallet Summary'
     : (Store.classByKey(route) || {}).label;
 
   return (
@@ -510,12 +514,14 @@ function App() {
         </div>
         <div className="scrollarea" key={route}>
           {route === 'dashboard'    && <Dashboard onOpenClass={setRoute} />}
+          {route === 'networth'     && <NetWorthView />}
           {route === 'sectors'      && <SectorView />}
           {route === 'summary'      && <SummaryView />}
           {route === 'selllog'      && <SellLogView />}
           {route === 'wallet'       && <WalletOverview />}
           {route === 'transactions' && <TransactionLog />}
           {route === 'debts'        && <DebtTracker />}
+          {route === 'walletsummary' && <WalletSummary />}
           {Store.classByKey(route) && <HoldingsView classKey={route} onAdd={openAdd} onEditLot={openEdit} />}
         </div>
       </div>

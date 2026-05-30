@@ -16,6 +16,11 @@ function SellLogView() {
   const [date,       setDate]       = React.useState(new Date().toISOString().slice(0, 10));
   const [saved,      setSaved]      = React.useState(false);
 
+  // Wallet credit state
+  const [creditOn,      setCreditOn]      = React.useState(false);
+  const [walletAccId,   setWalletAccId]   = React.useState('');
+  const [walletFxRate,  setWalletFxRate]  = React.useState('');
+
   const cls         = Store.classByKey(classKey);
   const posInClass  = Store.positions(classKey);
   const selectedPos = posInClass.find(p => p.name === name);
@@ -40,11 +45,25 @@ function SellLogView() {
   const valid    = name.trim() && qtyN > 0 && buyN > 0 && sellN > 0;
   const overQty  = availableQty > 0 && qtyN > availableQty;
 
+  // Wallet credit helpers
+  const walletAccounts     = (Store.getWallet().accounts || []).filter(a => !a.archived);
+  const selectedWalletAcc  = walletAccounts.find(a => a.id === walletAccId);
+  const assetCcy           = cls ? cls.ccy : 'THB';
+  const crossCcy           = selectedWalletAcc && selectedWalletAcc.currency !== assetCcy;
+  const creditFxN          = parseFloat(walletFxRate) ||
+    (crossCcy ? Store.defaultFxRate(assetCcy, selectedWalletAcc.currency) : 1);
+  const creditAmount       = proceeds * (crossCcy ? creditFxN : 1);
+  const creditCcy          = selectedWalletAcc ? selectedWalletAcc.currency : assetCcy;
+
   const handleSubmit = () => {
     if (!valid) return;
-    Store.recordSale(classKey, { date, name: name.trim(), ccy: cls.ccy, buyPrice: buyN, sellPrice: sellN, qty: qtyN });
+    const walletData = creditOn && walletAccId
+      ? { accountId: walletAccId, exchangeRate: crossCcy ? creditFxN : null }
+      : null;
+    Store.recordSale(classKey, { date, name: name.trim(), ccy: cls.ccy, buyPrice: buyN, sellPrice: sellN, qty: qtyN }, walletData);
     setName(''); setBuyPrice(''); setSellPrice(''); setQty('');
     setDate(new Date().toISOString().slice(0, 10));
+    setCreditOn(false); setWalletAccId(''); setWalletFxRate('');
     setSaved(true);
     setTimeout(() => setSaved(false), 2200);
   };
@@ -181,6 +200,57 @@ function SellLogView() {
                   </div>
                 </div>
               )}
+
+              {/* Wallet credit section */}
+              <div className="full" style={{ borderTop: '1px solid var(--border-1)', paddingTop: 14, marginTop: 2 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
+                  <input type="checkbox" checked={creditOn} onChange={e => setCreditOn(e.target.checked)}
+                         style={{ width: 14, height: 14, cursor: 'pointer' }} />
+                  <span style={{ fontWeight: 600, fontSize: 12 }}>Add sale proceeds to wallet account</span>
+                </label>
+
+                {creditOn && (
+                  <div className="mgrid" style={{ marginTop: 10 }}>
+                    <div>
+                      <label className="flabel">Wallet Account</label>
+                      <select className="input" value={walletAccId} onChange={e => { setWalletAccId(e.target.value); setWalletFxRate(''); }}>
+                        <option value="">Select account…</option>
+                        {walletAccounts.map(a => (
+                          <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>
+                        ))}
+                      </select>
+                      {walletAccounts.length === 0 && (
+                        <div style={{ fontSize: 11, color: '#f59e0b', marginTop: 4 }}>No wallet accounts yet. Add one in the Wallet section first.</div>
+                      )}
+                    </div>
+
+                    {crossCcy && (
+                      <div>
+                        <label className="flabel">Exchange Rate (1 {assetCcy} = ? {creditCcy})</label>
+                        <input className="input" type="number" step="any" min="0"
+                               value={walletFxRate}
+                               placeholder={creditFxN.toFixed(4)}
+                               onChange={e => setWalletFxRate(e.target.value)} />
+                        <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 3 }}>Default from live rates. Override if the actual settlement rate differed.</div>
+                      </div>
+                    )}
+
+                    {selectedWalletAcc && proceeds > 0 && (
+                      <div className="full">
+                        <div style={{ background: 'var(--bg-inset,var(--bg-app))', borderRadius: 6, padding: '8px 12px',
+                                      fontSize: 12, color: 'var(--fg-2)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ color: 'var(--green-600)' }}>+</span>
+                          <strong style={{ color: 'var(--green-600)' }}>{window.fmtCcy(creditAmount, creditCcy)}</strong>
+                          <span style={{ color: 'var(--fg-3)' }}>
+                            will be added to <strong>{selectedWalletAcc.name}</strong>
+                            {crossCcy && ` (at ${creditFxN.toFixed(4)} ${assetCcy}/${creditCcy})`}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
 
               <div className="full" style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, paddingTop: 4 }}>
                 {saved && <span style={{ color: 'var(--green-600)', fontWeight: 600, fontSize: 13 }}>✓ Sale recorded</span>}

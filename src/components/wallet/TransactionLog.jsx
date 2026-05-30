@@ -7,8 +7,9 @@ function TransactionLog() {
   const sym      = window.ccySymbol(settings.displayCcy);
   const wallet   = Store.getWallet();
 
-  const [modalOpen, setModalOpen] = React.useState(false);
-  const [editTxn,   setEditTxn]   = React.useState(null);
+  const [modalOpen,   setModalOpen]   = React.useState(false);
+  const [editTxn,     setEditTxn]     = React.useState(null);
+  const [catOpen,     setCatOpen]     = React.useState(false);
   const [filterFlow,    setFilterFlow]    = React.useState('all');
   const [filterAccount, setFilterAccount] = React.useState('all');
   const [filterMonth,   setFilterMonth]   = React.useState('');
@@ -57,9 +58,12 @@ function TransactionLog() {
           <h1 className="t-h1" style={{ margin: '0 0 2px' }}>Transactions</h1>
           <div className="t-small">{filtered.length} transactions shown</div>
         </div>
-        <Button variant="accent" icon="plus" onClick={() => { setEditTxn(null); setModalOpen(true); }}>
-          Add Transaction
-        </Button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Button variant="secondary" icon="sliders" onClick={() => setCatOpen(true)}>Categories</Button>
+          <Button variant="accent" icon="plus" onClick={() => { setEditTxn(null); setModalOpen(true); }}>
+            Add Transaction
+          </Button>
+        </div>
       </div>
 
       <div className="kpis" style={{ marginBottom: 18 }}>
@@ -165,6 +169,7 @@ function TransactionLog() {
 
       <TransactionModal open={modalOpen} transaction={editTxn}
                         onClose={() => { setModalOpen(false); setEditTxn(null); }} />
+      <CategoryModal open={catOpen} onClose={() => setCatOpen(false)} />
     </div>
   );
 }
