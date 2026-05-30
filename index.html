@@ -15,19 +15,20 @@
   <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
 
-  <!-- data + logic (plain JS) -->
-  <script src="seed.js"></script>
-  <script src="fmt.js"></script>
-  <script src="store.js"></script>
+  <!-- config + data (plain JS, no JSX) -->
+  <script src="src/constants.js"></script>
+  <script src="src/seed.js"></script>
+  <script src="src/fmt.js"></script>
+  <script src="src/store.js"></script>
 
-  <!-- components (JSX) -->
-  <script type="text/babel" src="Primitives.jsx"></script>
-  <script type="text/babel" src="Charts.jsx"></script>
-  <script type="text/babel" src="HoldingModal.jsx"></script>
-  <script type="text/babel" src="HoldingsView.jsx"></script>
-  <script type="text/babel" src="Dashboard.jsx"></script>
-  <script type="text/babel" src="SellLog.jsx"></script>
-  <script type="text/babel" src="Login.jsx"></script>
-  <script type="text/babel" src="app.jsx"></script>
+  <!-- UI components (JSX) -->
+  <script type="text/babel" src="src/components/Primitives.jsx"></script>
+  <script type="text/babel" src="src/components/Charts.jsx"></script>
+  <script type="text/babel" src="src/components/HoldingModal.jsx"></script>
+  <script type="text/babel" src="src/components/HoldingsView.jsx"></script>
+  <script type="text/babel" src="src/components/Dashboard.jsx"></script>
+  <script type="text/babel" src="src/components/SellLog.jsx"></script>
+  <script type="text/babel" src="src/Login.jsx"></script>
+  <script type="text/babel" src="src/app.jsx"></script>
 </body>
 </html>

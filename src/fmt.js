@@ -9,8 +9,8 @@ window.fmtMoney = (n, ccy, dec) => {
   return (window.ccySymbol(ccy) || '') + n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
 };
 
-// compact for big KPI numbers (no decimals, grouped)
-window.fmtBig = (n, ccy) => {
+// Compact KPI numbers — no decimals, grouped thousands. Caller prepends the symbol.
+window.fmtBig = (n) => {
   if (n == null || isNaN(n)) return '—';
   return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
 };
@@ -20,7 +20,7 @@ window.fmtNum = (n, dec = 2) => {
   return n.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec });
 };
 
-// quantity: up to 6 sig decimals, trims trailing zeros
+// Quantity: up to 6 significant decimals, trims trailing zeros.
 window.fmtQty = (n) => {
   if (n == null || isNaN(n)) return '—';
   if (n >= 1000) return n.toLocaleString('en-US', { maximumFractionDigits: 2 });
