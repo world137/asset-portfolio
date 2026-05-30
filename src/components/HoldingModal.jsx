@@ -11,6 +11,11 @@ function HoldingModal({ open, onClose, classKey, lot }) {
   const blank   = { name: '', type: 'Debenture', price: '', qty: '', cur: '', sector: '' };
   const [f, setF] = React.useState(blank);
 
+  // Wallet deduction state
+  const [deductOn,      setDeductOn]      = React.useState(false);
+  const [walletAccId,   setWalletAccId]   = React.useState('');
+  const [walletFxRate,  setWalletFxRate]  = React.useState('');
+
   React.useEffect(() => {
     if (!open) return;
     if (lot) {
@@ -24,6 +29,9 @@ function HoldingModal({ open, onClose, classKey, lot }) {
       });
     } else {
       setF(blank);
+      setDeductOn(false);
+      setWalletAccId('');
+      setWalletFxRate('');
     }
   }, [open, lot, classKey]);
 
@@ -38,12 +46,28 @@ function HoldingModal({ open, onClose, classKey, lot }) {
   const profit = value - cost;
   const valid  = f.name.trim() && qtyN > 0 && priceN > 0;
 
+  // Wallet deduction helpers
+  const walletAccounts = (Store.getWallet().accounts || []).filter(a => !a.archived);
+  const selectedWalletAcc = walletAccounts.find(a => a.id === walletAccId);
+  const assetCcy = cls ? cls.ccy : 'THB';
+  const crossCcy = selectedWalletAcc && selectedWalletAcc.currency !== assetCcy;
+  const fxN = parseFloat(walletFxRate) ||
+    (crossCcy ? Store.defaultFxRate(assetCcy, selectedWalletAcc.currency) : 1);
+  const deductAmount = cost * (crossCcy ? fxN : 1);
+  const deductCcy    = selectedWalletAcc ? selectedWalletAcc.currency : assetCcy;
+
   const save = () => {
     if (!valid) return;
     const payload = { name: f.name.trim(), price: f.price, qty: f.qty, cur: f.cur, sector: f.sector.trim() || undefined };
     if (isOther) payload.type = f.type;
-    if (editing) Store.updateLot(classKey, lot.id, payload);
-    else         Store.addLot(classKey, payload);
+    if (editing) {
+      Store.updateLot(classKey, lot.id, payload);
+    } else {
+      const walletData = deductOn && walletAccId
+        ? { accountId: walletAccId, exchangeRate: crossCcy ? fxN : null }
+        : null;
+      Store.addLot(classKey, payload, walletData);
+    }
     onClose();
   };
 
@@ -113,6 +137,61 @@ function HoldingModal({ open, onClose, classKey, lot }) {
             </span>
           </div>
         </div>
+
+        {/* Wallet deduction — only for new lots */}
+        {!editing && (
+          <div className="full" style={{ borderTop: '1px solid var(--border-1)', paddingTop: 14, marginTop: 2 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
+              <input type="checkbox" checked={deductOn} onChange={e => setDeductOn(e.target.checked)}
+                     style={{ width: 14, height: 14, cursor: 'pointer' }} />
+              <span style={{ fontWeight: 600, fontSize: 12 }}>Deduct purchase cost from wallet account</span>
+            </label>
+
+            {deductOn && (
+              <div className="mgrid" style={{ marginTop: 10 }}>
+                <div>
+                  <label className="flabel">Wallet Account</label>
+                  <select className="input" value={walletAccId} onChange={e => { setWalletAccId(e.target.value); setWalletFxRate(''); }}>
+                    <option value="">Select account…</option>
+                    {walletAccounts.map(a => (
+                      <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>
+                    ))}
+                  </select>
+                  {walletAccounts.length === 0 && (
+                    <div style={{ fontSize: 11, color: '#f59e0b', marginTop: 4 }}>No wallet accounts yet. Add one in the Wallet section first.</div>
+                  )}
+                </div>
+
+                {crossCcy && (
+                  <div>
+                    <label className="flabel">Exchange Rate (1 {assetCcy} = ? {deductCcy})</label>
+                    <input className="input" type="number" step="any" min="0"
+                           value={walletFxRate}
+                           placeholder={fxN.toFixed(4)}
+                           onChange={e => setWalletFxRate(e.target.value)} />
+                    <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 3 }}>
+                      Default from live rates. Override if you paid a different rate.
+                    </div>
+                  </div>
+                )}
+
+                {selectedWalletAcc && cost > 0 && (
+                  <div className="full">
+                    <div style={{ background: 'var(--bg-inset,var(--bg-app))', borderRadius: 6, padding: '8px 12px',
+                                  fontSize: 12, color: 'var(--fg-2)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ color: 'var(--red-600)' }}>−</span>
+                      <strong style={{ color: 'var(--red-600)' }}>{window.fmtCcy(deductAmount, deductCcy)}</strong>
+                      <span style={{ color: 'var(--fg-3)' }}>
+                        will be deducted from <strong>{selectedWalletAcc.name}</strong>
+                        {crossCcy && ` (at ${fxN.toFixed(4)} ${assetCcy}/${deductCcy})`}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </Modal>
   );

@@ -43,7 +43,7 @@
     return {
       holdings,
       sectors: { ...window.SEED_SECTORS },
-      fx: { USDTHB: window.SEED_FX_USDTHB, at: null },
+      fx: { USDTHB: window.SEED_FX_USDTHB, JPYTHB: window.SEED_FX_JPYTHB, KRWTHB: window.SEED_FX_KRWTHB, at: null },
       settings: { ...DEFAULT_SETTINGS },
       lastPriceSync: null,
       priceMode: null,
@@ -53,13 +53,27 @@
     };
   }
 
-  let state = freshState();
+  function freshWallet() {
+    return {
+      accounts: [],
+      categories: (window.DEFAULT_WALLET_CATEGORIES || []).map(c => ({ ...c })),
+      transactions: [],
+      debts: [],
+    };
+  }
+
+  let state  = freshState();
+  let wallet = freshWallet();
 
   // ── DB sync status ─────────────────────────────────────────────────────────
   let _dbStatus = 'idle'; // 'idle' | 'pending' | 'saving' | 'saved' | 'error'
   let _dbSavedAt = null;
   // Guard: never write before loadFromCloud has run at least once.
   let _initialized = false;
+
+  // ── Wallet sync state ──────────────────────────────────────────────────────
+  let _walletInitialized = false;
+  let _walletSaveTimer   = null;
 
   // ── pub/sub ────────────────────────────────────────────────────────────────
   const subs = new Set();
@@ -76,12 +90,31 @@
     });
   }
 
+  function restoreWalletFromSaved(saved) {
+    const base = freshWallet();
+    const savedCats = saved.categories || [];
+    // Merge: keep saved categories; if none, fall back to defaults
+    const categories = savedCats.length ? savedCats : base.categories;
+    return {
+      accounts:     saved.accounts     || [],
+      categories,
+      transactions: saved.transactions || [],
+      debts:        saved.debts        || [],
+    };
+  }
+
   function restoreFromSaved(saved) {
     const base = freshState();
+    const savedFx = saved.fx || {};
     return {
       holdings: saved.holdings || base.holdings,
       sectors: { ...base.sectors, ...(saved.sectors || {}) },
-      fx: saved.fx || base.fx,
+      fx: {
+        USDTHB: savedFx.USDTHB || base.fx.USDTHB,
+        JPYTHB: savedFx.JPYTHB || base.fx.JPYTHB,
+        KRWTHB: savedFx.KRWTHB || base.fx.KRWTHB,
+        at: savedFx.at || null,
+      },
       settings: { ...base.settings, ...(saved.settings || {}) },
       lastPriceSync: saved.lastPriceSync || null,
       priceMode: saved.priceMode || null,
@@ -159,14 +192,81 @@
     }
   }
 
+  // ── Wallet cloud save/load ─────────────────────────────────────────────────
+  function scheduleWalletSave() {
+    clearTimeout(_walletSaveTimer);
+    _walletSaveTimer = setTimeout(doWalletSave, 500);
+  }
+
+  async function doWalletSave() {
+    if (!_walletInitialized) return;
+    try {
+      await fetch('/api/wallet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: portfolioId, data: JSON.stringify(wallet) }),
+      });
+    } catch (e) {
+      console.warn('[wallet] save error:', e.message);
+    }
+  }
+
+  async function loadWalletFromCloud() {
+    const id = portfolioId;
+    if (!/^[a-zA-Z0-9_-]{6,64}$/.test(id)) { _walletInitialized = true; return; }
+    try {
+      const r = await fetch('/api/wallet?id=' + encodeURIComponent(id));
+      if (!r.ok) { _walletInitialized = true; return; }
+      const j = await r.json();
+      if (j && j.data) {
+        const saved = JSON.parse(j.data);
+        if (saved && typeof saved === 'object') {
+          wallet = restoreWalletFromSaved(saved);
+        }
+      }
+    } catch (_) {}
+    _walletInitialized = true;
+    subs.forEach(fn => fn());
+  }
+
+  // Flush pending wallet save on tab close.
+  window.addEventListener('beforeunload', () => {
+    if (!_walletInitialized) return;
+    try {
+      navigator.sendBeacon('/api/wallet', new Blob([
+        JSON.stringify({ id: portfolioId, data: JSON.stringify(wallet) }),
+      ], { type: 'application/json' }));
+    } catch (_) {}
+  });
+
   // ── Currency conversion ────────────────────────────────────────────────────
   function toDisplay(amount, nativeCcy) {
     const disp = state.settings.displayCcy;
     if (nativeCcy === disp) return amount;
-    const rate = state.fx.USDTHB || window.SEED_FX_USDTHB;
-    if (nativeCcy === 'USD' && disp === 'THB') return amount * rate;
-    if (nativeCcy === 'THB' && disp === 'USD') return amount / rate;
+    const USDTHB = state.fx.USDTHB || window.SEED_FX_USDTHB;
+    if (nativeCcy === 'USD' && disp === 'THB') return amount * USDTHB;
+    if (nativeCcy === 'THB' && disp === 'USD') return amount / USDTHB;
     return amount;
+  }
+
+  // Convert any wallet currency to the display currency (THB or USD).
+  function walletToDisplay(amount, nativeCcy) {
+    const disp   = state.settings.displayCcy;
+    if (nativeCcy === disp) return amount;
+    const USDTHB = state.fx.USDTHB || window.SEED_FX_USDTHB;
+    const JPYTHB = state.fx.JPYTHB || window.SEED_FX_JPYTHB;
+    const KRWTHB = state.fx.KRWTHB || window.SEED_FX_KRWTHB;
+    // Convert to THB first
+    let inTHB;
+    if      (nativeCcy === 'THB') inTHB = amount;
+    else if (nativeCcy === 'USD') inTHB = amount * USDTHB;
+    else if (nativeCcy === 'JPY') inTHB = amount * JPYTHB;
+    else if (nativeCcy === 'KRW') inTHB = amount * KRWTHB;
+    else                          inTHB = amount;
+    // Convert from THB to display currency
+    if (disp === 'THB') return inTHB;
+    if (disp === 'USD') return inTHB / USDTHB;
+    return inTHB;
   }
 
   // ── Lot calculations ───────────────────────────────────────────────────────
@@ -255,6 +355,74 @@
 
   function classByKey(k) { return window.ASSET_CLASSES.find(c => c.key === k); }
 
+  // Private balance helper — reused by netWorthSummary without going through the public API.
+  function _debtRemainingAmount(d) {
+    if (!d.installment) return d.amount;
+    const { months, interestRate, paidMonths } = d.installment;
+    const totalInterest = d.amount * ((interestRate || 0) / 100) * (months / 12);
+    const monthlyPayment = (d.amount + totalInterest) / months;
+    return monthlyPayment * (months - (paidMonths || 0));
+  }
+
+  function _accBal(accountId) {
+    const acc = wallet.accounts.find(a => a.id === accountId);
+    if (!acc) return 0;
+    let b = acc.initialBal || 0;
+    for (const t of wallet.transactions) {
+      if (t.flow === 'transfer') {
+        if (t.accountId   === accountId) b -= t.amount;
+        if (t.toAccountId === accountId) {
+          const to = wallet.accounts.find(a => a.id === t.toAccountId);
+          const fr = wallet.accounts.find(a => a.id === t.accountId);
+          b += (to && fr && to.currency !== fr.currency && t.fxRate) ? t.amount * t.fxRate : t.amount;
+        }
+      } else if (t.accountId === accountId) {
+        b += t.flow === 'income' ? t.amount : -t.amount;
+      }
+    }
+    return b;
+  }
+
+  // Compute "1 fromCcy = N toCcy" using THB as the pivot.
+  function defaultFxRate(fromCcy, toCcy) {
+    if (fromCcy === toCcy) return 1;
+    const USDTHB = state.fx.USDTHB || window.SEED_FX_USDTHB;
+    const JPYTHB = state.fx.JPYTHB || window.SEED_FX_JPYTHB;
+    const KRWTHB = state.fx.KRWTHB || window.SEED_FX_KRWTHB;
+    function toTHB(ccy) {
+      if (ccy === 'THB') return 1;
+      if (ccy === 'USD') return USDTHB;
+      if (ccy === 'JPY') return JPYTHB;
+      if (ccy === 'KRW') return KRWTHB;
+      return 1;
+    }
+    function fromTHB(ccy) {
+      if (ccy === 'THB') return 1;
+      if (ccy === 'USD') return 1 / USDTHB;
+      if (ccy === 'JPY') return 1 / JPYTHB;
+      if (ccy === 'KRW') return 1 / KRWTHB;
+      return 1;
+    }
+    return toTHB(fromCcy) * fromTHB(toCcy);
+  }
+
+  // Create a wallet transaction linked to an asset buy/sell.
+  function _linkWalletTxn({ accountId, assetCcy, amount, flow, fxRate, note }) {
+    if (!_walletInitialized || !accountId) return;
+    const acc = wallet.accounts.find(a => a.id === accountId);
+    if (!acc) return;
+    const sameCcy = assetCcy === acc.currency;
+    const rate    = sameCcy ? 1 : (fxRate || defaultFxRate(assetCcy, acc.currency));
+    const linked  = (flow === 'income') ? 'cat_invest_in' : 'cat_invest_in';
+    wallet.transactions.push({
+      id: uid(), accountId, date: new Date().toISOString().slice(0, 10),
+      amount: amount * rate, flow,
+      categoryId: 'cat_invest_in', note,
+      toAccountId: null, fxRate: sameCcy ? null : rate,
+    });
+    scheduleWalletSave();
+  }
+
   // Portfolio total always in THB (for snapshots).
   function grandTotalInTHB() {
     const rate = state.fx.USDTHB || window.SEED_FX_USDTHB;
@@ -330,10 +498,18 @@
       }
     } catch (_) { errors.push('crypto'); }
     try {
-      const r = await fetch('https://api.frankfurter.app/latest?from=USD&to=THB');
+      const r = await fetch('https://api.frankfurter.app/latest?from=USD&to=THB,JPY,KRW');
       if (r.ok) {
         const j = await r.json();
-        if (j && j.rates && j.rates.THB) state.fx = { USDTHB: j.rates.THB, at: Date.now() };
+        if (j && j.rates && j.rates.THB) {
+          const USDTHB = j.rates.THB;
+          state.fx = {
+            USDTHB,
+            JPYTHB: j.rates.JPY ? USDTHB / j.rates.JPY : state.fx.JPYTHB,
+            KRWTHB: j.rates.KRW ? USDTHB / j.rates.KRW : state.fx.KRWTHB,
+            at: Date.now(),
+          };
+        }
       }
     } catch (_) { errors.push('fx'); }
     return { errors };
@@ -351,7 +527,7 @@
     setSettings(obj) { Object.assign(state.settings, obj); emit(); },
 
     // ── Holdings mutations ─────────────────────────────────────────────────────
-    addLot(classKey, lot) {
+    addLot(classKey, lot, walletDeduction) {
       state.holdings[classKey] = state.holdings[classKey] || [];
       state.holdings[classKey].push({
         id: uid(), name: lot.name, type: lot.type || undefined,
@@ -359,6 +535,19 @@
         cur: lot.cur != null && lot.cur !== '' ? +lot.cur : +lot.price,
       });
       if (lot.sector) state.sectors[classKey + ':' + lot.name] = lot.sector;
+      // Optionally deduct purchase cost from a wallet account
+      if (walletDeduction && walletDeduction.accountId) {
+        const cls  = classByKey(classKey);
+        const cost = +lot.price * +lot.qty;
+        _linkWalletTxn({
+          accountId: walletDeduction.accountId,
+          assetCcy:  cls ? cls.ccy : 'THB',
+          amount:    cost,
+          flow:      'expense',
+          fxRate:    walletDeduction.exchangeRate || null,
+          note:      `Buy ${window.fmtQty ? window.fmtQty(+lot.qty) : lot.qty} ${lot.name}`,
+        });
+      }
       emit();
     },
     updateLot(classKey, id, patch) {
@@ -387,7 +576,7 @@
     resetAll() { state = freshState(); emit(); },
 
     // ── Sell log mutations ─────────────────────────────────────────────────────
-    recordSale(classKey, { date, name, ccy, buyPrice, sellPrice, qty }) {
+    recordSale(classKey, { date, name, ccy, buyPrice, sellPrice, qty }, walletCredit) {
       const cost       = +buyPrice * +qty;
       const proceeds   = +sellPrice * +qty;
       const realizedPnl = proceeds - cost;
@@ -396,6 +585,17 @@
       state.sales.push({ id: uid(), date, classKey, name, ccy,
         buyPrice: +buyPrice, sellPrice: +sellPrice, qty: +qty,
         cost, proceeds, realizedPnl, pnlPct });
+      // Optionally credit sale proceeds to a wallet account
+      if (walletCredit && walletCredit.accountId) {
+        _linkWalletTxn({
+          accountId: walletCredit.accountId,
+          assetCcy:  ccy || 'THB',
+          amount:    proceeds,
+          flow:      'income',
+          fxRate:    walletCredit.exchangeRate || null,
+          note:      `Sell ${window.fmtQty ? window.fmtQty(+qty) : qty} ${name}`,
+        });
+      }
       emit();
     },
     deleteSale(id) { state.sales = (state.sales || []).filter(s => s.id !== id); emit(); },
@@ -420,8 +620,211 @@
 
     // ── Read helpers (derived data) ────────────────────────────────────────────
     positions, classTotals, grandTotals, sectorTotals, classByKey, toDisplay, lotMetrics,
+    walletToDisplay, defaultFxRate,
     getSnapshots: () => state.snapshots,
     autoSnapshot() { takeSnapshot(); emit(); },
+
+    // ── Wallet read helpers ────────────────────────────────────────────────────
+    getWallet: () => wallet,
+
+    accountBalance: (accountId) => _accBal(accountId),
+
+    monthlyFlow(year, month) {
+      let income = 0, expense = 0;
+      const prefix = `${year}-${String(month).padStart(2, '0')}`;
+      for (const t of wallet.transactions) {
+        if (!t.date.startsWith(prefix)) continue;
+        const acc = wallet.accounts.find(a => a.id === t.accountId);
+        const ccy = acc ? acc.currency : 'THB';
+        const inDisp = walletToDisplay(t.amount, ccy);
+        if (t.flow === 'income')   income  += inDisp;
+        if (t.flow === 'expense')  expense += inDisp;
+      }
+      return { income, expense };
+    },
+
+    debtSummary() {
+      let totalLent = 0, totalBorrowed = 0, monthlyInstallment = 0;
+      for (const d of wallet.debts) {
+        if (d.settled) continue;
+        const inDisp = walletToDisplay(_debtRemainingAmount(d), d.currency);
+        if (d.direction === 'lent')     totalLent     += inDisp;
+        if (d.direction === 'borrowed') totalBorrowed += inDisp;
+        if (d.installment) {
+          const remaining = d.installment.months - (d.installment.paidMonths || 0);
+          if (remaining > 0) {
+            const ti = d.amount * ((d.installment.interestRate || 0) / 100) * (d.installment.months / 12);
+            monthlyInstallment += walletToDisplay((d.amount + ti) / d.installment.months, d.currency);
+          }
+        }
+      }
+      return { totalLent, totalBorrowed, monthlyInstallment };
+    },
+
+    // Net worth: portfolio + cash + credit card debt + borrowed debts
+    netWorthSummary() {
+      const portValue = grandTotals().value;
+      let cashTotal = 0, creditDebt = 0, borrowedDebt = 0;
+
+      for (const acc of wallet.accounts.filter(a => !a.archived)) {
+        const bal = _accBal(acc.id);
+        if (acc.type === 'credit_card') {
+          if (bal > 0) creditDebt += walletToDisplay(bal, acc.currency);
+        } else {
+          if (bal > 0) cashTotal += walletToDisplay(bal, acc.currency);
+        }
+      }
+      for (const d of wallet.debts) {
+        if (!d.settled && d.direction === 'borrowed') {
+          borrowedDebt += walletToDisplay(_debtRemainingAmount(d), d.currency);
+        }
+      }
+
+      const totalAssets      = portValue + cashTotal;
+      const totalLiabilities = creditDebt + borrowedDebt;
+      return { portValue, cashTotal, creditDebt, borrowedDebt, totalAssets, totalLiabilities, netWorth: totalAssets - totalLiabilities };
+    },
+
+    // Last numMonths months of income/expense in display currency
+    walletMonthlyData(numMonths) {
+      numMonths = numMonths || 6;
+      const now = new Date();
+      return Array.from({ length: numMonths }, (_, i) => {
+        const d    = new Date(now.getFullYear(), now.getMonth() - (numMonths - 1 - i), 1);
+        const prefix = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        let income = 0, expense = 0;
+        for (const t of wallet.transactions) {
+          if (!t.date.startsWith(prefix)) continue;
+          const acc  = wallet.accounts.find(a => a.id === t.accountId);
+          const ccy  = acc ? acc.currency : 'THB';
+          const amt  = walletToDisplay(t.amount, ccy);
+          if (t.flow === 'income')  income  += amt;
+          if (t.flow === 'expense') expense += amt;
+        }
+        const label = d.toLocaleString('en', { month: 'short' });
+        return { month: prefix, label, income, expense };
+      });
+    },
+
+    // Income and expense by category for a given month ('YYYY-MM')
+    walletCategoryData(monthPrefix) {
+      const incMap = new Map(), expMap = new Map();
+      for (const t of wallet.transactions) {
+        if (!t.date.startsWith(monthPrefix)) continue;
+        const acc  = wallet.accounts.find(a => a.id === t.accountId);
+        const ccy  = acc ? acc.currency : 'THB';
+        const amt  = walletToDisplay(t.amount, ccy);
+        const cat  = wallet.categories.find(c => c.id === t.categoryId);
+        const key  = cat ? cat.name : 'Uncategorized';
+        const col  = cat ? (cat.color || '#6b7280') : '#6b7280';
+        if (t.flow === 'income')  { const e = incMap.get(key) || { value: 0, color: col }; e.value += amt; incMap.set(key, e); }
+        if (t.flow === 'expense') { const e = expMap.get(key) || { value: 0, color: col }; e.value += amt; expMap.set(key, e); }
+      }
+      const toSegs = m => [...m.entries()].map(([label, v]) => ({ label, value: v.value, color: v.color })).sort((a, b) => b.value - a.value);
+      return { income: toSegs(incMap), expense: toSegs(expMap) };
+    },
+
+    // ── Wallet accounts mutations ──────────────────────────────────────────────
+    addAccount(data) {
+      wallet.accounts.push({
+        id: uid(), name: data.name, type: data.type || 'bank',
+        currency: data.currency || 'THB', color: data.color || null,
+        initialBal: +data.initialBal || 0,
+        creditLimit: data.creditLimit != null ? +data.creditLimit : null,
+        sortOrder: wallet.accounts.length, archived: false,
+      });
+      subs.forEach(fn => fn()); scheduleWalletSave();
+    },
+    updateAccount(id, patch) {
+      const i = wallet.accounts.findIndex(a => a.id === id);
+      if (i < 0) return;
+      wallet.accounts[i] = { ...wallet.accounts[i], ...patch };
+      subs.forEach(fn => fn()); scheduleWalletSave();
+    },
+    deleteAccount(id) {
+      wallet.accounts = wallet.accounts.filter(a => a.id !== id);
+      wallet.transactions = wallet.transactions.filter(t => t.accountId !== id && t.toAccountId !== id);
+      subs.forEach(fn => fn()); scheduleWalletSave();
+    },
+
+    // ── Wallet categories mutations ────────────────────────────────────────────
+    addCategory(data) {
+      wallet.categories.push({ id: uid(), name: data.name, flow: data.flow, icon: data.icon || null, color: data.color || null });
+      subs.forEach(fn => fn()); scheduleWalletSave();
+    },
+    deleteCategory(id) {
+      wallet.categories = wallet.categories.filter(c => c.id !== id);
+      subs.forEach(fn => fn()); scheduleWalletSave();
+    },
+
+    // ── Wallet transaction mutations ───────────────────────────────────────────
+    addTransaction(data) {
+      wallet.transactions.push({
+        id: uid(), accountId: data.accountId, date: data.date,
+        amount: +data.amount, flow: data.flow,
+        categoryId: data.categoryId || null,
+        note: data.note || '',
+        toAccountId: data.toAccountId || null,
+        fxRate: data.fxRate != null ? +data.fxRate : null,
+      });
+      subs.forEach(fn => fn()); scheduleWalletSave();
+    },
+    updateTransaction(id, patch) {
+      const i = wallet.transactions.findIndex(t => t.id === id);
+      if (i < 0) return;
+      wallet.transactions[i] = { ...wallet.transactions[i], ...patch };
+      subs.forEach(fn => fn()); scheduleWalletSave();
+    },
+    deleteTransaction(id) {
+      wallet.transactions = wallet.transactions.filter(t => t.id !== id);
+      subs.forEach(fn => fn()); scheduleWalletSave();
+    },
+
+    // ── Wallet debt mutations ──────────────────────────────────────────────────
+    addDebt(data) {
+      wallet.debts.push({
+        id: uid(), direction: data.direction, counterparty: data.counterparty,
+        amount: +data.amount, currency: data.currency || 'THB',
+        dateStart: data.dateStart, dateDue: data.dateDue || null,
+        note: data.note || '', settled: false, settledDate: null,
+        installment: data.installment || null,
+      });
+      subs.forEach(fn => fn()); scheduleWalletSave();
+    },
+    updateDebt(id, patch) {
+      const i = wallet.debts.findIndex(d => d.id === id);
+      if (i < 0) return;
+      wallet.debts[i] = { ...wallet.debts[i], ...patch };
+      subs.forEach(fn => fn()); scheduleWalletSave();
+    },
+    settleDebt(id, settledDate) {
+      const i = wallet.debts.findIndex(d => d.id === id);
+      if (i < 0) return;
+      wallet.debts[i] = { ...wallet.debts[i], settled: true, settledDate: settledDate || new Date().toISOString().slice(0, 10) };
+      subs.forEach(fn => fn()); scheduleWalletSave();
+    },
+    deleteDebt(id) {
+      wallet.debts = wallet.debts.filter(d => d.id !== id);
+      subs.forEach(fn => fn()); scheduleWalletSave();
+    },
+    payInstallmentMonth(id) {
+      const i = wallet.debts.findIndex(d => d.id === id);
+      if (i < 0) return;
+      const debt = wallet.debts[i];
+      if (!debt.installment) return;
+      const paid = (debt.installment.paidMonths || 0) + 1;
+      const done = paid >= debt.installment.months;
+      wallet.debts[i] = {
+        ...debt,
+        installment: { ...debt.installment, paidMonths: paid },
+        settled: done || debt.settled,
+        settledDate: done && !debt.settled ? new Date().toISOString().slice(0, 10) : debt.settledDate,
+      };
+      subs.forEach(fn => fn()); scheduleWalletSave();
+    },
+
+    // ── Wallet cloud sync ──────────────────────────────────────────────────────
+    loadWalletFromCloud,
 
     // ── DB sync ────────────────────────────────────────────────────────────────
     getPortfolioId: () => portfolioId,
@@ -449,7 +852,14 @@
         const data = await r.json();
         if (!data || typeof data.prices !== 'object') throw new Error('bad-api');
         applyPrices(data.prices);
-        if (data.fx && data.fx.USDTHB) state.fx = { USDTHB: data.fx.USDTHB, at: Date.now() };
+        if (data.fx && data.fx.USDTHB) {
+          state.fx = {
+            USDTHB: data.fx.USDTHB,
+            JPYTHB: data.fx.JPYTHB || state.fx.JPYTHB || window.SEED_FX_JPYTHB,
+            KRWTHB: data.fx.KRWTHB || state.fx.KRWTHB || window.SEED_FX_KRWTHB,
+            at: Date.now(),
+          };
+        }
         state.priceMode   = 'api';
         state.priceErrors = data.errors || [];
         state.lastPriceSync = Date.now();

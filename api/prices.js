@@ -85,16 +85,31 @@ async function cryptoPrices(ids) {
   return r.json();
 }
 
-// ---- USD -> THB -------------------------------------------------------------
-async function usdThb() {
+// ---- FX rates: USDTHB, JPYTHB, KRWTHB --------------------------------------
+async function fetchFxRates() {
   try {
-    const r = await fetch('https://api.frankfurter.app/latest?from=USD&to=THB');
-    if (r.ok) { const j = await r.json(); if (j && j.rates && j.rates.THB) return j.rates.THB; }
+    const r = await fetch('https://api.frankfurter.app/latest?from=USD&to=THB,JPY,KRW');
+    if (r.ok) {
+      const j = await r.json();
+      if (j && j.rates && j.rates.THB) {
+        const USDTHB = j.rates.THB;
+        return {
+          USDTHB,
+          JPYTHB: j.rates.JPY ? USDTHB / j.rates.JPY : null,
+          KRWTHB: j.rates.KRW ? USDTHB / j.rates.KRW : null,
+        };
+      }
+    }
   } catch (e) {}
-  // fallback: derive from CoinGecko (BTC thb / BTC usd)
+  // fallback: derive USDTHB from CoinGecko (BTC thb / BTC usd)
   try {
     const r = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=thb,usd');
-    if (r.ok) { const j = await r.json(); if (j.bitcoin && j.bitcoin.thb && j.bitcoin.usd) return j.bitcoin.thb / j.bitcoin.usd; }
+    if (r.ok) {
+      const j = await r.json();
+      if (j.bitcoin && j.bitcoin.thb && j.bitcoin.usd) {
+        return { USDTHB: j.bitcoin.thb / j.bitcoin.usd, JPYTHB: null, KRWTHB: null };
+      }
+    }
   } catch (e) {}
   throw new Error('fx failed');
 }
@@ -132,7 +147,7 @@ export default async function handler(req, res) {
       .catch(e => errors.push('crypto ' + e.message)));
   }
   if (body.fx) {
-    tasks.push(usdThb().then(v => { fx = { USDTHB: v }; }).catch(e => errors.push('fx ' + e.message)));
+    tasks.push(fetchFxRates().then(v => { fx = v; }).catch(e => errors.push('fx ' + e.message)));
   }
 
   await Promise.allSettled(tasks);
