@@ -358,3 +358,162 @@ do $$ begin
     alter table wallet_debts add column installment jsonb;
   end if;
 end $$;
+
+
+-- ── 6. NEW TABLES & ADDITIVE COLUMNS (schema v2) ─────────────────────────────
+-- Safe to run on an existing database — all statements use IF NOT EXISTS.
+
+-- market_prices: current price per (user, class, ticker). Replaces holdings.cur
+-- as the canonical live-price store. holdings.cur is kept during migration and
+-- can be dropped once this table is populated and the API is deployed.
+create table if not exists market_prices (
+  user_id      text          not null references users(id) on delete cascade,
+  class_key    text          not null,
+  name         text          not null,   -- ticker / fund code
+  price        numeric(18,8) not null check (price >= 0),
+  source       text,                     -- 'yahoo' | 'settrade' | 'coingecko' | 'manual'
+  refreshed_at timestamptz   not null default now(),
+  primary key (user_id, class_key, name)
+);
+create index if not exists market_prices_user_idx on market_prices (user_id);
+
+alter table market_prices enable row level security;
+create policy "deny anon" on market_prices for all using (false);
+
+-- price_history: append-only price log written on each price refresh.
+create table if not exists price_history (
+  id          uuid          primary key default gen_random_uuid(),
+  user_id     text          not null references users(id) on delete cascade,
+  class_key   text          not null,
+  name        text          not null,
+  price       numeric(18,8) not null check (price >= 0),
+  source      text,
+  recorded_at timestamptz   not null default now()
+);
+create index if not exists price_history_user_name_time_idx
+  on price_history (user_id, class_key, name, recorded_at desc);
+
+alter table price_history enable row level security;
+create policy "deny anon" on price_history for all using (false);
+
+-- fx_rate_history: append-only FX rate log written on each price refresh.
+create table if not exists fx_rate_history (
+  id          uuid          primary key default gen_random_uuid(),
+  user_id     text          not null references users(id) on delete cascade,
+  pair        text          not null,
+  rate        numeric(12,6) not null check (rate > 0),
+  recorded_at timestamptz   not null default now()
+);
+create index if not exists fx_history_user_pair_idx
+  on fx_rate_history (user_id, pair, recorded_at desc);
+
+alter table fx_rate_history enable row level security;
+create policy "deny anon" on fx_rate_history for all using (false);
+
+-- debt_payments: individual installment payment records (audit log).
+create table if not exists debt_payments (
+  id            uuid          primary key default gen_random_uuid(),
+  user_id       text          not null references users(id) on delete cascade,
+  debt_id       text          not null references wallet_debts(id) on delete cascade,
+  wallet_txn_id text          references wallet_transactions(id) on delete set null,
+  payment_date  date          not null,
+  amount        numeric(18,2) not null check (amount > 0),
+  month_number  smallint,     -- which installment month this covers (1-based)
+  created_at    timestamptz   not null default now()
+);
+create index if not exists debt_payments_debt_idx on debt_payments (debt_id);
+
+alter table debt_payments enable row level security;
+create policy "deny anon" on debt_payments for all using (false);
+
+-- Additive columns on existing tables (all IF NOT EXISTS, safe to re-run).
+
+do $$ begin
+  -- holdings: purchase date (optional, for cost-basis tracking)
+  if not exists (
+    select 1 from information_schema.columns
+    where table_name = 'holdings' and column_name = 'bought_at'
+  ) then
+    alter table holdings add column bought_at date;
+  end if;
+
+  -- snapshots: per-class value breakdown in THB (nullable — old rows keep nulls)
+  if not exists (
+    select 1 from information_schema.columns
+    where table_name = 'snapshots' and column_name = 'thai_stock'
+  ) then
+    alter table snapshots
+      add column thai_stock numeric(18,2),
+      add column usa_stock  numeric(18,2),
+      add column etf        numeric(18,2),
+      add column fund       numeric(18,2),
+      add column crypto     numeric(18,2),
+      add column gold       numeric(18,2),
+      add column other      numeric(18,2);
+  end if;
+
+  -- wallet_debts: linked account FK (was in store.js but never persisted)
+  if not exists (
+    select 1 from information_schema.columns
+    where table_name = 'wallet_debts' and column_name = 'linked_account_id'
+  ) then
+    alter table wallet_debts
+      add column linked_account_id  text,
+      add column inst_months        smallint,
+      add column inst_interest_rate numeric(6,4),
+      add column inst_paid_months   smallint not null default 0;
+  end if;
+
+  -- wallet_transactions: optional FK to the holding lot that triggered this txn
+  if not exists (
+    select 1 from information_schema.columns
+    where table_name = 'wallet_transactions' and column_name = 'holding_lot_id'
+  ) then
+    alter table wallet_transactions
+      add column holding_lot_id text;
+  end if;
+
+  -- sales: optional FK back to the originating lot
+  if not exists (
+    select 1 from information_schema.columns
+    where table_name = 'sales' and column_name = 'lot_id'
+  ) then
+    alter table sales
+      add column lot_id        text,
+      add column wallet_txn_id text;
+  end if;
+
+  -- wallet_categories: flag for built-in default categories
+  if not exists (
+    select 1 from information_schema.columns
+    where table_name = 'wallet_categories' and column_name = 'is_system'
+  ) then
+    alter table wallet_categories
+      add column is_system  boolean not null default false,
+      add column sort_order int     not null default 0;
+  end if;
+end $$;
+
+
+-- ── 7. DATA MIGRATION (run once after section 6) ─────────────────────────────
+-- Populate market_prices from existing holdings.cur values.
+-- Safe to run multiple times (ON CONFLICT DO NOTHING).
+insert into market_prices (user_id, class_key, name, price, source, refreshed_at)
+select distinct on (user_id, class_key, name)
+  user_id, class_key, name,
+  coalesce(cur, price),
+  'migrated',
+  now()
+from holdings
+where cur is not null or price is not null
+on conflict (user_id, class_key, name) do nothing;
+
+-- Normalize installment JSONB → typed columns in wallet_debts.
+-- Run once. After verifying the API reads from typed columns, drop the jsonb column.
+update wallet_debts
+set
+  inst_months        = (installment->>'months')::smallint,
+  inst_interest_rate = (installment->>'interestRate')::numeric,
+  inst_paid_months   = coalesce((installment->>'paidMonths')::smallint, 0)
+where installment is not null
+  and inst_months is null;  -- idempotent: skip rows already migrated
