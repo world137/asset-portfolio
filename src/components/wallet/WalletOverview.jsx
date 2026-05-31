@@ -3,15 +3,18 @@
 
 function AccountCard({ account, balance, onEdit }) {
   const TYPE_LABELS = { bank: 'Bank', cash: 'Cash', credit_card: 'Credit Card', ewallet: 'E-Wallet' };
-  const color    = account.color || '#5a6677';
-  const isCC     = account.type === 'credit_card';
-  // For credit cards: balance < 0 means you owe money. Debt = |balance|, available = limit - debt.
-  const ccDebt   = isCC ? Math.max(0, -balance) : 0;
-  const ccAvail  = isCC && account.creditLimit ? Math.max(0, account.creditLimit - ccDebt) : 0;
-  const utilPct  = isCC && account.creditLimit ? Math.min((ccDebt / account.creditLimit) * 100, 100) : 0;
-  const balColor = isCC
-    ? (ccDebt > (account.creditLimit || 0) * 0.8 ? 'var(--red-600)' : 'var(--fg-1)')
-    : (balance < 0 ? 'var(--red-600)' : 'var(--fg-1)');
+  const color   = account.color || '#5a6677';
+  const isCC    = account.type === 'credit_card';
+  // balance < 0 means you owe (spent more than paid). ccDebt is the positive debt amount.
+  const ccDebt  = isCC ? Math.max(0, -balance) : 0;
+  const ccAvail = isCC && account.creditLimit ? Math.max(0, account.creditLimit - ccDebt) : 0;
+  const utilPct = isCC && account.creditLimit ? Math.min((ccDebt / account.creditLimit) * 100, 100) : 0;
+  const balColor = balance < 0 ? 'var(--red-600)' : (balance === 0 ? 'var(--fg-3)' : 'var(--fg-1)');
+
+  // Format signed balance: negative shown with − prefix
+  const signedBalance = balance < 0
+    ? '−' + window.fmtCcy(-balance, account.currency)
+    : window.fmtCcy(balance, account.currency);
 
   return (
     <div className="card" style={{ borderTop: '3px solid ' + color }}>
@@ -29,17 +32,19 @@ function AccountCard({ account, balance, onEdit }) {
       </div>
       <div style={{ padding: '4px 16px 14px' }}>
         <div style={{ fontSize: 22, fontWeight: 700, color: balColor, fontFamily: 'var(--font-mono)', lineHeight: 1.2 }}>
-          {isCC ? window.fmtCcy(ccDebt, account.currency) : window.fmtCcy(balance, account.currency)}
+          {signedBalance}
         </div>
         {isCC && (
           <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 2 }}>
-            {account.creditLimit ? `Available: ${window.fmtCcy(ccAvail, account.currency)}` : 'Debt owed'}
+            {account.creditLimit
+              ? `Available: ${window.fmtCcy(ccAvail, account.currency)}`
+              : (ccDebt > 0 ? 'Debt owed' : 'No balance')}
           </div>
         )}
         {isCC && account.creditLimit ? (
           <div style={{ marginTop: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--fg-3)', marginBottom: 4 }}>
-              <span>Debt</span>
+              <span>Used</span>
               <span>{window.fmtCcy(account.creditLimit, account.currency)} limit</span>
             </div>
             <div style={{ height: 4, background: 'var(--bg-inset,var(--bg-app))', borderRadius: 2, overflow: 'hidden' }}>

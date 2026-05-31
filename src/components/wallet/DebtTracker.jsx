@@ -1,5 +1,5 @@
 /* eslint-disable */
-/* DebtTracker.jsx — Lend & Borrow tracker */
+/* DebtTracker.jsx — Debt & Outstanding tracker */
 
 function calcInstallment(amount, months, annualRate) {
   const a = +amount, m = +months, r = +annualRate;
@@ -9,15 +9,111 @@ function calcInstallment(amount, months, annualRate) {
   return { monthlyPayment, totalInterest, totalPayable: a + totalInterest };
 }
 
+/* ── Pay-installment account picker ─────────────────────────────────────── */
+function PayInstallmentModal({ open, debt, onClose }) {
+  const today    = new Date().toISOString().slice(0, 10);
+  const wallet   = Store.getWallet();
+  const accounts = wallet.accounts.filter(a => !a.archived);
+
+  const [accountId, setAccountId] = React.useState('');
+  const [date, setDate]           = React.useState(today);
+
+  React.useEffect(() => {
+    if (!open || !debt) return;
+    setDate(today);
+    setAccountId(debt.linkedAccountId || accounts[0]?.id || '');
+  }, [open, debt]);
+
+  if (!debt) return null;
+
+  const instCalc  = debt.installment
+    ? calcInstallment(debt.amount, debt.installment.months, debt.installment.interestRate)
+    : null;
+  const paidMo    = debt.installment ? (debt.installment.paidMonths || 0) : 0;
+  const totalMo   = debt.installment ? debt.installment.months : 0;
+  const isDebt    = debt.direction === 'borrowed';
+  const linkedAcc = debt.linkedAccountId ? accounts.find(a => a.id === debt.linkedAccountId) : null;
+  const isLinkedCC = linkedAcc && linkedAcc.type === 'credit_card';
+  const payingAcc  = accounts.find(a => a.id === accountId);
+  const isPayingCC = payingAcc && payingAcc.type === 'credit_card';
+
+  let accLabel = isDebt ? 'Pay from account' : 'Receive repayment into account';
+  let accHint  = '';
+  if (isDebt && accountId) {
+    if (isPayingCC) {
+      accHint = `Income of ${instCalc ? window.fmtCcy(instCalc.monthlyPayment, debt.currency) : ''} recorded on ${payingAcc.name} — balance will decrease.`;
+    } else if (isLinkedCC) {
+      accHint = `Transfer from ${payingAcc?.name || 'account'} → ${linkedAcc.name}. Both balances will update.`;
+    } else {
+      accHint = 'Expense recorded on this account.';
+    }
+  } else if (!isDebt && accountId) {
+    accHint = 'Income recorded on this account.';
+  }
+
+  const confirm_ = () => {
+    Store.payInstallmentMonth(debt.id, accountId || null, date);
+    onClose();
+  };
+
+  return (
+    <Modal open={open} onClose={onClose}
+           title={isDebt ? 'Record Debt Payment' : 'Record Repayment Received'}
+           footer={
+             <React.Fragment>
+               <Button variant="ghost" onClick={onClose}>Cancel</Button>
+               <Button variant="accent" icon="check" onClick={confirm_}>Confirm</Button>
+             </React.Fragment>
+           }
+           width={400}>
+      <div className="mgrid">
+        <div className="full" style={{ background: 'var(--bg-2)', borderRadius: 8, padding: '10px 14px', fontSize: 13 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: 'var(--fg-2)' }}>{debt.counterparty}</span>
+            <span>Month {paidMo + 1} / {totalMo}</span>
+          </div>
+          {instCalc && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontWeight: 600 }}>
+              <span style={{ color: 'var(--fg-3)', fontWeight: 400 }}>Payment</span>
+              <span style={{ color: isDebt ? 'var(--red-600)' : 'var(--green-600)' }}>
+                {window.fmtCcy(instCalc.monthlyPayment, debt.currency)}
+              </span>
+            </div>
+          )}
+        </div>
+        <div className="full">
+          <label className="flabel">Date</label>
+          <input className="input" type="date" value={date} onChange={e => setDate(e.target.value)} />
+        </div>
+        <div className="full">
+          <label className="flabel">{accLabel} (optional)</label>
+          <select className="input" value={accountId} onChange={e => setAccountId(e.target.value)}>
+            <option value="">— Skip transaction —</option>
+            {accounts.map(a => (
+              <option key={a.id} value={a.id}>
+                {a.name} ({a.currency}){a.type === 'credit_card' ? ' · Credit Card' : ''}
+              </option>
+            ))}
+          </select>
+          {accHint && (
+            <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 3 }}>{accHint}</div>
+          )}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 function DebtTracker() {
   useStore();
   const settings = Store.settings();
   const sym      = window.ccySymbol(settings.displayCcy);
   const wallet   = Store.getWallet();
 
-  const [modalOpen, setModalOpen] = React.useState(false);
-  const [editDebt,  setEditDebt]  = React.useState(null);
-  const [tab, setTab]             = React.useState('outstanding'); // 'outstanding' | 'settled'
+  const [modalOpen, setModalOpen]   = React.useState(false);
+  const [editDebt,  setEditDebt]    = React.useState(null);
+  const [tab, setTab]               = React.useState('outstanding'); // 'outstanding' | 'settled'
+  const [payingDebt, setPayingDebt] = React.useState(null);
 
   const debts    = wallet.debts;
   const summary  = Store.debtSummary();
@@ -36,24 +132,24 @@ function DebtTracker() {
     <div className="page">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h1 className="t-h1" style={{ margin: '0 0 2px' }}>Debts</h1>
-          <div className="t-small">Track money you lent or borrowed</div>
+          <h1 className="t-h1" style={{ margin: '0 0 2px' }}>Debts & Outstanding</h1>
+          <div className="t-small">Track money you owe or are owed</div>
         </div>
         <Button variant="accent" icon="plus" onClick={() => { setEditDebt(null); setModalOpen(true); }}>
-          Add Debt
+          Add Record
         </Button>
       </div>
 
       <div className="kpis" style={{ marginBottom: 22 }}>
-        <div className="kpi accent">
-          <div className="lab">Total Lent</div>
-          <div className="big up"><span className="ccy">{sym}</span>{window.fmtBig(summary.totalLent)}</div>
-          <div className="delta" style={{ color: 'var(--fg-3)' }}>outstanding</div>
-        </div>
         <div className="kpi">
-          <div className="lab">Total Borrowed</div>
+          <div className="lab">Total Debt</div>
           <div className="big down"><span className="ccy">{sym}</span>{window.fmtBig(summary.totalBorrowed)}</div>
-          <div className="delta" style={{ color: 'var(--fg-3)' }}>outstanding</div>
+          <div className="delta" style={{ color: 'var(--fg-3)' }}>you owe</div>
+        </div>
+        <div className="kpi accent">
+          <div className="lab">Total Outstanding</div>
+          <div className="big up"><span className="ccy">{sym}</span>{window.fmtBig(summary.totalLent)}</div>
+          <div className="delta" style={{ color: 'var(--fg-3)' }}>owed to you</div>
         </div>
         <div className="kpi">
           <div className="lab">Net Position</div>
@@ -61,13 +157,13 @@ function DebtTracker() {
             <span className="ccy">{sym}</span>{window.fmtBig(Math.abs(net))}
           </div>
           <div className={'delta ' + (net >= 0 ? 'up' : 'down')}>
-            {net >= 0 ? 'Others owe you' : 'You owe others'}
+            {net >= 0 ? 'Others owe you more' : 'You owe others more'}
           </div>
         </div>
         <div className="kpi">
           <div className="lab">Monthly Installment</div>
           <div className="big"><span className="ccy">{sym}</span>{window.fmtBig(summary.monthlyInstallment)}</div>
-          <div className="delta" style={{ color: 'var(--fg-3)' }}>{outstanding.length} outstanding · {settled.length} settled</div>
+          <div className="delta" style={{ color: 'var(--fg-3)' }}>{outstanding.length} active · {settled.length} settled</div>
         </div>
       </div>
 
@@ -75,7 +171,7 @@ function DebtTracker() {
         <div className="card-h" style={{ paddingBottom: 0 }}>
           <div className="layoutseg" style={{ marginBottom: 0 }}>
             <button className={tab === 'outstanding' ? 'on' : ''} onClick={() => setTab('outstanding')}>
-              Outstanding ({outstanding.length})
+              Active ({outstanding.length})
             </button>
             <button className={tab === 'settled' ? 'on' : ''} onClick={() => setTab('settled')}>
               Settled ({settled.length})
@@ -86,13 +182,13 @@ function DebtTracker() {
           <table className="ptable">
             <thead>
               <tr>
-                <th style={{ width: 88 }}>Type</th>
+                <th style={{ width: 100 }}>Type</th>
                 <th>Person</th>
                 <th className="num">Amount</th>
                 <th style={{ width: 90 }}>Start</th>
                 <th style={{ width: 100 }}>Due / Settled</th>
                 <th>Note {hasInstallments && tab === 'outstanding' ? '/ Progress' : ''}</th>
-                <th style={{ width: 64 }} />
+                <th style={{ width: 80 }} />
               </tr>
             </thead>
             <tbody>
@@ -100,34 +196,34 @@ function DebtTracker() {
                 <tr>
                   <td colSpan={7}>
                     <div className="empty">
-                      {tab === 'outstanding' ? 'No outstanding debts.' : 'No settled debts yet.'}
+                      {tab === 'outstanding' ? 'No active debts or outstanding.' : 'No settled records yet.'}
                     </div>
                   </td>
                 </tr>
               )}
               {displayed.map(d => {
-                const isLent    = d.direction === 'lent';
-                const isOverdue = !d.settled && d.dateDue && d.dateDue < today;
-                const instCalc  = d.installment ? calcInstallment(d.amount, d.installment.months, d.installment.interestRate) : null;
-                const paidMo    = d.installment ? (d.installment.paidMonths || 0) : 0;
-                const totalMo   = d.installment ? d.installment.months : 0;
-                const canPay    = d.installment && !d.settled && paidMo < totalMo;
+                const isOutstanding = d.direction === 'lent';
+                const isOverdue     = !d.settled && d.dateDue && d.dateDue < today;
+                const instCalc      = d.installment ? calcInstallment(d.amount, d.installment.months, d.installment.interestRate) : null;
+                const paidMo        = d.installment ? (d.installment.paidMonths || 0) : 0;
+                const totalMo       = d.installment ? d.installment.months : 0;
+                const canPay        = d.installment && !d.settled && paidMo < totalMo;
                 return (
                   <tr key={d.id} onClick={() => { setEditDebt(d); setModalOpen(true); }} style={{ cursor: 'pointer' }}>
                     <td>
                       <span className="sectorchip"
                             style={{
-                              background: isLent ? 'var(--green-600)22' : 'var(--red-600)22',
-                              color: isLent ? 'var(--green-600)' : 'var(--red-600)',
+                              background: isOutstanding ? 'var(--green-600)22' : 'var(--red-600)22',
+                              color: isOutstanding ? 'var(--green-600)' : 'var(--red-600)',
                             }}>
-                        {isLent ? 'Lent' : 'Borrowed'}
+                        {isOutstanding ? 'Outstanding' : 'Debt'}
                       </span>
                       {d.installment && (
                         <div style={{ fontSize: 10, color: 'var(--fg-4)', marginTop: 3 }}>Installment</div>
                       )}
                     </td>
                     <td style={{ fontWeight: 500 }}>{d.counterparty}</td>
-                    <td className="num" style={{ fontWeight: 600, color: isLent ? 'var(--green-600)' : 'var(--red-600)' }}>
+                    <td className="num" style={{ fontWeight: 600, color: isOutstanding ? 'var(--green-600)' : 'var(--red-600)' }}>
                       {window.fmtCcy(d.amount, d.currency)}
                       {instCalc && (
                         <div style={{ fontWeight: 400, fontSize: 11, color: 'var(--fg-3)', marginTop: 2 }}>
@@ -158,7 +254,7 @@ function DebtTracker() {
                             <div style={{
                               height: '100%',
                               width: totalMo > 0 ? `${(paidMo / totalMo) * 100}%` : '0%',
-                              background: isLent ? 'var(--green-600)' : 'var(--red-600)',
+                              background: isOutstanding ? 'var(--green-600)' : 'var(--red-600)',
                               borderRadius: 2,
                             }} />
                           </div>
@@ -169,14 +265,12 @@ function DebtTracker() {
                       <div style={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
                         {canPay && (
                           <Button variant="ghost" size="sm"
-                                  title={`Pay month ${paidMo + 1} of ${totalMo}`}
+                                  title={`Record payment ${paidMo + 1} of ${totalMo}`}
                                   onClick={e => {
                                     e.stopPropagation();
-                                    if (confirm(`Record payment ${paidMo + 1}/${totalMo} for ${d.counterparty}?`)) {
-                                      Store.payInstallmentMonth(d.id);
-                                    }
+                                    setPayingDebt(d);
                                   }}>
-                            Pay
+                            {isOutstanding ? 'Receive' : 'Pay'}
                           </Button>
                         )}
                         <Button variant="ghost" size="sm" icon="edit"
@@ -193,6 +287,9 @@ function DebtTracker() {
 
       <DebtModal open={modalOpen} debt={editDebt}
                  onClose={() => { setModalOpen(false); setEditDebt(null); }} />
+
+      <PayInstallmentModal open={!!payingDebt} debt={payingDebt}
+                           onClose={() => setPayingDebt(null)} />
     </div>
   );
 }
