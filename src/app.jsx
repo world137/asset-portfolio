@@ -31,18 +31,18 @@ function Nav({ route, setRoute, totals, open, onClose }) {
         <span className="wm">Portfolio<small>Asset Tracker</small></span>
       </div>
       <div className="scroll">
-        {item('dashboard', 'Dashboard', 'layers')}
+        {item('dashboard', 'Dashboard', 'home')}
         {item('networth',  'Net Worth', 'shield')}
         <div className="grp-h">Holdings</div>
         {window.ASSET_CLASSES.map(c => item(c.key, c.label, null, window.CLASS_COLORS[c.key]))}
         <div className="grp-h">Analysis</div>
-        {item('sectors', 'By Sector', 'sliders')}
-        {item('summary', 'Cost vs Price', 'list')}
+        {item('sectors', 'By Sector', 'pie-chart')}
+        {item('summary', 'Cost vs Price', 'bar-chart-2')}
         {item('selllog', 'Sell Log', 'trending-down')}
         <div className="grp-h">Wallet</div>
-        {item('wallet',         'Accounts',     'layers')}
-        {item('transactions',   'Transactions', 'list')}
-        {item('debts',          'Debts',        'history')}
+        {item('wallet',         'Accounts',     'wallet')}
+        {item('transactions',   'Transactions', 'repeat')}
+        {item('debts',          'Debts',        'credit-card')}
         {item('walletsummary',  'Summary',      'sliders')}
         {item('walletcalendar', 'Calendar',     'calendar')}
       </div>
