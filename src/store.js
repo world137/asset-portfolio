@@ -355,33 +355,35 @@
 
   function classByKey(k) { return window.ASSET_CLASSES.find(c => c.key === k); }
 
-  // Private balance helper — reused by netWorthSummary without going through the public API.
   // Build the correct transaction(s) for a debt payment or outstanding receipt.
-  // For a borrowed debt linked to a credit card:
-  //   - paying FROM the CC itself  → income on CC (reduces CC balance)
-  //   - paying FROM a bank/cash    → transfer from bank to CC (bank down, CC up)
-  // For a borrowed debt with no linked CC → expense on the paying account
-  // For an outstanding (lent) receipt     → income on the receiving account
+  // CC-linked debt: must pay from a non-CC account → creates a transfer to the CC.
+  //   Paying from any credit card is blocked (would be circular / fake payment).
+  // Non-CC-linked debt: expense on the paying account.
+  // Outstanding (lent) receipt: income on the receiving account.
   function _debtPayTx(debt, accountId, amount, date, note) {
     const txBase = { categoryId: null, toAccountId: null, fxRate: null, note };
     if (debt.direction === 'lent') {
       return [{ id: uid(), accountId, date, amount, flow: 'income', ...txBase }];
     }
     // borrowed
-    const payingAcc  = wallet.accounts.find(a => a.id === accountId);
+    const payingAcc   = wallet.accounts.find(a => a.id === accountId);
     const linkedAccId = debt.linkedAccountId;
-    const linkedAcc  = linkedAccId ? wallet.accounts.find(a => a.id === linkedAccId) : null;
-    const isLinkedCC = linkedAcc && linkedAcc.type === 'credit_card';
+    const linkedAcc   = linkedAccId ? wallet.accounts.find(a => a.id === linkedAccId) : null;
+    const isLinkedCC  = linkedAcc && linkedAcc.type === 'credit_card';
 
-    if (payingAcc && payingAcc.type === 'credit_card') {
-      // Paying directly on a CC account → income reduces the CC balance
-      return [{ id: uid(), accountId, date, amount, flow: 'income', ...txBase }];
-    }
-    if (isLinkedCC && linkedAccId !== accountId) {
-      // Paying from a non-CC account toward a CC debt → transfer: bank↓, CC↑
+    if (isLinkedCC) {
+      // CC-linked debt: payment MUST come from a non-CC account.
+      // Paying via any credit card is invalid — block it (return no transactions).
+      if (!payingAcc || payingAcc.type === 'credit_card') return [];
+      // Transfer from bank/cash/ewallet → linked CC (bank↓, CC↑)
       return [{ id: uid(), accountId, date, amount, flow: 'transfer', ...txBase, toAccountId: linkedAccId }];
     }
-    // Generic: expense from the chosen account
+
+    // Non-CC-linked borrowed debt
+    if (payingAcc && payingAcc.type === 'credit_card') {
+      // Paying from a CC → income on that CC (reduces CC balance)
+      return [{ id: uid(), accountId, date, amount, flow: 'income', ...txBase }];
+    }
     return [{ id: uid(), accountId, date, amount, flow: 'expense', ...txBase }];
   }
 
@@ -706,6 +708,11 @@
       }
       for (const d of wallet.debts) {
         if (!d.settled && d.direction === 'borrowed') {
+          // Skip CC-linked debts — their liability is already captured in creditDebt via the CC account balance
+          if (d.linkedAccountId) {
+            const la = wallet.accounts.find(a => a.id === d.linkedAccountId);
+            if (la && la.type === 'credit_card') continue;
+          }
           borrowedDebt += walletToDisplay(_debtRemainingAmount(d), d.currency);
         }
       }
@@ -835,10 +842,19 @@
       const resolvedDate = settledDate || new Date().toISOString().slice(0, 10);
       wallet.debts[i] = { ...debt, settled: true, settledDate: resolvedDate };
       if (accountId) {
-        const remaining = _debtRemainingAmount(debt);
-        const tx = _debtPayTx(debt, accountId, remaining, resolvedDate,
-          debt.direction === 'borrowed' ? `Debt settled: ${debt.counterparty}` : `Outstanding received: ${debt.counterparty}`);
-        tx.forEach(t => wallet.transactions.push(t));
+        // For CC-linked debts cap at actual CC balance to prevent overpayment
+        let remaining = _debtRemainingAmount(debt);
+        if (debt.direction === 'borrowed' && debt.linkedAccountId) {
+          const la = wallet.accounts.find(a => a.id === debt.linkedAccountId);
+          if (la && la.type === 'credit_card') {
+            remaining = Math.min(remaining, Math.max(0, -_accBal(debt.linkedAccountId)));
+          }
+        }
+        if (remaining > 0) {
+          const tx = _debtPayTx(debt, accountId, remaining, resolvedDate,
+            debt.direction === 'borrowed' ? `Debt settled: ${debt.counterparty}` : `Outstanding received: ${debt.counterparty}`);
+          tx.forEach(t => wallet.transactions.push(t));
+        }
       }
       subs.forEach(fn => fn()); scheduleWalletSave();
     },
@@ -862,12 +878,17 @@
       };
       if (accountId) {
         const ti = debt.amount * ((debt.installment.interestRate || 0) / 100) * (debt.installment.months / 12);
+        // Installment payments use the contracted fixed monthly amount — no CC balance cap.
+        // Pre-payments via direct transfers are separate and may cause the CC to go positive,
+        // which is correct (the user over-paid the card but fulfilled the contract).
         const monthlyPayment = (debt.amount + ti) / debt.installment.months;
         const label = debt.direction === 'borrowed'
           ? `Debt payment: ${debt.counterparty} (${paid}/${debt.installment.months})`
           : `Outstanding received: ${debt.counterparty} (${paid}/${debt.installment.months})`;
-        const tx = _debtPayTx(debt, accountId, monthlyPayment, resolvedDate, label);
-        tx.forEach(t => wallet.transactions.push(t));
+        if (monthlyPayment > 0) {
+          const tx = _debtPayTx(debt, accountId, monthlyPayment, resolvedDate, label);
+          tx.forEach(t => wallet.transactions.push(t));
+        }
       }
       subs.forEach(fn => fn()); scheduleWalletSave();
     },

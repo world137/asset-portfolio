@@ -1,23 +1,149 @@
 /* eslint-disable */
 /* WalletOverview.jsx — Accounts page: account cards, balances, monthly summary */
 
-function AccountCard({ account, balance, onEdit }) {
+/* ── Drag-to-transfer modal ──────────────────────────────────────────────── */
+function DragTransferModal({ open, fromAccount, toAccount, onClose }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [amount, setAmount] = React.useState('');
+  const [date,   setDate]   = React.useState(today);
+  const [fxRate, setFxRate] = React.useState('');
+  const [note,   setNote]   = React.useState('');
+
+  React.useEffect(() => {
+    if (!open) return;
+    setAmount(''); setDate(today); setFxRate(''); setNote('');
+  }, [open]);
+
+  if (!fromAccount || !toAccount) return null;
+
+  const isCross   = fromAccount.currency !== toAccount.currency;
+  const fromBal   = Store.accountBalance(fromAccount.id);
+  const toBal     = Store.accountBalance(toAccount.id);
+  const maxSend   = fromAccount.type !== 'credit_card' ? fromBal : null;
+  const valid     = +amount > 0 && date && (!isCross || +fxRate > 0);
+
+  const save = () => {
+    if (!valid) return;
+    Store.addTransaction({
+      accountId:   fromAccount.id,
+      toAccountId: toAccount.id,
+      amount:      +amount,
+      flow:        'transfer',
+      date,
+      categoryId:  null,
+      note:        note.trim(),
+      fxRate:      isCross ? +fxRate : null,
+    });
+    onClose();
+  };
+
+  const arrowStyle = { fontSize: 18, color: 'var(--accent)', fontWeight: 700, lineHeight: 1 };
+
+  return (
+    <Modal open={open} onClose={onClose}
+           title="Transfer Between Accounts"
+           subtitle="Move money from one account to another"
+           footer={
+             <React.Fragment>
+               <Button variant="ghost" onClick={onClose}>Cancel</Button>
+               <Button variant="accent" icon="arrow-right" onClick={save} disabled={!valid}>
+                 Transfer
+               </Button>
+             </React.Fragment>
+           }
+           width={460}>
+      <div className="mgrid">
+        {/* From → To header */}
+        <div className="full" style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg-2)', borderRadius: 10, padding: '12px 14px' }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 11, color: 'var(--fg-3)', marginBottom: 3 }}>From</div>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>{fromAccount.name}</div>
+            <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 2 }}>
+              Balance: {fromBal < 0 ? '−' + window.fmtCcy(-fromBal, fromAccount.currency) : window.fmtCcy(fromBal, fromAccount.currency)}
+            </div>
+          </div>
+          <div style={arrowStyle}>→</div>
+          <div style={{ flex: 1, textAlign: 'right' }}>
+            <div style={{ fontSize: 11, color: 'var(--fg-3)', marginBottom: 3 }}>To</div>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>{toAccount.name}</div>
+            <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 2 }}>
+              Balance: {toBal < 0 ? '−' + window.fmtCcy(-toBal, toAccount.currency) : window.fmtCcy(toBal, toAccount.currency)}
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label className="flabel">Amount ({fromAccount.currency})</label>
+          <input className="input" type="number" min="0" step="any" placeholder="0.00" autoFocus
+                 value={amount} onChange={e => setAmount(e.target.value)} />
+          {maxSend !== null && maxSend > 0 && (
+            <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 3 }}>
+              Available: {window.fmtCcy(maxSend, fromAccount.currency)}
+              <button style={{ marginLeft: 6, fontSize: 11, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                      onClick={() => setAmount(String(maxSend))}>
+                Max
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div>
+          <label className="flabel">Date</label>
+          <input className="input" type="date" value={date} onChange={e => setDate(e.target.value)} />
+        </div>
+
+        {isCross && (
+          <div className="full">
+            <label className="flabel">
+              Exchange Rate (1 {fromAccount.currency} = ? {toAccount.currency})
+            </label>
+            <input className="input" type="number" min="0" step="any" placeholder="e.g. 33.5"
+                   value={fxRate} onChange={e => setFxRate(e.target.value)} />
+            {+fxRate > 0 && +amount > 0 && (
+              <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 3 }}>
+                Recipient gets {window.fmtCcy(+amount * +fxRate, toAccount.currency)}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="full">
+          <label className="flabel">Note (optional)</label>
+          <input className="input" placeholder="e.g. Monthly savings transfer"
+                 value={note} onChange={e => setNote(e.target.value)} />
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/* ── Account card ────────────────────────────────────────────────────────── */
+function AccountCard({ account, balance, onEdit, isDragging, isDropTarget, dragHandlers }) {
   const TYPE_LABELS = { bank: 'Bank', cash: 'Cash', credit_card: 'Credit Card', ewallet: 'E-Wallet' };
   const color   = account.color || '#5a6677';
   const isCC    = account.type === 'credit_card';
-  // balance < 0 means you owe (spent more than paid). ccDebt is the positive debt amount.
   const ccDebt  = isCC ? Math.max(0, -balance) : 0;
   const ccAvail = isCC && account.creditLimit ? Math.max(0, account.creditLimit - ccDebt) : 0;
   const utilPct = isCC && account.creditLimit ? Math.min((ccDebt / account.creditLimit) * 100, 100) : 0;
   const balColor = balance < 0 ? 'var(--red-600)' : (balance === 0 ? 'var(--fg-3)' : 'var(--fg-1)');
 
-  // Format signed balance: negative shown with − prefix
   const signedBalance = balance < 0
     ? '−' + window.fmtCcy(-balance, account.currency)
     : window.fmtCcy(balance, account.currency);
 
+  const cardStyle = {
+    borderTop: '3px solid ' + color,
+    opacity:     isDragging   ? 0.45 : 1,
+    outline:     isDropTarget ? '2px dashed var(--accent)' : 'none',
+    outlineOffset: isDropTarget ? '2px' : '0',
+    boxShadow:   isDropTarget ? '0 0 0 4px var(--accent)22' : undefined,
+    cursor:      'grab',
+    transition:  'opacity .15s, outline .1s, box-shadow .1s',
+    userSelect:  'none',
+  };
+
   return (
-    <div className="card" style={{ borderTop: '3px solid ' + color }}>
+    <div className="card" style={cardStyle} {...dragHandlers}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px 6px' }}>
         <div>
           <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--fg-1)' }}>{account.name}</div>
@@ -28,7 +154,10 @@ function AccountCard({ account, balance, onEdit }) {
             <span style={{ fontSize: 11, color: 'var(--fg-3)' }}>{account.currency}</span>
           </div>
         </div>
-        <Button variant="ghost" size="sm" icon="edit" onClick={onEdit} />
+        {/* Stop drag propagation on the edit button so clicking edit still works */}
+        <div onMouseDown={e => e.stopPropagation()} draggable={false}>
+          <Button variant="ghost" size="sm" icon="edit" onClick={onEdit} />
+        </div>
       </div>
       <div style={{ padding: '4px 16px 14px' }}>
         <div style={{ fontSize: 22, fontWeight: 700, color: balColor, fontFamily: 'var(--font-mono)', lineHeight: 1.2 }}>
@@ -52,18 +181,28 @@ function AccountCard({ account, balance, onEdit }) {
             </div>
           </div>
         ) : null}
+        {isDropTarget && (
+          <div style={{ marginTop: 8, fontSize: 11, color: 'var(--accent)', fontWeight: 500, textAlign: 'center' }}>
+            Drop to transfer here
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
+/* ── Page ────────────────────────────────────────────────────────────────── */
 function WalletOverview() {
   useStore();
   const settings  = Store.settings();
   const sym       = window.ccySymbol(settings.displayCcy);
   const wallet    = Store.getWallet();
-  const [addOpen, setAddOpen]     = React.useState(false);
-  const [editAcc,  setEditAcc]    = React.useState(null);
+
+  const [addOpen,  setAddOpen]  = React.useState(false);
+  const [editAcc,  setEditAcc]  = React.useState(null);
+  const [dragFrom, setDragFrom] = React.useState(null); // account id being dragged
+  const [dragOver, setDragOver] = React.useState(null); // account id being hovered during drag
+  const [transfer, setTransfer] = React.useState(null); // { fromId, toId }
 
   const accounts = wallet.accounts.filter(a => !a.archived);
 
@@ -75,13 +214,62 @@ function WalletOverview() {
 
   const totalDisplay = accountsWithBal.reduce((s, a) => s + a.balanceDisplay, 0);
 
-  const now      = new Date();
-  const monthly  = Store.monthlyFlow(now.getFullYear(), now.getMonth() + 1);
-  const netFlow  = monthly.income - monthly.expense;
+  const now     = new Date();
+  const monthly = Store.monthlyFlow(now.getFullYear(), now.getMonth() + 1);
+  const netFlow = monthly.income - monthly.expense;
 
-  // Split accounts by type for display order
   const regularAccounts = accountsWithBal.filter(a => a.type !== 'credit_card');
   const creditCards     = accountsWithBal.filter(a => a.type === 'credit_card');
+
+  const dragHandlersFor = (accId) => ({
+    draggable: true,
+    onDragStart: (e) => {
+      setDragFrom(accId);
+      e.dataTransfer.effectAllowed = 'move';
+      // Tiny delay so the ghost image renders before opacity change
+      setTimeout(() => setDragFrom(accId), 0);
+    },
+    onDragEnd: () => {
+      setDragFrom(null);
+      setDragOver(null);
+    },
+    onDragOver: (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (dragFrom && dragFrom !== accId) setDragOver(accId);
+    },
+    onDragEnter: (e) => {
+      e.preventDefault();
+      if (dragFrom && dragFrom !== accId) setDragOver(accId);
+    },
+    onDragLeave: (e) => {
+      // Only clear if leaving the card entirely (not entering a child)
+      if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(null);
+    },
+    onDrop: (e) => {
+      e.preventDefault();
+      if (dragFrom && dragFrom !== accId) {
+        setTransfer({ fromId: dragFrom, toId: accId });
+      }
+      setDragFrom(null);
+      setDragOver(null);
+    },
+  });
+
+  const fromAcc = transfer ? accountsWithBal.find(a => a.id === transfer.fromId) : null;
+  const toAcc   = transfer ? accountsWithBal.find(a => a.id === transfer.toId)   : null;
+
+  const renderCard = (a) => (
+    <AccountCard
+      key={a.id}
+      account={a}
+      balance={a.balance}
+      onEdit={() => setEditAcc(a)}
+      isDragging={dragFrom === a.id}
+      isDropTarget={dragOver === a.id && dragFrom !== a.id}
+      dragHandlers={dragHandlersFor(a.id)}
+    />
+  );
 
   return (
     <div className="page">
@@ -124,13 +312,17 @@ function WalletOverview() {
         </div>
       ) : (
         <React.Fragment>
+          {dragFrom && (
+            <div style={{ fontSize: 12, color: 'var(--accent)', textAlign: 'center', marginBottom: 10, fontWeight: 500 }}>
+              Drop onto another account to transfer
+            </div>
+          )}
+
           {regularAccounts.length > 0 && (
             <div style={{ marginBottom: 20 }}>
               <div className="grp-h" style={{ marginBottom: 10 }}>Bank, Cash &amp; E-Wallet</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(260px, 100%), 1fr))', gap: 14 }}>
-                {regularAccounts.map(a => (
-                  <AccountCard key={a.id} account={a} balance={a.balance} onEdit={() => setEditAcc(a)} />
-                ))}
+                {regularAccounts.map(renderCard)}
               </div>
             </div>
           )}
@@ -138,10 +330,14 @@ function WalletOverview() {
             <div>
               <div className="grp-h" style={{ marginBottom: 10 }}>Credit Cards</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(260px, 100%), 1fr))', gap: 14 }}>
-                {creditCards.map(a => (
-                  <AccountCard key={a.id} account={a} balance={a.balance} onEdit={() => setEditAcc(a)} />
-                ))}
+                {creditCards.map(renderCard)}
               </div>
+            </div>
+          )}
+
+          {accounts.length > 1 && !dragFrom && (
+            <div style={{ fontSize: 11, color: 'var(--fg-4)', textAlign: 'center', marginTop: 14 }}>
+              Drag any card onto another to transfer
             </div>
           )}
         </React.Fragment>
@@ -149,6 +345,13 @@ function WalletOverview() {
 
       <AccountModal open={addOpen || !!editAcc} account={editAcc}
                     onClose={() => { setAddOpen(false); setEditAcc(null); }} />
+
+      <DragTransferModal
+        open={!!transfer}
+        fromAccount={fromAcc}
+        toAccount={toAcc}
+        onClose={() => setTransfer(null)}
+      />
     </div>
   );
 }

@@ -18,32 +18,37 @@ function PayInstallmentModal({ open, debt, onClose }) {
   const [accountId, setAccountId] = React.useState('');
   const [date, setDate]           = React.useState(today);
 
+  const linkedAcc  = debt ? (debt.linkedAccountId ? accounts.find(a => a.id === debt.linkedAccountId) : null) : null;
+  const isLinkedCC = !!(linkedAcc && linkedAcc.type === 'credit_card');
+
+  // For CC-linked debts, only non-CC accounts are valid payers
+  const payableAccounts = (debt && debt.direction === 'borrowed' && isLinkedCC)
+    ? accounts.filter(a => a.type !== 'credit_card')
+    : accounts;
+
   React.useEffect(() => {
     if (!open || !debt) return;
     setDate(today);
-    setAccountId(debt.linkedAccountId || accounts[0]?.id || '');
+    // Default: first valid non-CC account (never default to the linked CC)
+    const firstValid = payableAccounts[0];
+    setAccountId(firstValid ? firstValid.id : '');
   }, [open, debt]);
 
   if (!debt) return null;
 
-  const instCalc  = debt.installment
+  const instCalc = debt.installment
     ? calcInstallment(debt.amount, debt.installment.months, debt.installment.interestRate)
     : null;
-  const paidMo    = debt.installment ? (debt.installment.paidMonths || 0) : 0;
-  const totalMo   = debt.installment ? debt.installment.months : 0;
-  const isDebt    = debt.direction === 'borrowed';
-  const linkedAcc = debt.linkedAccountId ? accounts.find(a => a.id === debt.linkedAccountId) : null;
-  const isLinkedCC = linkedAcc && linkedAcc.type === 'credit_card';
-  const payingAcc  = accounts.find(a => a.id === accountId);
-  const isPayingCC = payingAcc && payingAcc.type === 'credit_card';
+  const paidMo  = debt.installment ? (debt.installment.paidMonths || 0) : 0;
+  const totalMo = debt.installment ? debt.installment.months : 0;
+  const isDebt  = debt.direction === 'borrowed';
+  const payingAcc = accounts.find(a => a.id === accountId);
 
   let accLabel = isDebt ? 'Pay from account' : 'Receive repayment into account';
   let accHint  = '';
-  if (isDebt && accountId) {
-    if (isPayingCC) {
-      accHint = `Income of ${instCalc ? window.fmtCcy(instCalc.monthlyPayment, debt.currency) : ''} recorded on ${payingAcc.name} — balance will decrease.`;
-    } else if (isLinkedCC) {
-      accHint = `Transfer from ${payingAcc?.name || 'account'} → ${linkedAcc.name}. Both balances will update.`;
+  if (isDebt && accountId && payingAcc) {
+    if (isLinkedCC) {
+      accHint = `Transfer from ${payingAcc.name} → ${linkedAcc.name}. Both balances will update.`;
     } else {
       accHint = 'Expense recorded on this account.';
     }
@@ -80,6 +85,11 @@ function PayInstallmentModal({ open, debt, onClose }) {
               </span>
             </div>
           )}
+          {isDebt && isLinkedCC && (
+            <div style={{ marginTop: 6, fontSize: 11, color: 'var(--fg-3)' }}>
+              Linked to: <strong>{linkedAcc.name}</strong> — payment will transfer from your bank/cash account to the card.
+            </div>
+          )}
         </div>
         <div className="full">
           <label className="flabel">Date</label>
@@ -89,12 +99,15 @@ function PayInstallmentModal({ open, debt, onClose }) {
           <label className="flabel">{accLabel} (optional)</label>
           <select className="input" value={accountId} onChange={e => setAccountId(e.target.value)}>
             <option value="">— Skip transaction —</option>
-            {accounts.map(a => (
-              <option key={a.id} value={a.id}>
-                {a.name} ({a.currency}){a.type === 'credit_card' ? ' · Credit Card' : ''}
-              </option>
+            {payableAccounts.map(a => (
+              <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>
             ))}
           </select>
+          {isDebt && isLinkedCC && payableAccounts.length === 0 && (
+            <div style={{ fontSize: 11, color: 'var(--red-600)', marginTop: 3 }}>
+              No bank/cash accounts found. Add one to record this payment.
+            </div>
+          )}
           {accHint && (
             <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 3 }}>{accHint}</div>
           )}
@@ -208,6 +221,14 @@ function DebtTracker() {
                 const paidMo        = d.installment ? (d.installment.paidMonths || 0) : 0;
                 const totalMo       = d.installment ? d.installment.months : 0;
                 const canPay        = d.installment && !d.settled && paidMo < totalMo;
+
+                // For CC-linked non-installment debts: show actual remaining CC balance, not original amount
+                const linkedAcct = d.linkedAccountId ? wallet.accounts.find(a => a.id === d.linkedAccountId) : null;
+                const isCCLinked = !d.installment && linkedAcct && linkedAcct.type === 'credit_card';
+                const displayAmt = isCCLinked
+                  ? Math.max(0, -Store.accountBalance(d.linkedAccountId))
+                  : d.amount;
+
                 return (
                   <tr key={d.id} onClick={() => { setEditDebt(d); setModalOpen(true); }} style={{ cursor: 'pointer' }}>
                     <td>
@@ -221,10 +242,18 @@ function DebtTracker() {
                       {d.installment && (
                         <div style={{ fontSize: 10, color: 'var(--fg-4)', marginTop: 3 }}>Installment</div>
                       )}
+                      {isCCLinked && (
+                        <div style={{ fontSize: 10, color: 'var(--fg-4)', marginTop: 3 }}>CC Balance</div>
+                      )}
                     </td>
                     <td style={{ fontWeight: 500 }}>{d.counterparty}</td>
                     <td className="num" style={{ fontWeight: 600, color: isOutstanding ? 'var(--green-600)' : 'var(--red-600)' }}>
-                      {window.fmtCcy(d.amount, d.currency)}
+                      {window.fmtCcy(displayAmt, d.currency)}
+                      {isCCLinked && displayAmt !== d.amount && (
+                        <div style={{ fontWeight: 400, fontSize: 11, color: 'var(--fg-4)', marginTop: 2, textDecoration: 'line-through' }}>
+                          {window.fmtCcy(d.amount, d.currency)}
+                        </div>
+                      )}
                       {instCalc && (
                         <div style={{ fontWeight: 400, fontSize: 11, color: 'var(--fg-3)', marginTop: 2 }}>
                           {window.fmtCcy(instCalc.monthlyPayment, d.currency)}/mo

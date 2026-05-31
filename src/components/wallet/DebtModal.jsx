@@ -53,6 +53,13 @@ function DebtModal({ open, debt, onClose }) {
   const valid   = f.counterparty.trim() && +f.amount > 0 && f.dateStart;
   const preview = f.instEnabled ? calcInstallment(f.amount, f.instMonths, f.instRate) : null;
 
+  // For CC-linked borrowed debts, settlement must come from a non-CC account
+  const settleLinkedAcc    = debt ? accounts.find(a => a.id === debt.linkedAccountId) : null;
+  const settleIsLinkedCC   = !!(settleLinkedAcc && settleLinkedAcc.type === 'credit_card');
+  const settleableAccounts = (editing && debt.direction === 'borrowed' && settleIsLinkedCC)
+    ? accounts.filter(a => a.type !== 'credit_card')
+    : accounts;
+
   const save = () => {
     if (!valid) return;
     let installment = null;
@@ -121,10 +128,25 @@ function DebtModal({ open, debt, onClose }) {
            title={settling ? 'Mark as Settled' : (editing ? 'Edit Record' : 'Add Debt / Outstanding')}
            subtitle={!settling && !editing ? 'Track money you owe or are owed' : null}
            footer={footer} width={480}>
-      {settling ? (
+      {settling ? (() => {
+        const la = debt.linkedAccountId
+          ? (Store.getWallet().accounts.find(a => a.id === debt.linkedAccountId) || null)
+          : null;
+        const isCCLinked = la && la.type === 'credit_card';
+        const settleAmt  = isCCLinked
+          ? Math.max(0, -Store.accountBalance(debt.linkedAccountId))
+          : debt.amount;
+        return (
         <div className="mgrid">
           <div className="full" style={{ color: 'var(--fg-2)', marginBottom: 4 }}>
-            Settling <strong>{debt.counterparty}</strong> · {window.fmtCcy(debt.amount, debt.currency)}
+            Settling <strong>{debt.counterparty}</strong>
+            {' · '}
+            <strong>{window.fmtCcy(settleAmt, debt.currency)}</strong>
+            {isCCLinked && settleAmt !== debt.amount && (
+              <span style={{ fontSize: 11, color: 'var(--fg-4)', marginLeft: 6 }}>
+                (original: {window.fmtCcy(debt.amount, debt.currency)} · reflects current CC balance)
+              </span>
+            )}
           </div>
           <div className="full">
             <label className="flabel">Settlement Date</label>
@@ -134,18 +156,29 @@ function DebtModal({ open, debt, onClose }) {
             <label className="flabel">{settleAccLabel} (optional)</label>
             <select className="input" value={settleAccId} onChange={e => setSettleAccId(e.target.value)}>
               <option value="">— Skip transaction —</option>
-              {accounts.map(a => (
+              {settleableAccounts.map(a => (
                 <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>
               ))}
             </select>
-            {settleAccId && (
+            {settleIsLinkedCC && (
+              <div style={{ fontSize: 11, color: 'var(--fg-4)', marginTop: 3 }}>
+                Credit card accounts are not shown — paying from a CC would be circular. Use a bank or cash account.
+              </div>
+            )}
+            {settleAccId && !settleIsLinkedCC && (
               <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 3 }}>
                 A {debt.direction === 'borrowed' ? 'payment expense' : 'received income'} transaction will be created automatically.
               </div>
             )}
+            {settleAccId && settleIsLinkedCC && (
+              <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 3 }}>
+                Transfer from this account → {settleLinkedAcc.name}. Both balances will update.
+              </div>
+            )}
           </div>
         </div>
-      ) : (
+        );
+      })() : (
         <div className="mgrid">
           <div className="full">
             <label className="flabel">Type</label>
