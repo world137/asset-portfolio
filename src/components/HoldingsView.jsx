@@ -1,6 +1,115 @@
 /* eslint-disable */
 /* HoldingsView.jsx — manage one asset class: positions, lots, inline edits */
 
+function PositionTagCell({ classKey, positionName }) {
+  const [editing,    setEditing]    = React.useState(false);
+  const [addingTag,  setAddingTag]  = React.useState(false);
+  const [newTagName, setNewTagName] = React.useState('');
+  const [newTagColor,setNewTagColor]= React.useState('#3b82f6');
+
+  const key        = classKey + ':' + positionName;
+  const allTags    = Store.getTags();
+  const selectedIds= Store.getHoldingTags(key);
+
+  const toggle = (tagId) => {
+    const next = selectedIds.includes(tagId)
+      ? selectedIds.filter(id => id !== tagId)
+      : [...selectedIds, tagId];
+    Store.setHoldingTags(key, next);
+  };
+
+  const createTag = () => {
+    if (!newTagName.trim()) { setAddingTag(false); return; }
+    const id = Store.addTag(newTagName.trim(), newTagColor);
+    Store.setHoldingTags(key, [...selectedIds, id]);
+    setNewTagName(''); setAddingTag(false);
+  };
+
+  if (!editing) {
+    return (
+      <span onClick={e => { e.stopPropagation(); setEditing(true); }}
+            title="Click to edit tags"
+            style={{ cursor: 'pointer', display: 'inline-flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+        {selectedIds.length === 0
+          ? <span style={{ color: 'var(--fg-4)', fontSize: 11, borderBottom: '1px dashed var(--border-2)' }}>—</span>
+          : selectedIds.map(tid => {
+              const tag = allTags.find(t => t.id === tid);
+              if (!tag) return null;
+              return (
+                <span key={tid} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 3,
+                  padding: '2px 7px', borderRadius: 20, fontSize: 11, fontWeight: 500,
+                  background: tag.color + '22', color: tag.color,
+                }}>
+                  <span style={{ width: 5, height: 5, borderRadius: '50%', background: tag.color, display: 'inline-block', flexShrink: 0 }} />
+                  {tag.name}
+                </span>
+              );
+            })
+        }
+      </span>
+    );
+  }
+
+  return (
+    <div onClick={e => e.stopPropagation()} style={{ minWidth: 160 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 6 }}>
+        {allTags.map(tag => {
+          const sel = selectedIds.includes(tag.id);
+          return (
+            <button key={tag.id} type="button" onClick={() => toggle(tag.id)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px',
+                borderRadius: 20, fontSize: 11, fontWeight: 500, cursor: 'pointer',
+                border: sel ? '2px solid ' + tag.color : '1.5px solid var(--border-2)',
+                background: sel ? tag.color + '28' : 'transparent',
+                color: sel ? tag.color : 'var(--fg-2)',
+              }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: tag.color, display: 'inline-block', flexShrink: 0 }} />
+              {tag.name}
+            </button>
+          );
+        })}
+        {allTags.length === 0 && !addingTag && (
+          <span style={{ fontSize: 11, color: 'var(--fg-4)' }}>No tags yet</span>
+        )}
+      </div>
+      {!addingTag ? (
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button type="button" onClick={() => setAddingTag(true)}
+            style={{ fontSize: 11, color: 'var(--accent,#2962ab)', cursor: 'pointer', background: 'none', border: 'none', padding: 0 }}>
+            + New tag
+          </button>
+          <button type="button" onClick={() => { setEditing(false); setAddingTag(false); setNewTagName(''); }}
+            style={{ fontSize: 11, color: 'var(--fg-3)', cursor: 'pointer', background: 'none', border: 'none', padding: 0 }}>
+            Done
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap', marginTop: 2 }}>
+          <input className="input" style={{ width: 100, fontSize: 12, padding: '3px 7px' }}
+                 placeholder="Tag name" autoFocus value={newTagName}
+                 onChange={e => setNewTagName(e.target.value)}
+                 onKeyDown={e => {
+                   if (e.key === 'Enter') createTag();
+                   if (e.key === 'Escape') { setAddingTag(false); setNewTagName(''); }
+                 }} />
+          <input type="color" value={newTagColor} onChange={e => setNewTagColor(e.target.value)}
+                 style={{ width: 28, height: 28, padding: 2, border: '1px solid var(--border-2)', borderRadius: 4, cursor: 'pointer', flexShrink: 0 }} />
+          <button type="button" onClick={createTag}
+            style={{ fontSize: 11, cursor: 'pointer', background: 'var(--accent,#2962ab)', color: '#fff', border: 'none', borderRadius: 4, padding: '3px 8px' }}>
+            Create
+          </button>
+          <button type="button" onClick={() => { setAddingTag(false); setNewTagName(''); }}
+            style={{ fontSize: 11, color: 'var(--fg-3)', cursor: 'pointer', background: 'none', border: 'none', padding: 0 }}>
+            Cancel
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PriceEdit({ position, classKey, ccy }) {
   const [editing, setEditing] = React.useState(false);
   const [v, setV] = React.useState('');
@@ -44,7 +153,7 @@ function SectorChip({ position, classKey }) {
 function LotRows({ position, classKey, ccy, onEdit }) {
   return (
     <tr className="lotrow">
-      <td colSpan={8}>
+      <td colSpan={9}>
         <div className="lotinner">
           <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
             <table className="lottable">
@@ -226,6 +335,7 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
             <tr>
               <SortTh col="name"     label={isOther ? 'Name' : 'Ticker'}      sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
               <SortTh col="sector"   label={isOther ? 'Type' : 'Sector'}       sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+              <th>Tags</th>
               <SortTh col="qty"      label="Units"    right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
               <SortTh col="avgPrice" label="Avg cost" right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
               <SortTh col="cur"      label="Current"  right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
@@ -236,7 +346,7 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
           </thead>
           <tbody>
             {sortedFiltered.length === 0 && (
-              <tr><td colSpan={8}><div className="empty">No holdings yet. <a className="t-link" onClick={() => onAdd(classKey)}>Add your first one →</a></div></td></tr>
+              <tr><td colSpan={9}><div className="empty">No holdings yet. <a className="t-link" onClick={() => onAdd(classKey)}>Add your first one →</a></div></td></tr>
             )}
             {sortedFiltered.map(p => {
               const color = window.CLASS_COLORS[classKey];
@@ -262,6 +372,9 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
                     </td>
                     <td onClick={e => e.stopPropagation()}>
                       {isOther ? <span className="tag">{p.type || '—'}</span> : isCrypto ? <span className="tag">Crypto</span> : <SectorChip position={p} classKey={classKey} />}
+                    </td>
+                    <td onClick={e => e.stopPropagation()}>
+                      <PositionTagCell classKey={classKey} positionName={p.name} />
                     </td>
                     <td className="num">{window.fmtQty(p.qty)}</td>
                     <td className="num" style={{ color: 'var(--fg-3)' }}>{window.fmtPrice(p.avgPrice, cls.ccy)}</td>

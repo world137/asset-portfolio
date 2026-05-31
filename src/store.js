@@ -50,6 +50,8 @@
       priceErrors: [],
       snapshots: [],
       sales: [],
+      tags: [],        // [{ id, name, color }]
+      holdingTags: {}, // { "classKey:name": [tagId, ...] }
     };
   }
 
@@ -87,6 +89,7 @@
       holdings: state.holdings, sectors: state.sectors, fx: state.fx,
       settings: state.settings, lastPriceSync: state.lastPriceSync,
       priceMode: state.priceMode, snapshots: state.snapshots, sales: state.sales,
+      tags: state.tags, holdingTags: state.holdingTags,
     });
   }
 
@@ -121,6 +124,8 @@
       priceErrors: [],
       snapshots: (saved.snapshots || []).slice(-window.MAX_SNAPSHOTS),
       sales: saved.sales || [],
+      tags: saved.tags || [],
+      holdingTags: saved.holdingTags || {},
     };
   }
 
@@ -350,6 +355,31 @@
     return [...map.entries()]
       .map(([sector, e]) => ({ sector, value: e.value, cost: e.cost }))
       .filter(s => s.value > 0 || s.cost > 0)
+      .sort((a, b) => b.value - a.value);
+  }
+
+  function tagTotals() {
+    const map = new Map();
+    const allTags = state.tags || [];
+    for (const cls of window.ASSET_CLASSES) {
+      for (const pos of positions(cls.key)) {
+        const key    = cls.key + ':' + pos.name;
+        const tagIds = (state.holdingTags || {})[key] || [];
+        if (!tagIds.length) continue;
+        const v = toDisplay(pos.value, cls.ccy);
+        const c = toDisplay(pos.cost, cls.ccy);
+        for (const tagId of tagIds) {
+          const tag = allTags.find(t => t.id === tagId);
+          if (!tag) continue;
+          const entry = map.get(tagId) || { tag, value: 0, cost: 0 };
+          entry.value += v;
+          entry.cost  += c;
+          map.set(tagId, entry);
+        }
+      }
+    }
+    return [...map.values()]
+      .map(e => ({ ...e, profit: e.value - e.cost, pct: e.cost ? (e.value - e.cost) / e.cost * 100 : 0 }))
       .sort((a, b) => b.value - a.value);
   }
 
@@ -659,8 +689,44 @@
         .sort((a, b) => b.year.localeCompare(a.year));
     },
 
+    // ── Tag mutations ──────────────────────────────────────────────────────────
+    addTag(name, color) {
+      const id = uid();
+      state.tags = state.tags || [];
+      state.tags.push({ id, name: name.trim(), color: color || '#6b7280' });
+      emit();
+      return id;
+    },
+    deleteTag(id) {
+      state.tags = (state.tags || []).filter(t => t.id !== id);
+      const ht = state.holdingTags || {};
+      for (const key of Object.keys(ht)) {
+        ht[key] = ht[key].filter(tid => tid !== id);
+        if (!ht[key].length) delete ht[key];
+      }
+      emit();
+    },
+    updateTag(id, patch) {
+      const tags = state.tags || [];
+      const i = tags.findIndex(t => t.id === id);
+      if (i < 0) return;
+      tags[i] = { ...tags[i], ...patch };
+      emit();
+    },
+    setHoldingTags(key, tagIds) {
+      state.holdingTags = state.holdingTags || {};
+      if (!tagIds || !tagIds.length) {
+        delete state.holdingTags[key];
+      } else {
+        state.holdingTags[key] = tagIds;
+      }
+      emit();
+    },
+    getTags:        () => state.tags || [],
+    getHoldingTags: (key) => (state.holdingTags || {})[key] || [],
+
     // ── Read helpers (derived data) ────────────────────────────────────────────
-    positions, classTotals, grandTotals, sectorTotals, classByKey, toDisplay, lotMetrics,
+    positions, classTotals, grandTotals, sectorTotals, tagTotals, classByKey, toDisplay, lotMetrics,
     walletToDisplay, defaultFxRate,
     getSnapshots: () => state.snapshots,
     autoSnapshot() { takeSnapshot(); emit(); },

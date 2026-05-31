@@ -91,7 +91,7 @@ async function sbInsert(table, rows) {
 // ── Shape helpers ─────────────────────────────────────────────────────────────
 
 // Reconstruct the JS state object (same shape store.js expects) from DB rows.
-function buildState(settingsRows, holdingRows, sectorRows, snapshotRows, saleRows, fxRows, marketPriceRows) {
+function buildState(settingsRows, holdingRows, sectorRows, snapshotRows, saleRows, fxRows, marketPriceRows, tagRows, holdingTagRows) {
   // Build lookup: "classKey:name" → current market price
   const mpMap = {};
   for (const mp of (marketPriceRows || [])) {
@@ -132,9 +132,19 @@ function buildState(settingsRows, holdingRows, sectorRows, snapshotRows, saleRow
     decimals:   s.decimals     ?? 2,
   };
 
+  const tags = (tagRows || []).map(t => ({ id: t.id, name: t.name, color: t.color }));
+
+  const holdingTagsMap = {};
+  for (const ht of (holdingTagRows || [])) {
+    const key = `${ht.class_key}:${ht.name}`;
+    (holdingTagsMap[key] ||= []).push(ht.tag_id);
+  }
+
   return {
-    holdings:      holdingsMap,
-    sectors:       sectorsMap,
+    holdings:    holdingsMap,
+    sectors:     sectorsMap,
+    tags,
+    holdingTags: holdingTagsMap,
     fx,
     settings,
     snapshots: snapshotRows.map(r => {
@@ -186,7 +196,7 @@ export default async function handler(req, res) {
     const uid = encodeURIComponent(id);
     try {
       const SNAPSHOT_COLS = 'date,value,thai_stock,usa_stock,etf,fund,crypto,gold,other';
-      const [settingsRows, holdingRows, sectorRows, snapshotRows, saleRows, fxRows, marketPriceRows] =
+      const [settingsRows, holdingRows, sectorRows, snapshotRows, saleRows, fxRows, marketPriceRows, tagRows, holdingTagRows] =
         await Promise.all([
           sbGet('settings',      `user_id=eq.${uid}&select=*`),
           sbGet('holdings',      `user_id=eq.${uid}&select=*&order=created_at.asc`),
@@ -195,6 +205,8 @@ export default async function handler(req, res) {
           sbGet('sales',         `user_id=eq.${uid}&select=*&order=date.asc`),
           sbGet('fx_rates',      `user_id=eq.${uid}&select=*`),
           sbGet('market_prices', `user_id=eq.${uid}&select=class_key,name,price`),
+          sbGet('asset_tags',    `user_id=eq.${uid}&select=*&order=sort_order.asc`),
+          sbGet('holding_tags',  `user_id=eq.${uid}&select=*`),
         ]);
 
       // No data at all → new user
@@ -202,7 +214,7 @@ export default async function handler(req, res) {
                     !snapshotRows.length && !saleRows.length;
       if (empty) return res.status(200).json({ data: null });
 
-      const state = buildState(settingsRows, holdingRows, sectorRows, snapshotRows, saleRows, fxRows, marketPriceRows);
+      const state = buildState(settingsRows, holdingRows, sectorRows, snapshotRows, saleRows, fxRows, marketPriceRows, tagRows, holdingTagRows);
       return res.status(200).json({ data: JSON.stringify(state) });
     } catch (e) {
       console.error('[portfolio] get error:', e.message);
@@ -332,6 +344,25 @@ export default async function handler(req, res) {
         user_id: id, pair, rate: p.fx[pair], recorded_at: now,
       }));
       if (fxRows.length) await sbUpsert('fx_rates', fxRows);
+
+      // 8. Asset tags (full replace)
+      await sbDelete('asset_tags', `user_id=eq.${uid}`);
+      const tagRowsSave = (p.tags || []).map((t, i) => ({
+        id: t.id, user_id: id, name: t.name, color: t.color || '#6b7280', sort_order: i,
+      }));
+      if (tagRowsSave.length) await sbUpsert('asset_tags', tagRowsSave);
+
+      // 9. Holding tags (full replace)
+      await sbDelete('holding_tags', `user_id=eq.${uid}`);
+      const htRowsSave = [];
+      for (const [key, tagIds] of Object.entries(p.holdingTags || {})) {
+        const ci = key.indexOf(':');
+        if (ci < 0) continue;
+        for (const tagId of (tagIds || [])) {
+          htRowsSave.push({ user_id: id, class_key: key.slice(0, ci), name: key.slice(ci + 1), tag_id: tagId });
+        }
+      }
+      if (htRowsSave.length) await sbUpsert('holding_tags', htRowsSave);
 
       return res.status(200).json({ ok: true });
     } catch (e) {

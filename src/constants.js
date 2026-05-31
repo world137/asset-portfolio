@@ -22,6 +22,13 @@ window.SECTOR_TAGS = [
   'Commodity', 'Infrastructure', 'Income',
 ];
 
+// ── Tag color palette (for user-defined portfolio tags) ───────────────────────
+window.TAG_COLORS = [
+  '#ef4444', '#f97316', '#eab308', '#22c55e',
+  '#14b8a6', '#3b82f6', '#8b5cf6', '#ec4899',
+  '#f43f5e', '#06b6d4', '#84cc16', '#a78bfa',
+];
+
 // ── Dashboard layout options ──────────────────────────────────────────────────
 window.LAYOUT_OPTIONS = [
   ['overview', 'Overview'],
