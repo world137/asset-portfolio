@@ -35,9 +35,18 @@ function TransactionModal({ open, transaction, onClose }) {
   const isCross    = f.flow === 'transfer' && fromAcc && toAcc && fromAcc.currency !== toAcc.currency;
   const categories = (wallet.categories || []).filter(c => c.flow === f.flow || f.flow === 'transfer');
 
+  // Credit limit guard: for expense on a credit card, block if amount exceeds available credit.
+  const isCCExpense = fromAcc && fromAcc.type === 'credit_card' && f.flow === 'expense';
+  const ccLimit     = isCCExpense ? (fromAcc.creditLimit || 0) : 0;
+  const ccBalance   = isCCExpense ? Store.accountBalance(fromAcc.id) : 0;
+  // Balance is negative when in debt; available = limit − |debt| = limit + balance
+  const ccAvail     = ccLimit > 0 ? Math.max(0, ccLimit + ccBalance) : 0;
+  const overLimit   = isCCExpense && ccLimit > 0 && (+f.amount || 0) > ccAvail;
+
   const valid = f.accountId && f.date && +f.amount > 0 &&
                 (f.flow !== 'transfer' || f.toAccountId) &&
-                f.accountId !== f.toAccountId;
+                f.accountId !== f.toAccountId &&
+                !overLimit;
 
   const save = () => {
     if (!valid) return;
@@ -107,7 +116,19 @@ function TransactionModal({ open, transaction, onClose }) {
           <label className="flabel">Amount</label>
           <input className="input" type="number" min="0" step="any" placeholder="0.00"
                  value={f.amount} onChange={set('amount')} />
-          {fromAcc && <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 3 }}>in {fromAcc.currency}</div>}
+          {fromAcc && !overLimit && (
+            <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 3 }}>
+              in {fromAcc.currency}
+              {isCCExpense && ccLimit > 0 && (
+                <span> · Available credit: {window.fmtCcy(ccAvail, fromAcc.currency)}</span>
+              )}
+            </div>
+          )}
+          {overLimit && (
+            <div style={{ fontSize: 11, color: 'var(--red-600)', marginTop: 3, fontWeight: 600 }}>
+              Exceeds available credit ({window.fmtCcy(ccAvail, fromAcc.currency)}). Reduce the amount or pay off the card first.
+            </div>
+          )}
         </div>
 
         {f.flow === 'transfer' && (

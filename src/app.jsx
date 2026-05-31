@@ -16,7 +16,7 @@ function Nav({ route, setRoute, totals, open, onClose }) {
     <div key={key} className={'item' + (route === key ? ' active' : '')} onClick={() => { setRoute(key); onClose(); }}>
       {color ? <span className="dot" style={{ background: color }} /> : <span className="ic"><Icon name={icon} size={16} /></span>}
       <span>{label}</span>
-      {key !== 'dashboard' && key !== 'summary' && key !== 'networth' && key !== 'wallet' && key !== 'transactions' && key !== 'debts' && key !== 'walletsummary' && (
+      {key !== 'dashboard' && key !== 'summary' && key !== 'networth' && key !== 'wallet' && key !== 'transactions' && key !== 'debts' && key !== 'walletsummary' && key !== 'walletcalendar' && (
         <span className="val">{sym}{window.fmtBig((totals.classes.find(c => c.key === key) || {}).value || 0)}</span>
       )}
     </div>
@@ -44,6 +44,7 @@ function Nav({ route, setRoute, totals, open, onClose }) {
         {item('transactions',   'Transactions', 'list')}
         {item('debts',          'Debts',        'history')}
         {item('walletsummary',  'Summary',      'sliders')}
+        {item('walletcalendar', 'Calendar',     'calendar')}
       </div>
       <div className="foot">
         <span className="av">PT</span>
@@ -520,6 +521,7 @@ function App() {
     : route === 'transactions'  ? 'Transactions'
     : route === 'debts'         ? 'Debts'
     : route === 'walletsummary' ? 'Wallet Summary'
+    : route === 'walletcalendar' ? 'Calendar'
     : (Store.classByKey(route) || {}).label;
 
   return (
@@ -557,7 +559,8 @@ function App() {
           {route === 'wallet'       && <WalletOverview />}
           {route === 'transactions' && <TransactionLog />}
           {route === 'debts'        && <DebtTracker />}
-          {route === 'walletsummary' && <WalletSummary />}
+          {route === 'walletsummary'  && <WalletSummary />}
+          {route === 'walletcalendar' && <WalletCalendar />}
           {Store.classByKey(route) && <HoldingsView classKey={route} onAdd={openAdd} onEditLot={openEdit} />}
         </div>
       </div>

@@ -669,7 +669,8 @@
       for (const acc of wallet.accounts.filter(a => !a.archived)) {
         const bal = _accBal(acc.id);
         if (acc.type === 'credit_card') {
-          if (bal > 0) creditDebt += walletToDisplay(bal, acc.currency);
+          // balance < 0 means debt (expense > income on the card)
+          if (bal < 0) creditDebt += walletToDisplay(-bal, acc.currency);
         } else {
           if (bal > 0) cashTotal += walletToDisplay(bal, acc.currency);
         }

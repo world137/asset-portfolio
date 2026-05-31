@@ -39,6 +39,9 @@ const Icon = ({ name, size = 16, stroke = 1.6, style }) => {
     case 'pie-chart':    return <svg {...props}><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>;
     case 'bar-chart-2':  return <svg {...props}><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>;
     case 'credit-card':  return <svg {...props}><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>;
+    case 'calendar':     return <svg {...props}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>;
+    case 'chevron-left': return <svg {...props}><polyline points="15 18 9 12 15 6"/></svg>;
+    case 'chevron-right':return <svg {...props}><polyline points="9 18 15 12 9 6"/></svg>;
     default:             return <svg {...props}><rect x="3" y="3" width="18" height="18" rx="2"/></svg>;
   }
 };

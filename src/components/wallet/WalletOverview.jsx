@@ -3,11 +3,14 @@
 
 function AccountCard({ account, balance, onEdit }) {
   const TYPE_LABELS = { bank: 'Bank', cash: 'Cash', credit_card: 'Credit Card', ewallet: 'E-Wallet' };
-  const color  = account.color || '#5a6677';
-  const isCC   = account.type === 'credit_card';
-  const utilPct = isCC && account.creditLimit ? Math.min((balance / account.creditLimit) * 100, 100) : 0;
+  const color    = account.color || '#5a6677';
+  const isCC     = account.type === 'credit_card';
+  // For credit cards: balance < 0 means you owe money. Debt = |balance|, available = limit - debt.
+  const ccDebt   = isCC ? Math.max(0, -balance) : 0;
+  const ccAvail  = isCC && account.creditLimit ? Math.max(0, account.creditLimit - ccDebt) : 0;
+  const utilPct  = isCC && account.creditLimit ? Math.min((ccDebt / account.creditLimit) * 100, 100) : 0;
   const balColor = isCC
-    ? (balance > (account.creditLimit || 0) * 0.8 ? 'var(--red-600)' : 'var(--fg-1)')
+    ? (ccDebt > (account.creditLimit || 0) * 0.8 ? 'var(--red-600)' : 'var(--fg-1)')
     : (balance < 0 ? 'var(--red-600)' : 'var(--fg-1)');
 
   return (
@@ -26,12 +29,17 @@ function AccountCard({ account, balance, onEdit }) {
       </div>
       <div style={{ padding: '4px 16px 14px' }}>
         <div style={{ fontSize: 22, fontWeight: 700, color: balColor, fontFamily: 'var(--font-mono)', lineHeight: 1.2 }}>
-          {window.fmtCcy(balance, account.currency)}
+          {isCC ? window.fmtCcy(ccDebt, account.currency) : window.fmtCcy(balance, account.currency)}
         </div>
+        {isCC && (
+          <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 2 }}>
+            {account.creditLimit ? `Available: ${window.fmtCcy(ccAvail, account.currency)}` : 'Debt owed'}
+          </div>
+        )}
         {isCC && account.creditLimit ? (
           <div style={{ marginTop: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--fg-3)', marginBottom: 4 }}>
-              <span>Used</span>
+              <span>Debt</span>
               <span>{window.fmtCcy(account.creditLimit, account.currency)} limit</span>
             </div>
             <div style={{ height: 4, background: 'var(--bg-inset,var(--bg-app))', borderRadius: 2, overflow: 'hidden' }}>
