@@ -147,7 +147,10 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
   const totals    = Store.classTotals(classKey);
   const [expanded, setExpanded] = React.useState({});
   const [q, setQ] = React.useState('');
+  const [chartName, setChartName] = React.useState(null);
   const { sortBy, sortDir, handleSort } = useSortState();
+
+  const hasChart = cls.live && cls.live !== 'settrade';
 
   const isLive  = !!cls.live;
   const isOther  = classKey === 'other';
@@ -168,6 +171,7 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
   }) : filtered;
 
   return (
+    <React.Fragment>
     <div className="page">
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, marginBottom: 18, flexWrap: 'wrap' }}>
         <div>
@@ -248,6 +252,12 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
                           {p.name.replace(/THB$/, '')}
                           {p.lots.length > 1 && <span style={{ font: '500 11px/1 var(--font-mono)', color: 'var(--fg-4)', marginLeft: 7 }}>{p.lots.length} lots</span>}
                         </span>
+                        {hasChart && (
+                          <button className="chart-open-btn" title="Price chart"
+                                  onClick={e => { e.stopPropagation(); setChartName(p.name); }}>
+                            <Icon name="bar-chart-2" size={12} />
+                          </button>
+                        )}
                       </span>
                     </td>
                     <td onClick={e => e.stopPropagation()}>
@@ -270,6 +280,11 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
         </table>
       </div>
     </div>
+
+    {chartName && (
+      <PriceChartModal classKey={classKey} name={chartName} onClose={() => setChartName(null)} />
+    )}
+    </React.Fragment>
   );
 }
 

@@ -508,6 +508,13 @@ body { background: var(--bg-app); display: block; padding: 0; }
 .linechart-svg { width: 100%; display: block; cursor: crosshair; overflow: visible; }
 .linechart-empty { text-align: center; padding: 40px 20px; font: 400 13px/1.6 var(--font-sans); color: var(--fg-3); }
 
+/* PriceChart */
+.chart-open-btn { border: 0; background: transparent; color: var(--fg-4); cursor: pointer; padding: 2px 4px; border-radius: 4px; display: inline-flex; align-items: center; line-height: 1; margin-left: 2px; }
+.chart-open-btn:hover { color: var(--accent); background: var(--bg-hover); }
+.price-chart-tip { display: flex; align-items: baseline; justify-content: space-between; gap: 10; min-height: 22px; margin-bottom: 4px; }
+.price-chart-tip-date { font: 400 12px/1.3 var(--font-sans); color: var(--fg-3); }
+.price-chart-tip-val { font: 600 13px/1 var(--font-mono); color: var(--fg-1); font-variant-numeric: tabular-nums; }
+
 /* ============================================================================
    Cost vs Price bar (SummaryView)
    ============================================================================ */
