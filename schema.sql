@@ -396,20 +396,6 @@ create index if not exists price_history_user_name_time_idx
 alter table price_history enable row level security;
 create policy "deny anon" on price_history for all using (false);
 
--- fx_rate_history: append-only FX rate log written on each price refresh.
-create table if not exists fx_rate_history (
-  id          uuid          primary key default gen_random_uuid(),
-  user_id     text          not null references users(id) on delete cascade,
-  pair        text          not null,
-  rate        numeric(12,6) not null check (rate > 0),
-  recorded_at timestamptz   not null default now()
-);
-create index if not exists fx_history_user_pair_idx
-  on fx_rate_history (user_id, pair, recorded_at desc);
-
-alter table fx_rate_history enable row level security;
-create policy "deny anon" on fx_rate_history for all using (false);
-
 -- debt_payments: individual installment payment records (audit log).
 create table if not exists debt_payments (
   id            uuid          primary key default gen_random_uuid(),

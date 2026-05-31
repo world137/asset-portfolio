@@ -331,14 +331,7 @@ export default async function handler(req, res) {
       const fxRows = fxPairs.filter(pair => p.fx?.[pair]).map(pair => ({
         user_id: id, pair, rate: p.fx[pair], recorded_at: now,
       }));
-      if (fxRows.length) {
-        await sbUpsert('fx_rates', fxRows);
-        if (isRecentSync) {
-          await sbInsert('fx_rate_history', fxRows.map(r => ({
-            user_id: id, pair: r.pair, rate: r.rate, recorded_at: now,
-          })));
-        }
-      }
+      if (fxRows.length) await sbUpsert('fx_rates', fxRows);
 
       return res.status(200).json({ ok: true });
     } catch (e) {
