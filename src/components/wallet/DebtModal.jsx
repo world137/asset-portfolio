@@ -1,5 +1,5 @@
 /* eslint-disable */
-/* DebtModal.jsx — Add / edit a lend or borrow record */
+/* DebtModal.jsx — Add / edit a debt or outstanding record */
 
 function calcInstallment(amount, months, annualRate) {
   const a = +amount, m = +months, r = +annualRate;
@@ -12,29 +12,36 @@ function calcInstallment(amount, months, annualRate) {
 function DebtModal({ open, debt, onClose }) {
   const today = new Date().toISOString().slice(0, 10);
   const blank = {
-    direction: 'lent', counterparty: '', amount: '', currency: 'THB',
+    direction: 'borrowed', counterparty: '', amount: '', currency: 'THB',
     dateStart: today, dateDue: '', note: '',
     instEnabled: false, instMonths: '12', instRate: '0',
+    linkedAccountId: '',
   };
   const [f, setF] = React.useState(blank);
-  const [settling, setSettling]     = React.useState(false);
-  const [settleDate, setSettleDate] = React.useState(today);
+  const [settling, setSettling]         = React.useState(false);
+  const [settleDate, setSettleDate]     = React.useState(today);
+  const [settleAccId, setSettleAccId]   = React.useState('');
+
+  const wallet   = Store.getWallet();
+  const accounts = wallet.accounts.filter(a => !a.archived);
 
   React.useEffect(() => {
     if (!open) return;
     setSettling(false);
+    setSettleAccId('');
     if (debt) {
       setF({
-        direction:    debt.direction,
-        counterparty: debt.counterparty,
-        amount:       String(debt.amount),
-        currency:     debt.currency,
-        dateStart:    debt.dateStart,
-        dateDue:      debt.dateDue || '',
-        note:         debt.note || '',
-        instEnabled:  !!debt.installment,
-        instMonths:   debt.installment ? String(debt.installment.months) : '12',
-        instRate:     debt.installment ? String(debt.installment.interestRate) : '0',
+        direction:       debt.direction,
+        counterparty:    debt.counterparty,
+        amount:          String(debt.amount),
+        currency:        debt.currency,
+        dateStart:       debt.dateStart,
+        dateDue:         debt.dateDue || '',
+        note:            debt.note || '',
+        instEnabled:     !!debt.installment,
+        instMonths:      debt.installment ? String(debt.installment.months) : '12',
+        instRate:        debt.installment ? String(debt.installment.interestRate) : '0',
+        linkedAccountId: debt.linkedAccountId || '',
       });
     } else {
       setF(blank);
@@ -45,6 +52,13 @@ function DebtModal({ open, debt, onClose }) {
   const editing = !!debt;
   const valid   = f.counterparty.trim() && +f.amount > 0 && f.dateStart;
   const preview = f.instEnabled ? calcInstallment(f.amount, f.instMonths, f.instRate) : null;
+
+  // For CC-linked borrowed debts, settlement must come from a non-CC account
+  const settleLinkedAcc    = debt ? accounts.find(a => a.id === debt.linkedAccountId) : null;
+  const settleIsLinkedCC   = !!(settleLinkedAcc && settleLinkedAcc.type === 'credit_card');
+  const settleableAccounts = (editing && debt.direction === 'borrowed' && settleIsLinkedCC)
+    ? accounts.filter(a => a.type !== 'credit_card')
+    : accounts;
 
   const save = () => {
     if (!valid) return;
@@ -57,14 +71,15 @@ function DebtModal({ open, debt, onClose }) {
       };
     }
     const data = {
-      direction:    f.direction,
-      counterparty: f.counterparty.trim(),
-      amount:       +f.amount,
-      currency:     f.currency,
-      dateStart:    f.dateStart,
-      dateDue:      f.dateDue || null,
-      note:         f.note.trim(),
+      direction:       f.direction,
+      counterparty:    f.counterparty.trim(),
+      amount:          +f.amount,
+      currency:        f.currency,
+      dateStart:       f.dateStart,
+      dateDue:         f.dateDue || null,
+      note:            f.note.trim(),
       installment,
+      linkedAccountId: f.linkedAccountId || null,
     };
     if (editing) Store.updateDebt(debt.id, data);
     else         Store.addDebt(data);
@@ -72,9 +87,15 @@ function DebtModal({ open, debt, onClose }) {
   };
 
   const confirmSettle = () => {
-    Store.settleDebt(debt.id, settleDate);
+    Store.settleDebt(debt.id, settleDate, settleAccId || null);
     onClose();
   };
+
+  const isDebt        = f.direction === 'borrowed';
+  const directionLabel = isDebt ? 'I borrowed from' : 'I lent to';
+  const settleAccLabel = debt && debt.direction === 'borrowed'
+    ? 'Deduct payment from account'
+    : 'Receive repayment into account';
 
   const footer = settling ? (
     <React.Fragment>
@@ -91,7 +112,7 @@ function DebtModal({ open, debt, onClose }) {
       )}
       {editing && (
         <Button variant="ghost" style={{ color: 'var(--red-600)' }}
-                onClick={() => { if (confirm('Delete this debt record?')) { Store.deleteDebt(debt.id); onClose(); } }}>
+                onClick={() => { if (confirm('Delete this record?')) { Store.deleteDebt(debt.id); onClose(); } }}>
           Delete
         </Button>
       )}
@@ -102,33 +123,71 @@ function DebtModal({ open, debt, onClose }) {
     </React.Fragment>
   );
 
-  const directionLabel = f.direction === 'lent' ? 'I lent to' : 'I borrowed from';
-
   return (
     <Modal open={open} onClose={onClose}
-           title={settling ? 'Mark as Settled' : (editing ? 'Edit Debt' : 'Add Debt')}
-           subtitle={!settling && !editing ? 'Track money you lent or borrowed' : null}
+           title={settling ? 'Mark as Settled' : (editing ? 'Edit Record' : 'Add Debt / Outstanding')}
+           subtitle={!settling && !editing ? 'Track money you owe or are owed' : null}
            footer={footer} width={480}>
-      {settling ? (
+      {settling ? (() => {
+        const la = debt.linkedAccountId
+          ? (Store.getWallet().accounts.find(a => a.id === debt.linkedAccountId) || null)
+          : null;
+        const isCCLinked = la && la.type === 'credit_card';
+        const settleAmt  = isCCLinked
+          ? Math.max(0, -Store.accountBalance(debt.linkedAccountId))
+          : debt.amount;
+        return (
         <div className="mgrid">
           <div className="full" style={{ color: 'var(--fg-2)', marginBottom: 4 }}>
-            Settling <strong>{debt.counterparty}</strong> · {window.fmtCcy(debt.amount, debt.currency)}
+            Settling <strong>{debt.counterparty}</strong>
+            {' · '}
+            <strong>{window.fmtCcy(settleAmt, debt.currency)}</strong>
+            {isCCLinked && settleAmt !== debt.amount && (
+              <span style={{ fontSize: 11, color: 'var(--fg-4)', marginLeft: 6 }}>
+                (original: {window.fmtCcy(debt.amount, debt.currency)} · reflects current CC balance)
+              </span>
+            )}
           </div>
           <div className="full">
             <label className="flabel">Settlement Date</label>
             <input className="input" type="date" value={settleDate} onChange={e => setSettleDate(e.target.value)} />
           </div>
+          <div className="full">
+            <label className="flabel">{settleAccLabel} (optional)</label>
+            <select className="input" value={settleAccId} onChange={e => setSettleAccId(e.target.value)}>
+              <option value="">— Skip transaction —</option>
+              {settleableAccounts.map(a => (
+                <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>
+              ))}
+            </select>
+            {settleIsLinkedCC && (
+              <div style={{ fontSize: 11, color: 'var(--fg-4)', marginTop: 3 }}>
+                Credit card accounts are not shown — paying from a CC would be circular. Use a bank or cash account.
+              </div>
+            )}
+            {settleAccId && !settleIsLinkedCC && (
+              <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 3 }}>
+                A {debt.direction === 'borrowed' ? 'payment expense' : 'received income'} transaction will be created automatically.
+              </div>
+            )}
+            {settleAccId && settleIsLinkedCC && (
+              <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 3 }}>
+                Transfer from this account → {settleLinkedAcc.name}. Both balances will update.
+              </div>
+            )}
+          </div>
         </div>
-      ) : (
+        );
+      })() : (
         <div className="mgrid">
           <div className="full">
-            <label className="flabel">Direction</label>
+            <label className="flabel">Type</label>
             <div className="layoutseg" style={{ marginTop: 2 }}>
-              <button className={f.direction === 'lent' ? 'on' : ''} onClick={() => setF(s => ({ ...s, direction: 'lent' }))}>
-                I Lent
-              </button>
               <button className={f.direction === 'borrowed' ? 'on' : ''} onClick={() => setF(s => ({ ...s, direction: 'borrowed' }))}>
-                I Borrowed
+                Debt (I owe)
+              </button>
+              <button className={f.direction === 'lent' ? 'on' : ''} onClick={() => setF(s => ({ ...s, direction: 'lent' }))}>
+                Outstanding (Owed to me)
               </button>
             </div>
           </div>
@@ -161,6 +220,28 @@ function DebtModal({ open, debt, onClose }) {
           <div>
             <label className="flabel">Due Date (optional)</label>
             <input className="input" type="date" value={f.dateDue} onChange={set('dateDue')} />
+          </div>
+
+          {/* ── Credit Card / Account Link ────────────────────────────────────── */}
+          <div className="full">
+            <label className="flabel">
+              {isDebt ? 'Linked Credit Card / Account (optional)' : 'Linked Account (optional)'}
+            </label>
+            <select className="input" value={f.linkedAccountId} onChange={set('linkedAccountId')}>
+              <option value="">— None —</option>
+              {accounts
+                .filter(a => isDebt ? true : true)
+                .map(a => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} ({a.currency}){a.type === 'credit_card' ? ' · Credit Card' : ''}
+                  </option>
+                ))}
+            </select>
+            {f.linkedAccountId && (
+              <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 3 }}>
+                Used as default account when recording payments.
+              </div>
+            )}
           </div>
 
           <div className="full">

@@ -16,7 +16,7 @@ function Nav({ route, setRoute, totals, open, onClose }) {
     <div key={key} className={'item' + (route === key ? ' active' : '')} onClick={() => { setRoute(key); onClose(); }}>
       {color ? <span className="dot" style={{ background: color }} /> : <span className="ic"><Icon name={icon} size={16} /></span>}
       <span>{label}</span>
-      {key !== 'dashboard' && key !== 'summary' && key !== 'networth' && key !== 'wallet' && key !== 'transactions' && key !== 'debts' && key !== 'walletsummary' && (
+      {key !== 'dashboard' && key !== 'summary' && key !== 'networth' && key !== 'wallet' && key !== 'transactions' && key !== 'debts' && key !== 'walletsummary' && key !== 'walletcalendar' && (
         <span className="val">{sym}{window.fmtBig((totals.classes.find(c => c.key === key) || {}).value || 0)}</span>
       )}
     </div>
@@ -31,19 +31,20 @@ function Nav({ route, setRoute, totals, open, onClose }) {
         <span className="wm">Portfolio<small>Asset Tracker</small></span>
       </div>
       <div className="scroll">
-        {item('dashboard', 'Dashboard', 'layers')}
+        {item('dashboard', 'Dashboard', 'home')}
         {item('networth',  'Net Worth', 'shield')}
         <div className="grp-h">Holdings</div>
         {window.ASSET_CLASSES.map(c => item(c.key, c.label, null, window.CLASS_COLORS[c.key]))}
         <div className="grp-h">Analysis</div>
-        {item('sectors', 'By Sector', 'sliders')}
-        {item('summary', 'Cost vs Price', 'list')}
+        {item('sectors', 'By Sector', 'pie-chart')}
+        {item('summary', 'Cost vs Price', 'bar-chart-2')}
         {item('selllog', 'Sell Log', 'trending-down')}
         <div className="grp-h">Wallet</div>
-        {item('wallet',         'Accounts',     'layers')}
-        {item('transactions',   'Transactions', 'list')}
-        {item('debts',          'Debts',        'history')}
+        {item('wallet',         'Accounts',     'wallet')}
+        {item('transactions',   'Transactions', 'repeat')}
+        {item('debts',          'Debts',        'credit-card')}
         {item('walletsummary',  'Summary',      'sliders')}
+        {item('walletcalendar', 'Calendar',     'calendar')}
       </div>
       <div className="foot">
         <span className="av">PT</span>
@@ -520,6 +521,7 @@ function App() {
     : route === 'transactions'  ? 'Transactions'
     : route === 'debts'         ? 'Debts'
     : route === 'walletsummary' ? 'Wallet Summary'
+    : route === 'walletcalendar' ? 'Calendar'
     : (Store.classByKey(route) || {}).label;
 
   return (
@@ -557,12 +559,12 @@ function App() {
           {route === 'wallet'       && <WalletOverview />}
           {route === 'transactions' && <TransactionLog />}
           {route === 'debts'        && <DebtTracker />}
-          {route === 'walletsummary' && <WalletSummary />}
+          {route === 'walletsummary'  && <WalletSummary />}
+          {route === 'walletcalendar' && <WalletCalendar />}
           {Store.classByKey(route) && <HoldingsView classKey={route} onAdd={openAdd} onEditLot={openEdit} />}
         </div>
       </div>
       <HoldingModal open={modal.open} classKey={modal.classKey} lot={modal.lot} onClose={closeModal} />
-      <BottomNav route={route} setRoute={setRoute} onOpenDrawer={() => setDrawer(true)} />
     </div>
   );
 }
