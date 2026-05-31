@@ -472,9 +472,19 @@
     const today = new Date().toISOString().slice(0, 10);
     const value = grandTotalInTHB();
     if (value <= 0) return;
+    const rate = state.fx.USDTHB || window.SEED_FX_USDTHB;
+    const snap = { date: today, value };
+    for (const cls of window.ASSET_CLASSES) {
+      let v = 0;
+      for (const lot of (state.holdings[cls.key] || [])) {
+        const m = lotMetrics(lot);
+        v += cls.ccy === 'USD' ? m.value * rate : m.value;
+      }
+      snap[cls.key] = v;
+    }
     const idx = state.snapshots.findIndex(s => s.date === today);
-    if (idx >= 0) state.snapshots[idx] = { date: today, value };
-    else state.snapshots.push({ date: today, value });
+    if (idx >= 0) state.snapshots[idx] = snap;
+    else state.snapshots.push(snap);
     if (state.snapshots.length > window.MAX_SNAPSHOTS) {
       state.snapshots = state.snapshots.slice(-window.MAX_SNAPSHOTS);
     }

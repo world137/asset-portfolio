@@ -75,19 +75,40 @@ async function sbUpsert(table, rows) {
   }
 }
 
+async function sbInsert(table, rows) {
+  if (!rows || !rows.length) return;
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method: 'POST',
+    headers: baseHeaders({ Prefer: 'return=minimal' }),
+    body: JSON.stringify(rows),
+  });
+  if (!r.ok) {
+    const body = await r.text().catch(() => '');
+    throw new Error(`sb-insert-${table}-${r.status}: ${body}`);
+  }
+}
+
 // ── Shape helpers ─────────────────────────────────────────────────────────────
 
 // Reconstruct the JS state object (same shape store.js expects) from DB rows.
-function buildState(settingsRows, holdingRows, sectorRows, snapshotRows, saleRows, fxRows) {
+function buildState(settingsRows, holdingRows, sectorRows, snapshotRows, saleRows, fxRows, marketPriceRows) {
+  // Build lookup: "classKey:name" → current market price
+  const mpMap = {};
+  for (const mp of (marketPriceRows || [])) {
+    mpMap[`${mp.class_key}:${mp.name}`] = parseFloat(mp.price);
+  }
+
   const holdingsMap = {};
   for (const lot of holdingRows) {
+    const mpPrice = mpMap[`${lot.class_key}:${lot.name}`];
     (holdingsMap[lot.class_key] ||= []).push({
       id:    lot.id,
       name:  lot.name,
       type:  lot.type || undefined,
       price: parseFloat(lot.price),
       qty:   parseFloat(lot.qty),
-      cur:   lot.cur != null ? parseFloat(lot.cur) : undefined,
+      // Prefer market_prices; fall back to holdings.cur during migration
+      cur:   mpPrice != null ? mpPrice : (lot.cur != null ? parseFloat(lot.cur) : undefined),
     });
   }
 
@@ -116,7 +137,17 @@ function buildState(settingsRows, holdingRows, sectorRows, snapshotRows, saleRow
     sectors:       sectorsMap,
     fx,
     settings,
-    snapshots:     snapshotRows.map(r => ({ date: r.date, value: parseFloat(r.value) })),
+    snapshots: snapshotRows.map(r => {
+      const snap = { date: r.date, value: parseFloat(r.value) };
+      if (r.thai_stock != null) snap.thaiStock = parseFloat(r.thai_stock);
+      if (r.usa_stock  != null) snap.usaStock  = parseFloat(r.usa_stock);
+      if (r.etf        != null) snap.etf       = parseFloat(r.etf);
+      if (r.fund       != null) snap.fund      = parseFloat(r.fund);
+      if (r.crypto     != null) snap.crypto    = parseFloat(r.crypto);
+      if (r.gold       != null) snap.gold      = parseFloat(r.gold);
+      if (r.other      != null) snap.other     = parseFloat(r.other);
+      return snap;
+    }),
     sales:         saleRows.map(r => ({
       id:          r.id,
       date:        r.date,
@@ -154,14 +185,16 @@ export default async function handler(req, res) {
 
     const uid = encodeURIComponent(id);
     try {
-      const [settingsRows, holdingRows, sectorRows, snapshotRows, saleRows, fxRows] =
+      const SNAPSHOT_COLS = 'date,value,thai_stock,usa_stock,etf,fund,crypto,gold,other';
+      const [settingsRows, holdingRows, sectorRows, snapshotRows, saleRows, fxRows, marketPriceRows] =
         await Promise.all([
-          sbGet('settings',  `user_id=eq.${uid}&select=*`),
-          sbGet('holdings',  `user_id=eq.${uid}&select=*&order=created_at.asc`),
-          sbGet('sectors',   `user_id=eq.${uid}&select=*`),
-          sbGet('snapshots', `user_id=eq.${uid}&select=date,value&order=date.asc&limit=${MAX_SNAPSHOTS}`),
-          sbGet('sales',     `user_id=eq.${uid}&select=*&order=date.asc`),
-          sbGet('fx_rates',  `user_id=eq.${uid}&select=*`),
+          sbGet('settings',      `user_id=eq.${uid}&select=*`),
+          sbGet('holdings',      `user_id=eq.${uid}&select=*&order=created_at.asc`),
+          sbGet('sectors',       `user_id=eq.${uid}&select=*`),
+          sbGet('snapshots',     `user_id=eq.${uid}&select=${SNAPSHOT_COLS}&order=date.asc&limit=${MAX_SNAPSHOTS}`),
+          sbGet('sales',         `user_id=eq.${uid}&select=*&order=date.asc`),
+          sbGet('fx_rates',      `user_id=eq.${uid}&select=*`),
+          sbGet('market_prices', `user_id=eq.${uid}&select=class_key,name,price`),
         ]);
 
       // No data at all → new user
@@ -169,7 +202,7 @@ export default async function handler(req, res) {
                     !snapshotRows.length && !saleRows.length;
       if (empty) return res.status(200).json({ data: null });
 
-      const state = buildState(settingsRows, holdingRows, sectorRows, snapshotRows, saleRows, fxRows);
+      const state = buildState(settingsRows, holdingRows, sectorRows, snapshotRows, saleRows, fxRows, marketPriceRows);
       return res.status(200).json({ data: JSON.stringify(state) });
     } catch (e) {
       console.error('[portfolio] get error:', e.message);
@@ -209,7 +242,9 @@ export default async function handler(req, res) {
       }]);
 
       // 3. Holdings — full replace (delete then bulk insert)
+      // Also collect unique current prices for market_prices table.
       const holdingRows = [];
+      const mpMap = new Map(); // "classKey:name" → { class_key, name, price }
       for (const [classKey, lots] of Object.entries(p.holdings || {})) {
         for (const lot of (lots || [])) {
           holdingRows.push({
@@ -222,11 +257,29 @@ export default async function handler(req, res) {
             qty:       lot.qty,
             cur:       lot.cur != null ? lot.cur : null,
           });
+          if (lot.cur != null) {
+            mpMap.set(`${classKey}:${lot.name}`, { class_key: classKey, name: lot.name, price: lot.cur });
+          }
         }
       }
       await sbDelete('holdings', `user_id=eq.${uid}`);
-      if (holdingRows.length > 0) {
-        await sbUpsert('holdings', holdingRows);
+      if (holdingRows.length > 0) await sbUpsert('holdings', holdingRows);
+
+      // Upsert latest prices to market_prices (replaces holdings.cur as the live-price store)
+      const mpRows = [...mpMap.values()].map(m => ({
+        user_id: id, class_key: m.class_key, name: m.name, price: m.price,
+        source: 'app', refreshed_at: now,
+      }));
+      if (mpRows.length > 0) await sbUpsert('market_prices', mpRows);
+
+      // Append price_history and fx_rate_history only on price-refresh saves
+      // (lastPriceSync is set to Date.now() by store.js immediately after applyPrices)
+      const isRecentSync = p.lastPriceSync && (Date.now() - p.lastPriceSync < 5 * 60 * 1000);
+      if (isRecentSync && mpRows.length > 0) {
+        await sbInsert('price_history', mpRows.map(m => ({
+          user_id: id, class_key: m.class_key, name: m.name,
+          price: m.price, source: m.source, recorded_at: now,
+        })));
       }
 
       // 4. Sectors — full replace
@@ -241,7 +294,16 @@ export default async function handler(req, res) {
 
       // 5. Snapshots — upsert by (user_id, date) to preserve history
       const snapshotRows = (p.snapshots || []).map(s => ({
-        user_id: id, date: s.date, value: s.value,
+        user_id:    id,
+        date:       s.date,
+        value:      s.value,
+        thai_stock: s.thaiStock ?? null,
+        usa_stock:  s.usaStock  ?? null,
+        etf:        s.etf       ?? null,
+        fund:       s.fund      ?? null,
+        crypto:     s.crypto    ?? null,
+        gold:       s.gold      ?? null,
+        other:      s.other     ?? null,
       }));
       await sbUpsert('snapshots', snapshotRows);
 
@@ -269,7 +331,14 @@ export default async function handler(req, res) {
       const fxRows = fxPairs.filter(pair => p.fx?.[pair]).map(pair => ({
         user_id: id, pair, rate: p.fx[pair], recorded_at: now,
       }));
-      if (fxRows.length) await sbUpsert('fx_rates', fxRows);
+      if (fxRows.length) {
+        await sbUpsert('fx_rates', fxRows);
+        if (isRecentSync) {
+          await sbInsert('fx_rate_history', fxRows.map(r => ({
+            user_id: id, pair: r.pair, rate: r.rate, recorded_at: now,
+          })));
+        }
+      }
 
       return res.status(200).json({ ok: true });
     } catch (e) {

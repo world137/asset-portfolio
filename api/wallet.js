@@ -96,17 +96,21 @@ function buildWalletState(accountRows, categoryRows, txnRows, debtRows) {
       fxRate:      r.fx_rate != null ? parseFloat(r.fx_rate) : null,
     })),
     debts: debtRows.map(r => ({
-      id:           r.id,
-      direction:    r.direction,
-      counterparty: r.counterparty,
-      amount:       parseFloat(r.amount),
-      currency:     r.currency,
-      dateStart:    r.date_start,
-      dateDue:      r.date_due || null,
-      note:         r.note || '',
-      settled:      r.settled,
-      settledDate:  r.settled_date || null,
-      installment:  r.installment || null,
+      id:              r.id,
+      direction:       r.direction,
+      counterparty:    r.counterparty,
+      amount:          parseFloat(r.amount),
+      currency:        r.currency,
+      dateStart:       r.date_start,
+      dateDue:         r.date_due || null,
+      note:            r.note || '',
+      settled:         r.settled,
+      settledDate:     r.settled_date || null,
+      linkedAccountId: r.linked_account_id || null,
+      // Prefer typed columns; fall back to JSONB for rows not yet migrated
+      installment: r.inst_months != null
+        ? { months: r.inst_months, interestRate: parseFloat(r.inst_interest_rate ?? 0), paidMonths: r.inst_paid_months ?? 0 }
+        : (r.installment || null),
     })),
   };
 }
@@ -213,18 +217,24 @@ export default async function handler(req, res) {
       // Debts — full replace
       await sbDelete('wallet_debts', `user_id=eq.${uid}`);
       const debtRows = (p.debts || []).map(d => ({
-        id:           d.id,
-        user_id:      id,
-        direction:    d.direction,
-        counterparty: d.counterparty,
-        amount:       d.amount,
-        currency:     d.currency || 'THB',
-        date_start:   d.dateStart,
-        date_due:     d.dateDue || null,
-        note:         d.note || null,
-        settled:      d.settled ?? false,
-        settled_date: d.settledDate || null,
-        installment:  d.installment || null,
+        id:                 d.id,
+        user_id:            id,
+        direction:          d.direction,
+        counterparty:       d.counterparty,
+        amount:             d.amount,
+        currency:           d.currency || 'THB',
+        date_start:         d.dateStart,
+        date_due:           d.dateDue || null,
+        note:               d.note || null,
+        settled:            d.settled ?? false,
+        settled_date:       d.settledDate || null,
+        linked_account_id:  d.linkedAccountId || null,
+        // Normalized installment columns (replaces JSONB over time)
+        inst_months:        d.installment?.months        ?? null,
+        inst_interest_rate: d.installment?.interestRate  ?? null,
+        inst_paid_months:   d.installment?.paidMonths    ?? 0,
+        // Keep JSONB for backward compat until DROP COLUMN migration is run
+        installment:        d.installment || null,
       }));
       await sbUpsert('wallet_debts', debtRows);
 
