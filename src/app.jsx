@@ -465,8 +465,9 @@ function App() {
   const [route,   setRoute]  = React.useState('dashboard');
   const [drawer,  setDrawer] = React.useState(false);
   const [modal,   setModal]  = React.useState({ open: false, classKey: null, lot: null });
-  const [syncing, setSyncing] = React.useState(false);
-  const [dbReady, setDbReady] = React.useState(false);
+  const [syncing,   setSyncing]   = React.useState(false);
+  const [dbReady,   setDbReady]   = React.useState(false);
+  const [dtOpen,    setDtOpen]    = React.useState(false);
 
   React.useEffect(() => { document.documentElement.setAttribute('data-theme', settings.theme); }, [settings.theme]);
 
@@ -546,6 +547,9 @@ function App() {
             <button className={settings.displayCcy === 'THB' ? 'on' : ''} onClick={() => Store.setSetting('displayCcy', 'THB')}>฿ THB</button>
             <button className={settings.displayCcy === 'USD' ? 'on' : ''} onClick={() => Store.setSetting('displayCcy', 'USD')}>$ USD</button>
           </div>
+          <button className="icon-toggle" title="Backup & Restore" onClick={() => setDtOpen(true)}>
+            <Icon name="archive" size={16} />
+          </button>
           <button className="icon-toggle" title="Toggle theme" onClick={() => Store.setSetting('theme', settings.theme === 'light' ? 'dark' : 'light')}>
             <Icon name={settings.theme === 'light' ? 'moon' : 'sun'} size={16} />
           </button>
@@ -565,6 +569,7 @@ function App() {
         </div>
       </div>
       <HoldingModal open={modal.open} classKey={modal.classKey} lot={modal.lot} onClose={closeModal} />
+      <DataTransferModal open={dtOpen} onClose={() => setDtOpen(false)} />
     </div>
   );
 }

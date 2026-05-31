@@ -918,6 +918,36 @@
     getDbStatus:    () => ({ status: _dbStatus, savedAt: _dbSavedAt }),
     forceSave:      () => { clearTimeout(_saveTimer); return doCloudSave(); },
 
+    // ── Data export / import ───────────────────────────────────────────────────
+    async exportData() {
+      const id = portfolioId;
+      const [pRes, wRes] = await Promise.all([
+        fetch(`/api/portfolio?id=${encodeURIComponent(id)}`),
+        fetch(`/api/wallet?id=${encodeURIComponent(id)}`),
+      ]);
+      if (!pRes.ok) throw new Error('export-portfolio-failed');
+      if (!wRes.ok) throw new Error('export-wallet-failed');
+      const pJson = await pRes.json();
+      const wJson = await wRes.json();
+      const portfolio = pJson.data  ? JSON.parse(pJson.data)  : null;
+      const wallet    = wJson.data  ? JSON.parse(wJson.data)  : null;
+      return { portfolio, wallet, exportedAt: new Date().toISOString(), version: 1 };
+    },
+
+    async importData({ portfolio, wallet, mode }) {
+      const r = await fetch('/api/data-transfer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: portfolioId, mode, portfolio, wallet }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.error || 'import-failed');
+      }
+      await Promise.all([loadFromCloud(), loadWalletFromCloud()]);
+      subs.forEach(fn => fn());
+    },
+
     // ── Live prices ────────────────────────────────────────────────────────────
     async refreshPrices() {
       const apiReq = buildApiRequest();
