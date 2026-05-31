@@ -503,3 +503,41 @@ set
   inst_paid_months   = coalesce((installment->>'paidMonths')::smallint, 0)
 where installment is not null
   and inst_months is null;  -- idempotent: skip rows already migrated
+
+
+-- ── 9. TAGS (schema v3) ───────────────────────────────────────────────────────
+-- asset_tags: user-defined tag definitions (many per user)
+create table if not exists asset_tags (
+  id         text primary key,
+  user_id    text not null references users(id) on delete cascade,
+  name       text not null,
+  color      text not null default '#6b7280',
+  sort_order int  not null default 0
+);
+create index if not exists asset_tags_user_idx on asset_tags (user_id);
+alter table asset_tags enable row level security;
+do $$ begin
+  if not exists (
+    select 1 from pg_policies where tablename = 'asset_tags' and policyname = 'deny anon'
+  ) then
+    execute 'create policy "deny anon" on asset_tags for all using (false)';
+  end if;
+end $$;
+
+-- holding_tags: many tags per ticker, keyed by (class_key, name) like sectors
+create table if not exists holding_tags (
+  user_id   text not null references users(id) on delete cascade,
+  class_key text not null,
+  name      text not null,   -- ticker / fund name
+  tag_id    text not null,
+  primary key (user_id, class_key, name, tag_id)
+);
+create index if not exists holding_tags_user_idx on holding_tags (user_id);
+alter table holding_tags enable row level security;
+do $$ begin
+  if not exists (
+    select 1 from pg_policies where tablename = 'holding_tags' and policyname = 'deny anon'
+  ) then
+    execute 'create policy "deny anon" on holding_tags for all using (false)';
+  end if;
+end $$;

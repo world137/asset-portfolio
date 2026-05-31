@@ -176,6 +176,229 @@ function ClassTable({ totals, settings, onOpenClass, hot, setHot }) {
   );
 }
 
+function TagDetailModal({ tag, onClose, onOpenClass }) {
+  if (!tag) return null;
+  const settings = Store.settings();
+  const sym      = window.ccySymbol(settings.displayCcy);
+
+  // Collect all positions that carry this tag, across all asset classes
+  const tagged = [];
+  for (const cls of window.ASSET_CLASSES) {
+    for (const pos of Store.positions(cls.key)) {
+      const tagIds = Store.getHoldingTags(cls.key + ':' + pos.name);
+      if (!tagIds.includes(tag.id)) continue;
+      const v = Store.toDisplay(pos.value, cls.ccy);
+      const c = Store.toDisplay(pos.cost,  cls.ccy);
+      tagged.push({ ...pos, classKey: cls.key, classLabel: cls.label, ccy: cls.ccy, valueDisp: v, costDisp: c });
+    }
+  }
+
+  const totalValue  = tagged.reduce((a, p) => a + p.valueDisp, 0);
+  const totalCost   = tagged.reduce((a, p) => a + p.costDisp,  0);
+  const totalProfit = totalValue - totalCost;
+  const totalPct    = totalCost ? (totalProfit / totalCost) * 100 : 0;
+
+  const footer = (
+    <React.Fragment>
+      <span className="muted t-small">{tagged.length} position{tagged.length !== 1 ? 's' : ''}</span>
+      <Button variant="ghost" onClick={onClose}>Close</Button>
+    </React.Fragment>
+  );
+
+  return (
+    <Modal open={true} onClose={onClose}
+           title={tag.name}
+           subtitle={'Assets tagged "' + tag.name + '" · click a row to open that class'}
+           footer={footer} width={640}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+        <span style={{ width: 12, height: 12, borderRadius: '50%', background: tag.color, display: 'inline-block', flexShrink: 0 }} />
+        <span style={{ fontSize: 13, color: 'var(--fg-2)', fontWeight: 500 }}>{tag.name}</span>
+        <span style={{ fontSize: 12, color: 'var(--fg-4)' }}>·</span>
+        <span style={{ fontSize: 12, color: 'var(--fg-3)' }}>
+          {sym}{window.fmtBig(totalValue)} total value
+          <span className={totalProfit >= 0 ? ' up' : ' down'} style={{ marginLeft: 8 }}>
+            {(totalProfit >= 0 ? '+' : '−') + sym + window.fmtBig(Math.abs(totalProfit))} ({window.fmtPct(totalPct)})
+          </span>
+        </span>
+      </div>
+
+      {tagged.length === 0 ? (
+        <div className="empty">No assets tagged "{tag.name}" yet. Go to any holding class and assign this tag in the Tags column.</div>
+      ) : (
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <table className="ptable">
+            <thead>
+              <tr>
+                <th>Asset</th>
+                <th>Class</th>
+                <th className="num">Value</th>
+                <th className="num">Cost</th>
+                <th className="num">P/L</th>
+                <th className="num">%</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tagged.map(p => (
+                <tr key={p.classKey + ':' + p.name} className="pos"
+                    onClick={() => { onClose(); onOpenClass(p.classKey); }}
+                    title={'Open ' + p.classLabel}>
+                  <td>
+                    <span className="tk">
+                      <span className="av" style={{ background: window.CLASS_COLORS[p.classKey], borderRadius: 7 }}>
+                        {p.name.replace(/THB$/, '').slice(0, 3).toUpperCase()}
+                      </span>
+                      {p.name.replace(/THB$/, '')}
+                    </span>
+                  </td>
+                  <td><span className="tag">{p.classLabel}</span></td>
+                  <td className="num">{sym}{window.fmtBig(p.valueDisp)}</td>
+                  <td className="num" style={{ color: 'var(--fg-3)' }}>{sym}{window.fmtBig(p.costDisp)}</td>
+                  <td className={'num ' + (p.profit >= 0 ? 'up' : 'down')}>
+                    {(p.profit >= 0 ? '+' : '−') + sym + window.fmtBig(Math.abs(Store.toDisplay(p.profit, p.ccy)))}
+                  </td>
+                  <td className={'num ' + (p.pct >= 0 ? 'up' : 'down')}>{window.fmtPct(p.pct)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr style={{ borderTop: '2px solid var(--border-1)', fontWeight: 600 }}>
+                <td colSpan={2} style={{ color: 'var(--fg-2)', paddingTop: 8 }}>Total</td>
+                <td className="num">{sym}{window.fmtBig(totalValue)}</td>
+                <td className="num" style={{ color: 'var(--fg-3)' }}>{sym}{window.fmtBig(totalCost)}</td>
+                <td className={'num ' + (totalProfit >= 0 ? 'up' : 'down')}>
+                  {(totalProfit >= 0 ? '+' : '−') + sym + window.fmtBig(Math.abs(totalProfit))}
+                </td>
+                <td className={'num ' + (totalPct >= 0 ? 'up' : 'down')}>{window.fmtPct(totalPct)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function TagSummaryCard({ settings, onOpenClass }) {
+  const tagData = Store.tagTotals();
+  const totals  = Store.grandTotals();
+  const sym     = window.ccySymbol(settings.displayCcy);
+  const [activeTag,    setActiveTag]    = React.useState(null);
+  const [editingTagId, setEditingTagId] = React.useState(null);
+  const [editName,     setEditName]     = React.useState('');
+  const [editColor,    setEditColor]    = React.useState('');
+
+  if (!tagData.length) return null;
+
+  const startEdit = (tag, e) => {
+    e.stopPropagation();
+    setEditingTagId(tag.id);
+    setEditName(tag.name);
+    setEditColor(tag.color);
+  };
+
+  const commitEdit = (e) => {
+    if (e) e.stopPropagation();
+    if (!editName.trim()) return;
+    Store.updateTag(editingTagId, { name: editName.trim(), color: editColor });
+    setEditingTagId(null);
+  };
+
+  const cancelEdit = (e) => {
+    if (e) e.stopPropagation();
+    setEditingTagId(null);
+  };
+
+  const handleDelete = (tag, e) => {
+    e.stopPropagation();
+    if (!confirm(`Delete tag "${tag.name}"? It will be removed from all assets.`)) return;
+    Store.deleteTag(tag.id);
+    if (activeTag && activeTag.id === tag.id) setActiveTag(null);
+  };
+
+  return (
+    <div className="card" style={{ marginTop: 18 }}>
+      <div className="card-h">
+        <div>
+          <div className="t">By Tag</div>
+          <div className="s">{tagData.length} tag{tagData.length !== 1 ? 's' : ''} · click a row to see assets · use the edit/delete icons to manage tags</div>
+        </div>
+      </div>
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <table className="ptable">
+          <thead>
+            <tr>
+              <th>Tag</th>
+              <th style={{ width: 150 }}>Allocation</th>
+              <th className="num">Value</th>
+              <th className="num">Cost</th>
+              <th className="num">P/L</th>
+              <th className="num">%</th>
+              <th style={{ width: 60 }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {tagData.map(({ tag, value, cost, profit, pct }) => {
+              const alloc    = totals.value ? (value / totals.value) * 100 : 0;
+              const isEditing = editingTagId === tag.id;
+              return (
+                <tr key={tag.id} className="pos"
+                    style={{ cursor: isEditing ? 'default' : 'pointer' }}
+                    onClick={() => !isEditing && setActiveTag(tag)}>
+                  <td>
+                    {isEditing ? (
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}
+                           onClick={e => e.stopPropagation()}>
+                        <input type="color" value={editColor} onChange={e => setEditColor(e.target.value)}
+                               style={{ width: 28, height: 28, padding: 2, border: '1px solid var(--border-2)', borderRadius: 4, cursor: 'pointer', flexShrink: 0 }} />
+                        <input className="input" style={{ flex: 1, fontSize: 13, padding: '3px 8px' }}
+                               autoFocus value={editName} onChange={e => setEditName(e.target.value)}
+                               onKeyDown={e => { if (e.key === 'Enter') commitEdit(e); if (e.key === 'Escape') cancelEdit(e); }} />
+                        <button onClick={commitEdit}
+                                style={{ fontSize: 11, cursor: 'pointer', background: 'var(--accent,#2962ab)', color: '#fff', border: 'none', borderRadius: 4, padding: '3px 9px', flexShrink: 0 }}>
+                          Save
+                        </button>
+                        <button onClick={cancelEdit}
+                                style={{ fontSize: 11, color: 'var(--fg-3)', cursor: 'pointer', background: 'none', border: 'none', padding: 0, flexShrink: 0 }}>
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ width: 10, height: 10, borderRadius: '50%', background: tag.color, flexShrink: 0, display: 'inline-block' }} />
+                        <span style={{ fontWeight: 500 }}>{tag.name}</span>
+                      </span>
+                    )}
+                  </td>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div className="minibar" style={{ flex: 1 }}><span style={{ width: alloc + '%', background: tag.color }} /></div>
+                      <span style={{ font: '500 11.5px/1 var(--font-mono)', color: 'var(--fg-3)', minWidth: 38, textAlign: 'right' }}>{alloc.toFixed(1)}%</span>
+                    </div>
+                  </td>
+                  <td className="num">{sym}{window.fmtBig(value)}</td>
+                  <td className="num" style={{ color: 'var(--fg-3)' }}>{sym}{window.fmtBig(cost)}</td>
+                  <td className={'num ' + (profit >= 0 ? 'up' : 'down')}>{(profit >= 0 ? '+' : '−') + sym + window.fmtBig(Math.abs(profit))}</td>
+                  <td className={'num ' + (pct >= 0 ? 'up' : 'down')}>{window.fmtPct(pct)}</td>
+                  <td onClick={e => e.stopPropagation()}>
+                    <span className="lotact">
+                      <button title="Rename / recolor" onClick={e => startEdit(tag, e)}><Icon name="edit" size={13} /></button>
+                      <button className="del" title="Delete tag" onClick={e => handleDelete(tag, e)}><Icon name="trash" size={13} /></button>
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {activeTag && (
+        <TagDetailModal tag={activeTag} onClose={() => setActiveTag(null)} onOpenClass={onOpenClass} />
+      )}
+    </div>
+  );
+}
+
 function Dashboard({ onOpenClass }) {
   const settings = Store.settings();
   const totals   = Store.grandTotals();
@@ -254,6 +477,7 @@ function Dashboard({ onOpenClass }) {
       )}
 
       <PortfolioHistoryCard settings={settings} />
+      <TagSummaryCard settings={settings} onOpenClass={onOpenClass} />
     </div>
   );
 }
