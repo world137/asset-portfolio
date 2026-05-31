@@ -565,7 +565,6 @@ function App() {
         </div>
       </div>
       <HoldingModal open={modal.open} classKey={modal.classKey} lot={modal.lot} onClose={closeModal} />
-      <BottomNav route={route} setRoute={setRoute} onOpenDrawer={() => setDrawer(true)} />
     </div>
   );
 }
