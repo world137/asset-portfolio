@@ -20,10 +20,11 @@ async function dbLoad() {
 async function dbSave(items) {
   try {
     const id = Store.getPortfolioId();
+    const minimal = items.map(({ ticker, type, name }) => ({ ticker, type, name }));
     await fetch('/api/watchlist', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, items }),
+      body: JSON.stringify({ id, items: minimal }),
     });
   } catch (_) { /* non-critical — items are still visible in state */ }
 }
@@ -110,11 +111,17 @@ function WatchlistView() {
   const [filter,    setFilter]    = React.useState('all');
   const [chartItem, setChartItem] = React.useState(null);
 
-  // Load from DB on mount
+  // Load from DB on mount, then immediately fetch live prices
   React.useEffect(() => {
-    dbLoad().then(loaded => {
+    dbLoad().then(async loaded => {
       setItems(loaded);
       setDbLoading(false);
+      if (loaded.length > 0) {
+        setLoading(true);
+        const withPrices = await fetchPricesFor(loaded);
+        setItems(withPrices);
+        setLoading(false);
+      }
     });
   }, []);
 
@@ -177,7 +184,6 @@ function WatchlistView() {
     setLoading(true);
     const updated = await fetchPricesFor(items);
     setItems(updated);
-    await dbSave(updated);
     setLoading(false);
   }
 
