@@ -31,14 +31,36 @@ async function yahooPrice(symbol) {
   let lastErr;
   for (const host of hosts) {
     try {
-      const url = `https://${host}/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
+      // includePrePost=true adds pre/post market candles; 5m intervals keep payload small (~3KB)
+      const url = `https://${host}/v8/finance/chart/${encodeURIComponent(symbol)}?interval=5m&range=1d&includePrePost=true`;
       const r = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' } });
       if (!r.ok) { lastErr = new Error('HTTP ' + r.status); continue; }
       const j = await r.json();
-      const p = j && j.chart && j.chart.result && j.chart.result[0] && j.chart.result[0].meta
-        ? j.chart.result[0].meta.regularMarketPrice : null;
-      if (p != null) return p;
-      lastErr = new Error('no price field');
+      const result = j?.chart?.result?.[0];
+      if (!result) { lastErr = new Error('no result'); continue; }
+      const meta = result.meta;
+      const price = meta?.regularMarketPrice;
+      if (price == null) { lastErr = new Error('no price field'); continue; }
+
+      // Find the last non-null close and its timestamp
+      const timestamps = result.timestamp || [];
+      const closes = result.indicators?.quote?.[0]?.close || [];
+      let lastClose = null, lastTs = null;
+      for (let i = closes.length - 1; i >= 0; i--) {
+        if (closes[i] != null) { lastClose = closes[i]; lastTs = timestamps[i]; break; }
+      }
+
+      let pre = null, post = null;
+      if (lastClose != null && lastTs != null) {
+        const tp = meta.currentTradingPeriod || {};
+        if (tp.pre && lastTs >= tp.pre.start && lastTs < tp.pre.end) {
+          pre = { price: +lastClose.toFixed(4), pct: (lastClose - price) / price * 100 };
+        } else if (tp.post && lastTs >= tp.post.start && lastTs < tp.post.end) {
+          post = { price: +lastClose.toFixed(4), pct: (lastClose - price) / price * 100 };
+        }
+      }
+
+      return { price, pre, post };
     } catch (e) { lastErr = e; }
   }
   throw lastErr || new Error('yahoo failed');
@@ -125,12 +147,18 @@ export default async function handler(req, res) {
 
   const body = await readBody(req);
   const prices = {};
+  const prePost = {};
   const errors = [];
   const tasks = [];
 
   for (const it of (body.yahoo || [])) {
     tasks.push(yahooPrice(it.symbol)
-      .then(p => { prices[`${it.key}:${it.name}`] = p; })
+      .then(({ price, pre, post }) => {
+        const k = `${it.key}:${it.name}`;
+        prices[k] = price;
+        const active = post || pre;
+        if (active) prePost[k] = { ...active, type: post ? 'post' : 'pre' };
+      })
       .catch(e => errors.push(`${it.key}:${it.name} ${e.message}`)));
   }
   for (const it of (body.funds || [])) {
@@ -154,5 +182,5 @@ export default async function handler(req, res) {
 
   // light caching at the edge (30s)
   res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=120');
-  return res.status(200).json({ prices, fx, errors, ts: Date.now() });
+  return res.status(200).json({ prices, prePost, fx, errors, ts: Date.now() });
 }

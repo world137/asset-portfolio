@@ -67,12 +67,9 @@ export default async function handler(req, res) {
         `portfolio_id=eq.${encodeURIComponent(id)}&select=*&order=created_at.asc`,
       );
       const items = rows.map(r => ({
-        ticker:    r.ticker,
-        type:      r.type || 'stock',
-        name:      r.name  || null,
-        price:     r.price != null ? parseFloat(r.price) : null,
-        updatedAt: r.price_updated_at ? new Date(r.price_updated_at).getTime() : null,
-        chgPct:    null, // computed client-side, not persisted
+        ticker: r.ticker,
+        type:   r.type || 'stock',
+        name:   r.name || null,
       }));
       return res.status(200).json({ items });
     } catch (e) {
@@ -94,12 +91,10 @@ export default async function handler(req, res) {
       await sbDelete('watchlist', `portfolio_id=eq.${encodeURIComponent(id)}`);
       if (items.length > 0) {
         const rows = items.map(item => ({
-          portfolio_id:    id,
-          ticker:          String(item.ticker).slice(0, 20).toUpperCase(),
-          type:            item.type === 'crypto' ? 'crypto' : 'stock',
-          name:            item.name  ? String(item.name).slice(0, 120)  : null,
-          price:           item.price != null ? Number(item.price) : null,
-          price_updated_at: item.updatedAt ? new Date(item.updatedAt).toISOString() : null,
+          portfolio_id: id,
+          ticker:       String(item.ticker).slice(0, 20).toUpperCase(),
+          type:         item.type === 'crypto' ? 'crypto' : 'stock',
+          name:         item.name ? String(item.name).slice(0, 120) : null,
         }));
         await sbUpsert('watchlist', rows);
       }
