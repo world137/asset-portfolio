@@ -241,6 +241,89 @@ function IsoCoffee({ col, row, offX=0.72 }) {
   );
 }
 
+// ── SVG-native speech bubble (renders inside SVG) ────────────────────────────
+function SpeechBubbleSVG({ x, y, text }) {
+  const MAX = 11;
+  const label = text.length > MAX ? text.slice(0, MAX - 1) + '…' : text;
+  const w = label.length * 5.4 + 10;
+  const h = 14;
+  const bx = x - w / 2;
+  const by = y - h - 6;
+  return (
+    <g style={{ pointerEvents: 'none', animation: 'px-svg-bubble 2.4s ease forwards' }}>
+      <rect x={bx} y={by} width={w} height={h} rx={2.5}
+        fill="#ffffff" stroke="#9ca3af" strokeWidth="0.7" opacity="0.97"/>
+      <text x={x} y={by + 9} textAnchor="middle"
+        fontSize="5.8" fontFamily="'Courier New',monospace" fill="#111827" fontWeight="700"
+        style={{ letterSpacing: '0.02em' }}>
+        {label}
+      </text>
+      <polygon points={`${x-3},${by+h} ${x+3},${by+h} ${x},${by+h+5}`}
+        fill="#ffffff" stroke="#9ca3af" strokeWidth="0.7"/>
+    </g>
+  );
+}
+
+// ── Isometric chair ───────────────────────────────────────────────────────────
+function IsoChair({ col, row, e = 0 }) {
+  const sc = '#1d4ed8', sl = '#1e40af', sr = '#1e3a8a';
+  const bh = 0.38, sw = 0.22;
+  return (
+    <g>
+      <IsoBox col={col} row={row} e={e} h={sw} top={hx(sc,1.2)} lft={sl} rgt={sr}/>
+      <IsoBox col={col} row={row} e={e+sw} h={bh} top={hx(sc,0.85)} lft={hx(sl,0.75)} rgt={hx(sr,0.7)}/>
+    </g>
+  );
+}
+
+// ── Locker ────────────────────────────────────────────────────────────────────
+function IsoLocker({ col, row }) {
+  const h = 0.80;
+  const b = ixy(col, row, h);
+  return (
+    <g>
+      <IsoBox col={col} row={row} h={h} top='#4b5563' lft='#1f2937' rgt='#111827'/>
+      <rect x={b.x+TW*0.64} y={b.y+TH*0.45} width={2} height={4} fill='#9ca3af' opacity="0.9"/>
+      <rect x={b.x+TW*0.58} y={b.y+TH*0.25} width={7} height={1} fill='#000' opacity="0.35"/>
+      <rect x={b.x+TW*0.58} y={b.y+TH*0.35} width={7} height={1} fill='#000' opacity="0.35"/>
+    </g>
+  );
+}
+
+// ── Water dispenser ───────────────────────────────────────────────────────────
+function IsoWaterDispenser({ col, row }) {
+  const h = 0.60;
+  const p = ixy(col, row, h);
+  const cx = p.x + TW/2, cy = p.y;
+  return (
+    <g>
+      <IsoBox col={col} row={row} h={h} top='#bae6fd' lft='#7dd3fc' rgt='#38bdf8'/>
+      <ellipse cx={cx}   cy={cy-1} rx={5} ry={4} fill='#60a5fa' opacity="0.90"/>
+      <ellipse cx={cx}   cy={cy-4} rx={3.5} ry={3} fill='#93c5fd' opacity="0.85"/>
+      <ellipse cx={cx}   cy={cy-7} rx={2} ry={1.5} fill='#e0f2fe' opacity="0.75"/>
+    </g>
+  );
+}
+
+// ── Server rack ───────────────────────────────────────────────────────────────
+function IsoServerRack({ col, row }) {
+  const h = 1.15;
+  const b = ixy(col, row, 0), t = ixy(col, row, h);
+  const LEDS = ['#22c55e','#22c55e','#f59e0b','#22c55e','#ef4444','#22c55e'];
+  const rx  = b.x + TW * 0.67;
+  const fT  = t.y + TH * 0.68;
+  const fB  = b.y + TH * 0.68;
+  const step = (fB - fT) / (LEDS.length + 1);
+  return (
+    <g>
+      <IsoBox col={col} row={row} h={h} top='#1e293b' lft='#0f172a' rgt='#04080f'/>
+      {LEDS.map((lc,i) => (
+        <rect key={i} x={rx} y={fT+step*(i+1)} width={3} height={2} fill={lc} opacity="0.90"/>
+      ))}
+    </g>
+  );
+}
+
 // ── Mini pixel character (SVG <g>, S=2, 16×20px) ──────────────────────────────
 function MiniChar({ x=0, y=0, color='#6366f1', happy=true, tired=false, hC }) {
   const SK='#f5c99a', EY='#1a1a2e', HR=hC||'#3d2b1f',
@@ -487,6 +570,41 @@ function PixelSummary({ totals, sym, classes }) {
   );
 }
 
+// ── Shared helper: SVG pixel coords for a character at (col, row) ─────────────
+function charPixelPos(col, row) {
+  const p = ixy(col, row, 0);
+  return { x: p.x + TW/2 - 8, y: p.y + TH/2 - 20 };
+}
+
+// ── Character animation data ──────────────────────────────────────────────────
+const ZONE_QUOTES = {
+  ceo:      ['Q4 TARGETS!','BULLISH!','Memo sent','Board call','BUY MORE!','Results!','Approved!'],
+  invest:   ['BUY THE DIP','MOON SOON','HODL!!!','Reading DD','BTFD!','Long $AAPL','Chart up!'],
+  acct:     ['P/L updated','Costs noted','Balanced!','Reconciled','Auditing…','Expense?','Done!'],
+  dev:      ['git push -f','Compiling…','404: sleep','npm i 🔥','LGTM! Ship','Bug fixed!','Deployed!'],
+  ba:       ['Per my email','SYNERGY!','Let\'s pivot','Agile now!','Scope alert','Workshop?','KPIs!'],
+  corridor: ['Coffee? ☕','Hey there!','Lunch time?','Stand-up!','Brb…','Meeting!','Snack run?'],
+};
+
+const WALKABLE_POS = {
+  ceo:      [[0,0],[2,0],[2,1]],               // (1,0) → locker
+  invest:   [[3,0],[5,0],[5,1]],               // (4,0) → water dispenser
+  acct:     [[6,0],[7,0],[8,0],[8,1]],
+  dev:      [[1,3],[0,4],[1,4],[2,4],[3,4]],   // (3,3) → server rack
+  ba:       [[4,4],[5,4],[6,4],[8,4],[8,3]],   // (7,4) → locker
+  corridor: [[1,2],[2,2],[3,2],[4,2],[5,2],[6,2],[7,2]],
+};
+
+const CHAR_DEFS = [
+  { id:'ceo', zoneKey:'ceo',      color:'#fbbf24', hC:'#92400e' },
+  { id:'inv', zoneKey:'invest',   color:'#34d399', hC:'#065f46' },
+  { id:'acc', zoneKey:'acct',     color:'#60a5fa', hC:'#1e3a8a' },
+  { id:'dv1', zoneKey:'dev',      color:'#a78bfa', hC:'#4c1d95' },
+  { id:'dv2', zoneKey:'dev',      color:'#c4b5fd', hC:'#5b21b6' },
+  { id:'ba1', zoneKey:'ba',       color:'#f472b6', hC:'#831843' },
+  { id:'cor', zoneKey:'corridor', color:'#6366f1', hC:'#312e81' },
+];
+
 // ── Unified open-office floor plan ───────────────────────────────────────────
 // Grid: C=9 cols × R=5 rows
 //   Upper: CEO 0-2 | INVEST 3-5 | ACCT 6-8   (rows 0-1, desk/char at row 1)
@@ -513,102 +631,180 @@ function ofcFloor(col, row) {
 }
 
 function IsoOpenOffice({ totals, sym, classes }) {
-  const C=9, R=5, wH=1.0, happy = totals.pct >= 0;
+  const C=9, R=5, wH=1.0;
 
-  function cAt(col, row, color, hC, h) {
-    const p = ixy(col, row, 0);
-    return <MiniChar key={`oc${col}${row}`}
-      x={p.x+TW/2-8} y={p.y+TH/2-20} color={color} happy={h!==undefined?h:happy}
-      hC={hC||hx(color,0.35)}/>;
-  }
+  // ── Character state: current (x,y), target (tx,ty), speech, speechKey ────
+  const [chars, setChars] = React.useState(() =>
+    CHAR_DEFS.map((def, i) => {
+      const positions = WALKABLE_POS[def.zoneKey];
+      const pos       = positions[i % positions.length];
+      const { x, y } = charPixelPos(pos[0], pos[1]);
+      return { ...def, col: pos[0], row: pos[1], x, y, tx: x, ty: y, speech: null, sk: 0 };
+    })
+  );
 
-  // Wall colors: back-right wall gets zone colors per column
+  // Fast lerp: smoothly move x/y toward tx/ty
+  React.useEffect(() => {
+    const lerp = setInterval(() => {
+      setChars(prev => {
+        let dirty = false;
+        const next = prev.map(ch => {
+          const dx = ch.tx - ch.x, dy = ch.ty - ch.y;
+          if (Math.abs(dx) < 0.4 && Math.abs(dy) < 0.4) return ch;
+          dirty = true;
+          return { ...ch, x: ch.x + dx * 0.18, y: ch.y + dy * 0.18 };
+        });
+        return dirty ? next : prev;
+      });
+    }, 48);
+    return () => clearInterval(lerp);
+  }, []);
+
+  // Slow target update: pick new tile + maybe show speech
+  React.useEffect(() => {
+    const move = setInterval(() => {
+      setChars(prev => prev.map(ch => {
+        const positions = WALKABLE_POS[ch.zoneKey];
+        const np       = positions[Math.floor(Math.random() * positions.length)];
+        const { x: tx, y: ty } = charPixelPos(np[0], np[1]);
+        const quotes   = ZONE_QUOTES[ch.zoneKey] || ZONE_QUOTES.corridor;
+        const speech   = Math.random() < 0.32
+          ? quotes[Math.floor(Math.random() * quotes.length)]
+          : null;
+        return { ...ch, col: np[0], row: np[1], tx, ty, speech, sk: ch.sk + 1 };
+      }));
+    }, 2800);
+    return () => clearInterval(move);
+  }, []);
+
+  // ── Derived legend data ────────────────────────────────────────────────────
+  const best    = classes.length ? [...classes].sort((a,b)=>b.pct-a.pct)[0] : null;
+  const secs    = Store.sectorTotals ? Store.sectorTotals() : [];
+  const topSec  = secs.length ? [...secs].sort((a,b)=>b.value-a.value)[0] : null;
+  const nAssets = classes.reduce((a,c)=>a+c.positions.length,0);
+
   const wallFaceC = col => col<=2 ? hx('#f59e0b',0.52) : col<=5 ? hx('#10b981',0.52) : hx('#3b82f6',0.52);
   const wallTopC  = col => col<=2 ? hx('#f59e0b',0.70) : col<=5 ? hx('#10b981',0.70) : hx('#3b82f6',0.70);
 
-  // Legend data
-  const best = classes.length ? [...classes].sort((a,b)=>b.pct-a.pct)[0] : null;
-  const secs = Store.sectorTotals ? Store.sectorTotals() : [];
-  const topSec = secs.length ? [...secs].sort((a,b)=>b.value-a.value)[0] : null;
-  const nAssets = classes.reduce((a,c)=>a+c.positions.length,0);
-
   const zones = [
-    { id:'ceo',    c:'#f59e0b', icon:'👔', label:'CEO OFFICE',    items:[{ l:'AUM',v:sym+window.fmtBig(totals.value) },{ l:'P/L',v:(totals.profit>=0?'+':'−')+sym+window.fmtBig(Math.abs(totals.profit)),cls:totals.profit>=0?'up':'down' }] },
-    { id:'invest', c:'#10b981', icon:'📈', label:'INVESTOR',       items: best?[{ l:'TOP',v:best.label.slice(0,10).toUpperCase() },{ l:'RET',v:'+'+best.pct.toFixed(1)+'%',cls:'up' }]:[{ l:'STATUS',v:'SCOUTING' }] },
-    { id:'acct',   c:'#3b82f6', icon:'📊', label:'ACCOUNTING',     items:[{ l:'COST',v:sym+window.fmtBig(totals.cost) },{ l:'P/L',v:(totals.profit>=0?'+':'−')+sym+window.fmtBig(Math.abs(totals.profit)),cls:totals.profit>=0?'up':'down' }] },
-    { id:'dev',    c:'#8b5cf6', icon:'💻', label:'DEV DEPT',        items:[{ l:'ASSETS',v:nAssets+' items' },{ l:'TYPES',v:classes.length+' cls' }] },
-    { id:'ba',     c:'#ec4899', icon:'🔍', label:'BA & ANALYSIS',   items: topSec?[{ l:'TOP SEC',v:(topSec.sector||'N/A').slice(0,10).toUpperCase() },{ l:'SECTS',v:secs.length+' tracked' }]:[{ l:'STATUS',v:'ANALYZING' }] },
+    { id:'ceo',    c:'#f59e0b', icon:'👔', label:'CEO OFFICE',   items:[{ l:'AUM',v:sym+window.fmtBig(totals.value) },{ l:'P/L',v:(totals.profit>=0?'+':'−')+sym+window.fmtBig(Math.abs(totals.profit)),cls:totals.profit>=0?'up':'down' }] },
+    { id:'invest', c:'#10b981', icon:'📈', label:'INVESTOR',      items: best?[{ l:'TOP',v:best.label.slice(0,10).toUpperCase() },{ l:'RET',v:'+'+best.pct.toFixed(1)+'%',cls:'up' }]:[{ l:'STATUS',v:'SCOUTING' }] },
+    { id:'acct',   c:'#3b82f6', icon:'📊', label:'ACCOUNTING',    items:[{ l:'COST',v:sym+window.fmtBig(totals.cost) },{ l:'P/L',v:(totals.profit>=0?'+':'−')+sym+window.fmtBig(Math.abs(totals.profit)),cls:totals.profit>=0?'up':'down' }] },
+    { id:'dev',    c:'#8b5cf6', icon:'💻', label:'DEV DEPT',       items:[{ l:'ASSETS',v:nAssets+' items' },{ l:'TYPES',v:classes.length+' cls' }] },
+    { id:'ba',     c:'#ec4899', icon:'🔍', label:'BA & ANALYSIS',  items: topSec?[{ l:'TOP SEC',v:(topSec.sector||'N/A').slice(0,10).toUpperCase() },{ l:'SECTS',v:secs.length+' tracked' }]:[{ l:'STATUS',v:'ANALYZING' }] },
   ];
 
   return (
     <>
       <div className="px-hq-office-scroll">
-        <svg viewBox="-88 -44 308 196"
+        <svg viewBox="-88 -44 308 210"
           style={{width:'100%',height:'auto',minWidth:'520px',display:'block',imageRendering:'pixelated',shapeRendering:'crispEdges'}}>
 
-          {/* Back-left wall — neutral */}
+          {/* Back-left wall */}
           {[...Array(R)].map((_,row) => [
             <polygon key={`wl${row}`}  points={rgtPts(-1,row,0,wH)} fill={hx('#22224a',0.65)} stroke="#0003" strokeWidth="0.5"/>,
             <polygon key={`wlt${row}`} points={tilePts(-1,row,wH)}  fill={hx('#22224a',0.82)} stroke="#0003" strokeWidth="0.5"/>,
           ])}
 
-          {/* Back-right wall — zone-colored face + top */}
+          {/* Back-right wall — zone-coloured */}
           {[...Array(C)].map((_,col) => [
             <polygon key={`wr${col}`}  points={lftPts(col,-1,0,wH)} fill={wallFaceC(col)} stroke="#0003" strokeWidth="0.5"/>,
             <polygon key={`wrt${col}`} points={tilePts(col,-1,wH)}  fill={wallTopC(col)}  stroke="#0003" strokeWidth="0.5"/>,
           ])}
 
-          {/* Zone-tinted floor tiles */}
-          {[...Array(R)].map((_,row) => [...Array(C)].map((_,col) => (
-            <polygon key={`f${col}${row}`} points={tilePts(col,row)} fill={ofcFloor(col,row)} stroke="#fff1" strokeWidth="0.4"/>
-          )))}
+          {/* Floor — zone-tinted + lighter corridor strip */}
+          {[...Array(R)].map((_,row) => [...Array(C)].map((_,col) => {
+            let fill;
+            if (row === 2) {
+              fill = (col+row)%2===0 ? '#252538' : '#1e1e30';
+            } else {
+              fill = ofcFloor(col,row);
+            }
+            return <polygon key={`f${col}${row}`} points={tilePts(col,row)} fill={fill} stroke="#fff1" strokeWidth="0.4"/>;
+          }))}
 
-          {/* Zone marker pillars — h=1.3 (just above wH=1.0 wall) */}
+          {/* Corridor lane highlight */}
+          {[...Array(C)].map((_,col) => {
+            const p = ixy(col, 2, 0);
+            return <polygon key={`cl${col}`} points={tilePts(col,2)} fill="none"
+              stroke="#4a4a6a" strokeWidth="0.6" opacity="0.5"/>;
+          })}
+
+          {/* Zone marker pillars */}
           {[[0,0,'ceo'],[3,0,'invest'],[6,0,'acct'],[0,3,'dev'],[4,3,'ba']].map(([c,r,id]) => {
             const zc = OFC_ZONES.find(z=>z.id===id).c;
             return <IsoBox key={`zp${c}${r}`} col={c} row={r} h={1.3}
               top={hx(zc,1.0)} lft={hx(zc,0.72)} rgt={hx(zc,0.50)}/>;
           })}
 
-          {/* ─ CEO ZONE — desks at row=1, visible above back wall ─ */}
+          {/* ─ CEO ZONE ─ */}
           <IsoDesk col={0} row={1} wide={true}/>
           <IsoMonitor col={0} row={1} pct={totals.pct}/>
           <IsoCoffee col={1} row={1} offX={0.72}/>
-          <IsoPlant col={2} row={1}/>
+          <IsoChair col={2} row={1}/>
+          <IsoLocker col={1} row={0}/>
+          <IsoPlant col={2} row={0}/>
 
           {/* ─ INVEST ZONE ─ */}
           <IsoDesk col={3} row={1} wide={true}/>
           <IsoMonitor col={3} row={1} pct={best ? best.pct : 1}/>
           <IsoCoffee col={4} row={1} offX={0.72}/>
-          <IsoPlant col={5} row={1}/>
+          <IsoChair col={5} row={1}/>
+          <IsoWaterDispenser col={4} row={0}/>
+          <IsoPlant col={5} row={0}/>
 
           {/* ─ ACCT ZONE ─ */}
           <IsoDesk col={6} row={1} wide={true}/>
           <IsoLaptop col={6} row={1}/>
           <IsoCoffee col={7} row={1} offX={0.72}/>
-          <IsoPlant col={8} row={1}/>
+          <IsoChair col={8} row={1}/>
+          <IsoLocker col={7} row={0}/>
+          <IsoPlant col={8} row={0}/>
 
-          {/* ─ DEV ZONE — two desk clusters ─ */}
+          {/* ─ DEV ZONE ─ */}
           <IsoDesk col={0} row={3} wide={true}/>
           <IsoLaptop col={0} row={3}/>
           <IsoDesk col={2} row={3} wide={false}/>
           <IsoLaptop col={2} row={3}/>
           <IsoCoffee col={1} row={3} offX={0.72}/>
+          <IsoChair col={1} row={4}/>
+          <IsoChair col={2} row={4}/>
+          <IsoServerRack col={3} row={3}/>
+          <IsoWaterDispenser col={4} row={4}/>
           <IsoPlant col={3} row={4}/>
 
           {/* ─ BA ZONE ─ */}
           <IsoDesk col={4} row={3} wide={true}/>
           <IsoWhiteboard col={7} row={3}/>
           <IsoCoffee col={5} row={3} offX={0.72}/>
+          <IsoChair col={6} row={3}/>
+          <IsoLocker col={7} row={4}/>
           <IsoPlant col={8} row={4}/>
 
-          {/* Characters rendered last */}
-          {cAt(1, 1, '#fbbf24')}
-          {cAt(4, 1, '#34d399', null, true)}
-          {cAt(7, 1, '#60a5fa', null, totals.profit>=0)}
-          {cAt(1, 4, '#a78bfa', null, true)}
-          {cAt(6, 4, '#f472b6', null, happy)}
-          {cAt(4, 2, '#6366f1', null, true)}
+          {/* ─ Characters: smooth lerp walk + direction flip + bob ─ */}
+          {chars.map(ch => {
+            const isHappy   = totals.pct >= 0 || ch.zoneKey === 'corridor';
+            const isMoving  = Math.abs(ch.tx - ch.x) > 1.5 || Math.abs(ch.ty - ch.y) > 1.5;
+            const facingL   = ch.tx < ch.x - 2;
+            const midX      = ch.x + 8;
+            const charNode  = (
+              <MiniChar x={ch.x} y={ch.y} color={ch.color} happy={isHappy} hC={ch.hC}/>
+            );
+            return (
+              <g key={ch.id}>
+                <g className={isMoving ? 'px-char-walk' : 'px-char-idle'}>
+                  {facingL
+                    ? <g transform={`translate(${2*midX} 0) scale(-1 1)`}>{charNode}</g>
+                    : charNode
+                  }
+                </g>
+                {ch.speech && (
+                  <SpeechBubbleSVG key={`${ch.id}-${ch.sk}`}
+                    x={ch.x + 8} y={ch.y - 1} text={ch.speech}/>
+                )}
+              </g>
+            );
+          })}
         </svg>
       </div>
 
