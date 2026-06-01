@@ -334,8 +334,8 @@ body { background: var(--bg-app); display: block; padding: 0; }
   .card-h { flex-wrap: wrap; row-gap: 8px; }
   .toolbar2 { flex-wrap: wrap; }
 }
-/* ── 600px: compact topbar → collapse into sliders icon ─────────────────── */
-@media (max-width: 600px) {
+/* ── 900px: compact topbar → collapse into sliders icon (phone + tablet portrait) */
+@media (max-width: 900px) {
   .tb { gap: 4px; position: relative; }
   .tb-refresh-text { display: none; }
   .icon-toggle.tb-more { display: inline-flex; }
@@ -364,6 +364,7 @@ body { background: var(--bg-app); display: block; padding: 0; }
   .kpi .big { font-size: 19px; }
   .kpi .lab { letter-spacing: 0.04em; }
   .pill-toggle { display: none; }
+  .modal .pill-toggle { display: inline-flex; }
   .filter-row { flex-direction: column !important; align-items: stretch !important; }
   .filter-row > * { width: 100%; }
   .filter-row .layoutseg { width: 100%; justify-content: stretch; }
