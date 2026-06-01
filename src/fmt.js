@@ -3,8 +3,11 @@
 
 window.ccySymbol = (c) => (c === 'USD' ? '$' : '฿');
 
+window._amountsHidden = () => (typeof Store !== 'undefined' && Store.settings && Store.settings().hideAmounts);
+
 window.fmtMoney = (n, ccy, dec) => {
   if (n == null || isNaN(n)) return '—';
+  if (window._amountsHidden()) return (window.ccySymbol(ccy) || '') + '***.**';
   const d = dec != null ? dec : (Math.abs(n) >= 1000 ? 0 : 2);
   return (window.ccySymbol(ccy) || '') + n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
 };
@@ -12,6 +15,7 @@ window.fmtMoney = (n, ccy, dec) => {
 // Compact KPI numbers — no decimals, grouped thousands. Caller prepends the symbol.
 window.fmtBig = (n) => {
   if (n == null || isNaN(n)) return '—';
+  if (window._amountsHidden()) return '***';
   return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
 };
 
@@ -34,6 +38,7 @@ window.fmtPct = (n) => {
 
 window.fmtPrice = (n, ccy) => {
   if (n == null || isNaN(n)) return '—';
+  if (window._amountsHidden()) return (window.ccySymbol(ccy) || '') + '***.**';
   const d = Math.abs(n) >= 1000 ? 2 : Math.abs(n) >= 1 ? 2 : 4;
   return (window.ccySymbol(ccy) || '') + n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
 };
@@ -41,6 +46,10 @@ window.fmtPrice = (n, ccy) => {
 // Multi-currency formatter — 0 decimals for JPY/KRW, 2 for THB/USD.
 window.fmtCcy = (n, ccy) => {
   if (n == null || isNaN(n)) return '—';
+  if (window._amountsHidden()) {
+    const sym = ccy === 'USD' ? '$' : ccy === 'JPY' ? '¥' : ccy === 'KRW' ? '₩' : '฿';
+    return sym + '***.**';
+  }
   const dec = (ccy === 'JPY' || ccy === 'KRW') ? 0 : 2;
   const sym = ccy === 'USD' ? '$' : ccy === 'JPY' ? '¥' : ccy === 'KRW' ? '₩' : '฿';
   return sym + n.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec });

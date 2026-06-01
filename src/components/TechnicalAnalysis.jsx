@@ -411,7 +411,7 @@ function TechnicalAnalysis() {
   const ccy = meta?.currency === 'USD' ? '$' : meta?.currency === 'THB' ? '฿' : '';
 
   return (
-    <div style={{ maxWidth: 680, margin: '0 auto', padding: '24px 0 48px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ maxWidth: 680, margin: '0 auto', padding: '24px 16px 48px', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
       {/* ── Search ── */}
       <div style={{ display:'flex', gap:8 }}>

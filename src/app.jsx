@@ -564,6 +564,11 @@ function App() {
             <button className={settings.displayCcy === 'THB' ? 'on' : ''} onClick={() => Store.setSetting('displayCcy', 'THB')}>฿ THB</button>
             <button className={settings.displayCcy === 'USD' ? 'on' : ''} onClick={() => Store.setSetting('displayCcy', 'USD')}>$ USD</button>
           </div>
+          <button className="icon-toggle" title={settings.hideAmounts ? 'Show amounts' : 'Hide amounts'}
+            onClick={() => Store.setSetting('hideAmounts', !settings.hideAmounts)}
+            style={{ color: settings.hideAmounts ? 'var(--accent)' : undefined }}>
+            <Icon name={settings.hideAmounts ? 'eye-off' : 'eye'} size={16} />
+          </button>
           <button className="icon-toggle" title="Backup & Restore" onClick={() => setDtOpen(true)}>
             <Icon name="archive" size={16} />
           </button>

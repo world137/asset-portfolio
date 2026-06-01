@@ -35,6 +35,7 @@
     palette: 'class',
     layout: 'overview',
     decimals: 2,
+    hideAmounts: false,
   };
 
   function freshState() {
