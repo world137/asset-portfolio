@@ -73,6 +73,18 @@ function WatchlistCard({ item, onRemove, onChart }) {
         )}
       </div>
 
+      {item.prePost && (
+        <div className={'wl-prepost ' + (item.prePost.pct >= 0 ? 'up' : 'down')}>
+          <span className="wl-prepost-label">{item.prePost.type === 'pre' ? 'Pre-market' : 'After-hours'}</span>
+          <span className="wl-prepost-price">${window.fmtBig(item.prePost.price)}</span>
+          {item.prePost.pct != null && (
+            <span className="wl-prepost-pct">
+              ({item.prePost.pct >= 0 ? '+' : ''}{item.prePost.pct.toFixed(2)}%)
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="wl-card-footer">
         {item.updatedAt ? (
           <span className="wl-updated">Updated {window.timeAgo(item.updatedAt)}</span>
@@ -140,7 +152,8 @@ function WatchlistView() {
         const raw = data.prices['watchlist:' + item.ticker];
         if (raw == null) return item;
         const priceUsd = item.type === 'crypto' ? raw / usdthb : raw;
-        return { ...item, price: priceUsd, updatedAt: now };
+        const prePost  = (data.prePost && data.prePost['watchlist:' + item.ticker]) || null;
+        return { ...item, price: priceUsd, updatedAt: now, prePost };
       });
     } catch (_) { return list; }
   }

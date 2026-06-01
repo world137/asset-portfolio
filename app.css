@@ -934,6 +934,15 @@ body { background: var(--bg-app); display: block; padding: 0; }
 }
 .wl-chg.up   { color: var(--green-600); }
 .wl-chg.down { color: var(--red-600); }
+.wl-prepost {
+  display: flex; align-items: baseline; gap: 6px;
+  font: 500 12px/1 var(--font-mono);
+}
+.wl-prepost.up   { color: var(--green-600); }
+.wl-prepost.down { color: var(--red-600); }
+.wl-prepost-label { font: 400 10px/1 var(--font-sans); color: var(--fg-4); letter-spacing: 0.03em; flex-shrink: 0; }
+.wl-prepost-price { font-weight: 600; }
+.wl-prepost-pct   { font-weight: 400; }
 .wl-card-footer { display: flex; align-items: center; justify-content: space-between; }
 .wl-updated { font: 400 11px/1 var(--font-sans); color: var(--fg-4); }
 .wl-chart-hint { font: 500 11px/1 var(--font-sans); color: var(--accent); opacity: 0; display: flex; align-items: center; gap: 3px; transition: opacity var(--dur-1); }
