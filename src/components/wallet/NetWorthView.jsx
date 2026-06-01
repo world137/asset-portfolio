@@ -148,7 +148,7 @@ function NetWorthView() {
           <div style={{ padding: '0 20px 20px' }}>
             {/* Net worth bar */}
             <div style={{ marginBottom: 14 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--fg-3)', marginBottom: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--fg-3)', marginBottom: 6 , marginTop: 6}}>
                 <span>Assets <strong style={{ color: 'var(--fg-2)' }}>{sym}{window.fmtBig(s.totalAssets)}</strong></span>
                 {s.totalLiabilities > 0 && (
                   <span>Liabilities <strong style={{ color: 'var(--red-600)' }}>{sym}{window.fmtBig(s.totalLiabilities)}</strong></span>

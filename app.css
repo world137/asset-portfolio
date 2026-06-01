@@ -522,3 +522,207 @@ body { background: var(--bg-app); display: block; padding: 0; }
 .costbar { height: 5px; border-radius: 999px; min-width: 3px; transition: width var(--dur-2); }
 
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+/* ============================================================================
+   PixelWorld — pixel art portfolio office
+   ============================================================================ */
+
+/* Character animations */
+@keyframes px-bob    { 0%,100% { transform: translateY(0);    } 50% { transform: translateY(-4px); } }
+@keyframes px-jump   { 0%,100% { transform: translateY(0);    } 25% { transform: translateY(-10px) scaleX(.9); } 60% { transform: translateY(-14px) scaleX(.9); } 80% { transform: translateY(-6px); } }
+@keyframes px-slouch { 0%,100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(3px) rotate(-8deg); } }
+@keyframes px-idle   { 0%,100% { transform: translateY(0) scaleX(1); } 40% { transform: translateY(-1px); } 80% { transform: translateY(0) scaleX(-1); } }
+@keyframes px-ticker { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+@keyframes px-blink  { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+@keyframes px-bubble-in { 0% { opacity:0; transform: scale(.8) translateY(4px); } 100% { opacity:1; transform: scale(1) translateY(0); } }
+
+.px-anim-bob    { animation: px-bob    2s ease-in-out infinite; display: inline-block; }
+.px-anim-jump   { animation: px-jump   0.8s ease-in-out infinite; display: inline-block; }
+.px-anim-slouch { animation: px-slouch 3s ease-in-out infinite; display: inline-block; transform-origin: bottom center; }
+.px-anim-idle   { animation: px-idle   4s ease-in-out infinite; display: inline-block; }
+
+/* World container */
+.px-world { background: #080812; min-height: 100%; color: #e0e0ff; }
+.px-world .page { background: #080812; }
+
+/* Header */
+.px-header {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+  padding: 20px 24px 16px; border-bottom: 2px solid #1a1a3a;
+  background: linear-gradient(135deg, #0d0d1f 0%, #0a0a1a 100%);
+}
+.px-header-left { display: flex; align-items: center; gap: 14px; }
+.px-logo-block {
+  width: 44px; height: 44px; border-radius: 8px; background: #12123a;
+  border: 2px solid #2a2a6a; display: flex; align-items: center; justify-content: center;
+  image-rendering: pixelated;
+}
+.px-title {
+  font: 700 20px/1 'Courier New', monospace; color: #a78bfa; letter-spacing: 0.08em;
+  text-shadow: 0 0 14px rgba(167,139,250,0.6);
+}
+.px-subtitle { font: 500 11px/1.4 'Courier New', monospace; color: #6366f1; letter-spacing: 0.05em; margin-top: 3px; }
+.px-header-kpis { display: flex; gap: 16px; }
+.px-hkpi { text-align: center; }
+.px-hkpi-lab { font: 600 9px/1 'Courier New', monospace; color: #6366f1; letter-spacing: 0.1em; text-transform: uppercase; }
+.px-hkpi-val { font: 700 16px/1.3 'Courier New', monospace; color: #e0e0ff; margin-top: 2px; }
+.px-hkpi.up .px-hkpi-val { color: #4ade80; text-shadow: 0 0 8px rgba(74,222,128,0.5); }
+.px-hkpi.down .px-hkpi-val { color: #f87171; text-shadow: 0 0 8px rgba(248,113,113,0.5); }
+
+/* Ticker tape */
+.px-ticker-bar {
+  display: flex; align-items: center; gap: 0; overflow: hidden;
+  background: #0d0d22; border-bottom: 1px solid #1a1a3a; height: 28px;
+}
+.px-ticker-tag {
+  flex-shrink: 0; background: #ef4444; color: #fff;
+  font: 700 9px/1 'Courier New', monospace; padding: 0 8px; height: 100%;
+  display: flex; align-items: center; letter-spacing: 0.1em;
+  animation: px-blink 1.2s step-end infinite;
+}
+.px-ticker-track { flex: 1; overflow: hidden; white-space: nowrap; }
+.px-ticker-text {
+  display: inline-block;
+  font: 500 11px/28px 'Courier New', monospace; color: #a5b4fc;
+  animation: px-ticker 35s linear infinite;
+  padding-left: 100%;
+  letter-spacing: 0.03em;
+}
+
+/* Office floor */
+.px-office {
+  padding: 24px;
+  background:
+    repeating-linear-gradient(0deg,   transparent, transparent 23px, rgba(100,100,255,0.04) 23px, rgba(100,100,255,0.04) 24px),
+    repeating-linear-gradient(90deg,  transparent, transparent 23px, rgba(100,100,255,0.04) 23px, rgba(100,100,255,0.04) 24px),
+    #080812;
+}
+.px-dept-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+/* Department cards */
+.px-dept {
+  border: 2px solid #1e1e3f;
+  border-top: 4px solid var(--dept-clr, #5e5ce6);
+  border-radius: 0;                       /* pixel art = no round corners */
+  background: #0d0d1f;
+  padding: 12px;
+  position: relative;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  cursor: default;
+  image-rendering: pixelated;
+}
+.px-dept:hover { border-color: var(--dept-clr, #5e5ce6); box-shadow: 0 0 18px -2px var(--dept-clr, #5e5ce6); }
+.px-dept.px-dept-up  { box-shadow: inset 0 -1px 0 rgba(74,222,128,0.08); }
+.px-dept.px-dept-down{ box-shadow: inset 0 -1px 0 rgba(248,113,113,0.08); }
+
+.px-dept-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+.px-dept-label { font: 700 11px/1 'Courier New', monospace; color: var(--dept-clr, #a78bfa); letter-spacing: 0.06em; }
+.px-dept-count { font: 500 9px/1 'Courier New', monospace; color: #4b5563; }
+
+/* Pixel art scene */
+.px-scene {
+  position: relative; height: 90px; overflow: hidden;
+  background: #0a0a1c;
+  border: 1px solid #1a1a3a;
+  margin-bottom: 10px;
+  image-rendering: pixelated;
+}
+.px-floor-tiles {
+  position: absolute; inset: 0;
+  background:
+    repeating-linear-gradient(0deg,   transparent, transparent 7px, rgba(255,255,255,0.015) 7px, rgba(255,255,255,0.015) 8px),
+    repeating-linear-gradient(90deg,  transparent, transparent 7px, rgba(255,255,255,0.015) 7px, rgba(255,255,255,0.015) 8px);
+}
+.px-plant { position: absolute; bottom: 18px; left: 8px; }
+.px-desk-area { position: absolute; bottom: 18px; right: 8px; display: flex; align-items: flex-end; gap: 4px; }
+.px-monitor   { flex-shrink: 0; }
+.px-coffee    { flex-shrink: 0; margin-bottom: 4px; }
+.px-worker-wrap { flex-shrink: 0; position: relative; display: flex; flex-direction: column; align-items: center; }
+.px-desk-surface {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  height: 18px;
+}
+
+/* Speech bubble */
+.px-bubble {
+  position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+  margin-bottom: 4px; white-space: nowrap;
+  background: #1a1a3a; border: 1px solid #3b3b6a;
+  padding: 3px 6px; font: 600 8px/1.2 'Courier New', monospace;
+  color: #a5b4fc; letter-spacing: 0.04em;
+  animation: px-bubble-in 0.4s ease-out;
+}
+.px-bubble::after {
+  content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+  border: 4px solid transparent; border-top-color: #3b3b6a;
+}
+
+/* Nametag */
+.px-nametag {
+  display: flex; align-items: center; gap: 4px; margin-bottom: 6px;
+  font: 600 10px/1 'Courier New', monospace; color: #6b7280;
+  letter-spacing: 0.04em;
+}
+.px-nametag-text { color: #9ca3af; }
+
+/* Status badge */
+.px-badge {
+  display: inline-block; padding: 2px 7px; margin-bottom: 8px;
+  font: 700 8px/1.5 'Courier New', monospace; letter-spacing: 0.08em;
+  border: 1px solid currentColor;
+}
+.px-badge-moon   { color: #a78bfa; }
+.px-badge-grind  { color: #4ade80; }
+.px-badge-chill  { color: #60a5fa; }
+.px-badge-struggle{ color: #fbbf24; }
+.px-badge-red    { color: #f87171; }
+.px-badge-crisis { color: #ef4444; animation: px-blink 0.8s step-end infinite; }
+
+/* Performance bar */
+.px-perfbar-wrap {
+  height: 6px; background: #1a1a3a; margin-bottom: 8px;
+  border: 1px solid #2a2a4a; overflow: hidden;
+}
+.px-perfbar-fill { height: 100%; transition: width 0.6s ease; }
+.px-perfbar-fill.up   { background: #4ade80; box-shadow: 0 0 6px rgba(74,222,128,0.6); }
+.px-perfbar-fill.down { background: #f87171; box-shadow: 0 0 6px rgba(248,113,113,0.6); }
+
+/* Stats row */
+.px-dept-stats { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.px-dept-value  { font: 700 11px/1 'Courier New', monospace; color: #e0e0ff; }
+.px-dept-pct    { font: 700 10px/1 'Courier New', monospace; }
+.px-dept-profit { font: 500 9px/1  'Courier New', monospace; }
+.px-dept-pct.up,.px-dept-profit.up   { color: #4ade80; }
+.px-dept-pct.down,.px-dept-profit.down{ color: #f87171; }
+
+/* Empty state */
+.px-empty { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 48px 24px; }
+.px-empty-msg { font: 600 12px/1.6 'Courier New', monospace; color: #4b5563; text-align: center; letter-spacing: 0.04em; }
+
+/* Company summary */
+.px-summary {
+  margin: 0; padding: 24px;
+  background: #0a0a1a; border-top: 2px solid #1a1a3a;
+}
+.px-summary-title {
+  font: 700 12px/1 'Courier New', monospace; color: #6366f1;
+  letter-spacing: 0.1em; margin-bottom: 16px; text-align: center;
+}
+.px-summary-row { margin-bottom: 8px; }
+.px-sl { font: 600 9px/1 'Courier New', monospace; color: #4b5563; letter-spacing: 0.06em; }
+.px-sv { font: 600 11px/1 'Courier New', monospace; color: #9ca3af; margin-left: 8px; }
+.px-summary-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 12px; margin-top: 12px;
+}
+.px-skpi {
+  background: #0d0d22; border: 1px solid #1a1a3a; padding: 10px 12px;
+}
+.px-skpi-lab { font: 600 8px/1 'Courier New', monospace; color: #4b5563; letter-spacing: 0.08em; margin-bottom: 6px; }
+.px-skpi-val { font: 700 13px/1 'Courier New', monospace; color: #e0e0ff; }
+.px-skpi.up   .px-skpi-val { color: #4ade80; }
+.px-skpi.down .px-skpi-val { color: #f87171; }
