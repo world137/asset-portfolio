@@ -1,0 +1,709 @@
+//@version=5
+indicator("CDC ActionZone V2 + Ichimoku + Confluence Table v3", overlay=true, max_lines_count=500, max_labels_count=500)
+
+// ══════════════════════════════════════════════════════════════
+// INPUTS — Core EMA/MA
+// ══════════════════════════════════════════════════════════════
+fastLen    = input.int(12,  title="EMA Fast")
+slowLen    = input.int(26,  title="EMA Slow")
+ma20_len   = input.int(20,  title="MA 1")
+ma50_len   = input.int(50,  title="MA 2")
+ma100_len  = input.int(100, title="MA 3")
+ma200_len  = input.int(200, title="MA 4")
+ema20_len  = input.int(20,  title="EMA 1")
+ema50_len  = input.int(50,  title="EMA 2")
+ema100_len = input.int(100, title="EMA 3")
+ema200_len = input.int(200, title="EMA 4")
+
+// ══════════════════════════════════════════════════════════════
+// INPUTS — Ichimoku
+// ══════════════════════════════════════════════════════════════
+ichiConvLen  = input.int(9,  minval=1, title="Conversion Line Periods", group="☁️ Ichimoku")
+ichiBaseLen  = input.int(26, minval=1, title="Base Line Periods",       group="☁️ Ichimoku")
+ichiSpan2Len = input.int(52, minval=1, title="Lagging Span 2 Periods",  group="☁️ Ichimoku")
+ichiDisp     = input.int(26, minval=1, title="Displacement",            group="☁️ Ichimoku")
+
+// ══════════════════════════════════════════════════════════════
+// INPUTS — Strategy (ATR / TP / SL)
+// ══════════════════════════════════════════════════════════════
+atrLen  = input.int(14,    title="ATR Length",             group="⚙️ Strategy")
+tpMult  = input.float(2.0, title="Take Profit  (ATR ×)",   group="⚙️ Strategy", step=0.1)
+slMult  = input.float(1.0, title="Stop Loss    (ATR ×)",   group="⚙️ Strategy", step=0.1)
+boxLen  = input.int(20,    title="TP/SL Box Width (bars)", group="⚙️ Strategy")
+
+// ══════════════════════════════════════════════════════════════
+// INPUTS — Confluence Filters
+// ══════════════════════════════════════════════════════════════
+rsiLen       = input.int(14, title="RSI Length",            group="📊 Confluence Filters")
+macdFastLen  = input.int(12, title="MACD Fast",             group="📊 Confluence Filters")
+macdSlowLen  = input.int(26, title="MACD Slow",             group="📊 Confluence Filters")
+macdSigLen   = input.int(9,  title="MACD Signal",           group="📊 Confluence Filters")
+zLen         = input.int(20, title="Z-Score Length",        group="📊 Confluence Filters")
+adxLen       = input.int(14, title="ADX Length",            group="📊 Confluence Filters")
+adxSmooth    = input.int(14, title="ADX Smoothing",         group="📊 Confluence Filters")
+adxThresh    = input.int(25, title="ADX Trend Threshold",   group="📊 Confluence Filters")
+obvSigLen    = input.int(20, title="OBV Signal EMA Length", group="📊 Confluence Filters")
+pivLeft      = input.int(5,  title="Pivot Left Bars (S/R)", group="📊 Confluence Filters")
+pivRight     = input.int(5,  title="Pivot Right Bars (S/R)",group="📊 Confluence Filters")
+gcFastLen    = input.int(50, title="Golden Cross Fast MA",   group="📊 Confluence Filters")
+gcSlowLen    = input.int(200,title="Golden Cross Slow MA",   group="📊 Confluence Filters")
+
+// ══════════════════════════════════════════════════════════════
+// INPUTS — Layer Toggles  (toggle off to exclude from score)
+// ══════════════════════════════════════════════════════════════
+useCDC  = input.bool(true, title="CDC Zone",    group="🔀 Layer Toggles")
+useMacd = input.bool(true, title="MACD",        group="🔀 Layer Toggles")
+useAdx  = input.bool(true, title="ADX Trend",   group="🔀 Layer Toggles")
+useObv  = input.bool(true, title="OBV Volume",  group="🔀 Layer Toggles")
+useRsi  = input.bool(true, title="RSI",         group="🔀 Layer Toggles")
+useZ    = input.bool(true, title="Z-Score",     group="🔀 Layer Toggles")
+useIchi = input.bool(true, title="Ichimoku ☁", group="🔀 Layer Toggles")
+useGC   = input.bool(true, title="Golden Cross",  group="🔀 Layer Toggles")
+
+// ══════════════════════════════════════════════════════════════
+// INPUTS — Signal Settings
+// ══════════════════════════════════════════════════════════════
+buyThresh         = input.int(4,    title="BUY  min score",              group="🎯 Signal Settings", minval=1, maxval=8)
+sellThresh        = input.int(4,    title="SELL min |score|",            group="🎯 Signal Settings", minval=1, maxval=8)
+showConfluenceSig = input.bool(true, title="Show Confluence Signals on Chart", group="🎯 Signal Settings")
+
+// ══════════════════════════════════════════════════════════════
+// CORE CDC CALCULATIONS
+// ══════════════════════════════════════════════════════════════
+emaFast = ta.ema(close, fastLen)
+emaSlow = ta.ema(close, slowLen)
+
+ma20    = ta.sma(close, ma20_len)
+ma50    = ta.sma(close, ma50_len)
+ma100   = ta.sma(close, ma100_len)
+ma200   = ta.sma(close, ma200_len)
+ema20   = ta.ema(close, ema20_len)
+ema50   = ta.ema(close, ema50_len)
+ema100  = ta.ema(close, ema100_len)
+ema200  = ta.ema(close, ema200_len)
+
+atr = ta.atr(atrLen)
+
+// CDC Zone Conditions
+green  = close > emaFast and emaFast > emaSlow
+yellow = close > emaFast and emaFast < emaSlow
+blue   = close < emaFast and emaFast > emaSlow
+red    = close < emaFast and emaFast < emaSlow
+
+buySignal  = green and not green[1]
+sellSignal = red   and not red[1]
+
+// ══════════════════════════════════════════════════════════════
+// ICHIMOKU CALCULATIONS
+// ══════════════════════════════════════════════════════════════
+donchian(len) => (ta.lowest(len) + ta.highest(len)) / 2
+
+conversionLine = donchian(ichiConvLen)
+baseLine       = donchian(ichiBaseLen)
+spanA          = (conversionLine + baseLine) / 2
+spanB          = donchian(ichiSpan2Len)
+
+spanA_now = spanA[ichiDisp - 1]
+spanB_now = spanB[ichiDisp - 1]
+
+idealbuy  = (close > high[ichiDisp - 1]) and
+             conversionLine > baseLine and
+             (close > spanA_now and close > spanB_now) and
+             (low   > spanA_now and low   > spanB_now)
+
+idealsell = (close < low[ichiDisp - 1]) and
+             conversionLine < baseLine and
+             (close < spanA_now and close < spanB_now) and
+             (high  < spanA_now and high  < spanB_now)
+
+var bool buymem  = false
+var bool sellmem = false
+buymem  := idealbuy  ? true  : idealsell ? false : buymem[1]
+sellmem := idealsell ? true  : idealbuy  ? false : sellmem[1]
+
+longCond  = idealbuy  and not buymem[1]
+shortCond = idealsell and not sellmem[1]
+
+buycloud  = ta.crossover(spanA,  spanB) and (low  > spanA_now and low  > spanB_now)
+sellcloud = ta.crossunder(spanA, spanB) and (high < spanA_now and high < spanB_now)
+
+ichiAboveCloud = close > spanA_now and close > spanB_now and conversionLine > baseLine
+ichiBelowCloud = close < spanA_now and close < spanB_now and conversionLine < baseLine
+
+// ══════════════════════════════════════════════════════════════
+// CONFLUENCE INDICATOR CALCULATIONS
+// ══════════════════════════════════════════════════════════════
+
+// — RSI —
+rsiValue = ta.rsi(close, rsiLen)
+rsiOB    = rsiValue > 70
+rsiOS    = rsiValue < 30
+
+// — MACD —
+[macdLine, sigLine, macdHist] = ta.macd(close, macdFastLen, macdSlowLen, macdSigLen)
+macdUp = macdLine > sigLine
+
+// — Z-Score —
+zMean  = ta.sma(close, zLen)
+zStd   = ta.stdev(close, zLen)
+zScore = zStd != 0 ? (close - zMean) / zStd : 0.0
+zOB    = zScore > 2
+zOB2   = zScore > 1.75
+zOS    = zScore < -2
+zOS2   = zScore < -1.75
+
+// — ADX —
+[plusDI, minusDI, adxValue] = ta.dmi(adxLen, adxSmooth)
+trendStrong = adxValue >= adxThresh
+
+// — OBV —
+obvValue = ta.obv
+obvSig   = ta.ema(obvValue, obvSigLen)
+obvBull  = obvValue > obvSig
+
+// — Support / Resistance —
+phigh = ta.pivothigh(high, pivLeft, pivRight)
+plow  = ta.pivotlow(low,  pivLeft, pivRight)
+
+var float resistanceLevel = na
+var float supportLevel    = na
+if not na(phigh)
+    resistanceLevel := phigh
+if not na(plow)
+    supportLevel    := plow
+
+// Invalidate stored levels if price has already crossed them
+if not na(resistanceLevel) and close > resistanceLevel
+    resistanceLevel := na
+if not na(supportLevel) and close < supportLevel
+    supportLevel    := na
+
+// — Golden Cross —
+gcFast        = ta.sma(close, gcFastLen)
+gcSlow        = ta.sma(close, gcSlowLen)
+isGoldenCross = gcFast > gcSlow
+justGolden    = ta.crossover(gcFast, gcSlow)
+justDeath     = ta.crossunder(gcFast, gcSlow)
+
+// ══════════════════════════════════════════════════════════════
+// SHARED SIGNAL COUNTER (CDC signals)
+// ══════════════════════════════════════════════════════════════
+var int sigCount = 0
+if buySignal or sellSignal
+    sigCount := sigCount + 1
+
+// ══════════════════════════════════════════════════════════════
+// CONFLUENCE SCORING  (layer-toggle aware)
+//
+//  Voting rules per layer:
+//  CDC       : Green +1 | Red -1 | Yellow/Blue 0
+//  ADX       : Bullish +1 | Bearish -1 | Sideways 0
+//  MACD      : Bullish +1 | Bearish -1
+//  OBV       : Bullish +1 | Bearish -1
+//  RSI       : ≤ 60  →  +1  |  61–70  →  0  |  > 70  →  -1
+//  Z-Score   : ≤ 1.75 → +1  |  1.76–2.0 → 0  |  > 2.0 → -1
+//  Ichimoku  : Above cloud +1 | Below cloud -1 | In cloud 0
+//  Golden X  : Golden Cross +1 | Death Cross -1
+//
+//  Confidence % = |totalScore| / activeCount × 100
+//  Signal Strength : ≥ 86% STRONG | ≥ 57% MODERATE | < 57% WEAK
+//
+//  OVERBOUGHT VETO: BUY blocked when RSI > 70 AND Z-Score > 2.0
+// ══════════════════════════════════════════════════════════════
+
+// Raw layer votes (independent of toggle)
+cdcRaw  = green ? 1 : red ? -1 : 0
+macdRaw = macdUp ? 1 : -1
+adxRaw  = trendStrong ? (plusDI > minusDI ? 1 : -1) : 0
+obvRaw  = obvBull ? 1 : -1
+rsiRaw  = rsiValue <= 60 ? 1 : rsiValue <= 70 ? 0 : -1
+zRaw    = zScore  <= 1.75 ? 1 : zScore  <= 2.0  ? 0 : -1
+ichiRaw = ichiAboveCloud ? 1 : ichiBelowCloud ? -1 : 0
+gcRaw   = isGoldenCross ? 1 : -1
+
+// Toggle-gated votes
+cdcScore  = useCDC  ? cdcRaw  : 0
+macdScore = useMacd ? macdRaw : 0
+adxScore  = useAdx  ? adxRaw  : 0
+obvScore  = useObv  ? obvRaw  : 0
+rsiScore  = useRsi  ? rsiRaw  : 0
+zScore2   = useZ    ? zRaw    : 0
+ichiScore = useIchi ? ichiRaw : 0
+gcScore   = useGC   ? gcRaw   : 0
+
+totalScore = cdcScore + macdScore + adxScore + obvScore + rsiScore + zScore2 + ichiScore + gcScore
+
+// Active-layer denominator for confidence
+activeCount =
+     (useCDC  ? 1 : 0) + (useMacd ? 1 : 0) + (useAdx ? 1 : 0) +
+     (useObv  ? 1 : 0) + (useRsi  ? 1 : 0) + (useZ   ? 1 : 0) +
+     (useIchi ? 1 : 0) + (useGC   ? 1 : 0)
+
+// Bull / Bear vote tallies (active layers only)
+bullVotes =
+     (useCDC  and cdcRaw  > 0 ? 1 : 0) + (useMacd and macdRaw > 0 ? 1 : 0) +
+     (useAdx  and adxRaw  > 0 ? 1 : 0) + (useObv  and obvRaw  > 0 ? 1 : 0) +
+     (useRsi  and rsiRaw  > 0 ? 1 : 0) + (useZ    and zRaw    > 0 ? 1 : 0) +
+     (useIchi and ichiRaw > 0 ? 1 : 0) + (useGC   and gcRaw   > 0 ? 1 : 0)
+
+bearVotes =
+     (useCDC  and cdcRaw  < 0 ? 1 : 0) + (useMacd and macdRaw < 0 ? 1 : 0) +
+     (useAdx  and adxRaw  < 0 ? 1 : 0) + (useObv  and obvRaw  < 0 ? 1 : 0) +
+     (useRsi  and rsiRaw  < 0 ? 1 : 0) + (useZ    and zRaw    < 0 ? 1 : 0) +
+     (useIchi and ichiRaw < 0 ? 1 : 0) + (useGC   and gcRaw   < 0 ? 1 : 0)
+
+// Confidence 0–100%
+confidence = activeCount > 0 ? math.round(math.abs(totalScore) / activeCount * 100) : 0
+
+// ── Signal decision ──
+// Overbought veto: block BUY when BOTH RSI > 70 AND Z-Score > 2.0
+// This prevents entering long positions into overextended rallies
+// even when the score is otherwise high enough.
+obVeto = rsiValue > 70 and zScore > 2.0
+
+isBuy  = totalScore >= buyThresh  and not obVeto
+isSell = totalScore <= -sellThresh
+
+signalStr =
+     isBuy   ? "🟢  BUY"      :
+     isSell  ? "🔴  SELL"     :
+     obVeto  ? "🚫  OB VETO"  : "⚪  HOLD"
+
+signalColor =
+     isBuy   ? color.lime   :
+     isSell  ? color.red    :
+     obVeto  ? color.orange : color.gray
+
+// ── Signal strength ──
+strengthStr =
+     confidence >= 86 ? "⚡ STRONG"    :
+     confidence >= 57 ? "〰 MODERATE"  : "🌫  WEAK"
+
+strengthColor =
+     confidence >= 86 ? color.lime   :
+     confidence >= 57 ? color.yellow : color.new(color.gray, 30)
+
+scoreStr = str.tostring(math.abs(totalScore)) + " / " + str.tostring(activeCount)
+
+// ── Confluence chart signals: fire only on first crossing bar ──
+conflBuy  = showConfluenceSig and isBuy  and not isBuy[1]
+conflSell = showConfluenceSig and isSell and not isSell[1]
+
+// ══════════════════════════════════════════════════════════════
+// VOTE DISPLAY HELPERS
+// ══════════════════════════════════════════════════════════════
+voteStr(s, active) =>
+    not active ? "— OFF" : s > 0      ? "▲ +1"  :  s < 0      ? "▼  -1" : "→  0"
+
+voteClr(s, active) =>
+    not active ? color.new(color.gray, 55) : s > 0      ? color.lime  : s < 0      ? color.red                 : color.gray
+
+// ══════════════════════════════════════════════════════════════
+// PLOTS — CDC EMA Ribbon + Fill
+// ══════════════════════════════════════════════════════════════
+p1 = plot(emaFast, color=color.rgb(255,255,255,100), title="EMA Fast")
+p2 = plot(emaSlow, color=color.rgb(255,255,255,100), title="EMA Slow")
+
+zoneColor =
+     green  ? color.new(#00ff08, 70) :
+     yellow ? color.new(#1900ff, 70) :
+     blue   ? color.new(#ffff00, 70) :
+              color.new(#ff0000, 70)
+fill(p1, p2, color=zoneColor)
+
+// ══════════════════════════════════════════════════════════════
+// PLOTS — MA / EMA Lines
+// ══════════════════════════════════════════════════════════════
+plot(ma20,   color=color.green,  linewidth=1, title="MA 1")
+plot(ma50,   color=color.blue,   linewidth=1, title="MA 2")
+plot(ma100,  color=color.yellow, linewidth=1, title="MA 3")
+plot(ma200,  color=color.red,    linewidth=1, title="MA 4")
+// EMA dashed: alternate na every 3 bars to simulate dash gaps
+_dash = bar_index % 4 != 0
+plot(_dash ? ema20  : na, color=color.green,  linewidth=1, style=plot.style_linebr, title="EMA 1")
+plot(_dash ? ema50  : na, color=color.blue,   linewidth=1, style=plot.style_linebr, title="EMA 2")
+plot(_dash ? ema100 : na, color=color.yellow, linewidth=1, style=plot.style_linebr, title="EMA 3")
+plot(_dash ? ema200 : na, color=color.red,    linewidth=1, style=plot.style_linebr, title="EMA 4")
+
+// ══════════════════════════════════════════════════════════════
+// PLOTS — Ichimoku Cloud
+// ══════════════════════════════════════════════════════════════
+plot(conversionLine, color=#0496ff,           title="Ichi: Conversion Line")
+plot(baseLine,       color=#991515,           title="Ichi: Base Line")
+plot(close, offset=-(ichiDisp - 1),
+     color=color.new(#459915, 0),             title="Ichi: Lagging Span")
+
+ichiP1 = plot(spanA, offset=ichiDisp - 1,
+     color=color.new(color.green, 0),         title="Ichi: Span A")
+ichiP2 = plot(spanB, offset=ichiDisp - 1,
+     color=color.new(color.red, 0),           title="Ichi: Span B")
+fill(ichiP1, ichiP2,
+     color = spanA > spanB ? color.new(color.green, 80) : color.new(color.red, 80))
+
+// ── Ichimoku Signal Shapes ──
+plotshape(longCond,  title="Ichi Buy",   text="BUY",
+     location=location.belowbar, style=shape.triangleup,
+     color=color.lime,   textcolor=color.white,   size=size.small)
+plotshape(shortCond, title="Ichi Sell",  text="Sell",
+     location=location.abovebar, style=shape.triangledown,
+     color=color.red,    textcolor=color.white,    size=size.small)
+plotshape(buycloud,  title="Cloud Buy",  text="BUY",
+     location=location.belowbar, style=shape.triangleup,
+     color=color.lime,   textcolor=color.white,   size=size.tiny)
+plotshape(sellcloud, title="Cloud Sell", text="Sell",
+     location=location.abovebar, style=shape.triangledown,
+     color=color.red, textcolor=color.white, size=size.tiny)
+
+// ── Confluence Signal Shapes (fire once on threshold crossing) ──
+plotshape(conflBuy  and not trendStrong, title="Confluence BUY",  text="BUY",
+     location=location.belowbar, style=shape.triangleup,
+     color=color.lime, textcolor=color.white, size=size.normal)
+plotshape(conflSell and not trendStrong, title="Confluence SELL", text="SELL",
+     location=location.abovebar, style=shape.triangledown,
+     color=color.red,   textcolor=color.white, size=size.normal)
+
+// ══════════════════════════════════════════════════════════════
+// TABLE DISPLAY STRINGS
+// ══════════════════════════════════════════════════════════════
+
+// — CDC Zone —
+cdcStr =
+     green  ? "▲ GREEN  ZONE" :
+     yellow ? "↑ YELLOW ZONE" :
+     blue   ? "↓ BLUE   ZONE" : "▼ RED    ZONE"
+cdcColor =
+     green  ? color.lime   :
+     yellow ? color.yellow :
+     blue   ? color.aqua   : color.red
+
+// — Trend (ADX) —
+trendStr =
+     not trendStrong  ? "↔ SIDEWAY"  :
+     plusDI > minusDI ? "▲ BULLISH"  : "▼ BEARISH"
+trendColor =
+     not trendStrong  ? color.yellow :
+     plusDI > minusDI ? color.lime   : color.red
+
+// — MACD —
+macdStr   = macdUp ? "▲ BULLISH" : "▼ BEARISH"
+macdColor = macdUp ? color.lime  : color.red
+
+// — OBV —
+obvStr   = obvBull ? "▲ BULLISH" : "▼ BEARISH"
+obvColor = obvBull ? color.lime  : color.red
+
+// — RSI  (≤60 → Bull | 61–70 → Neutral | >70 → Bear) —
+rsiStr =
+     rsiValue > 70 ? "▼ OVERBOUGHT (" + str.tostring(math.round(rsiValue)) + ")" :
+     rsiValue > 60 ? "→ NEUTRAL    (" + str.tostring(math.round(rsiValue)) + ")" :
+                     "▲ BULLISH    (" + str.tostring(math.round(rsiValue)) + ")"
+rsiColor = rsiValue > 70 ? color.red : rsiValue > 60 ? color.gray : color.lime
+
+// — Z-Score  (≤1.75 → Bull | 1.76–2.0 → Warning | >2.0 → Bear) —
+zStr =
+     zScore > 2.0  ? "▼ OVERBOUGHT (" + str.tostring(zScore, "#.##") + ")" :
+     zScore > 1.75 ? "→ WARNING    (" + str.tostring(zScore, "#.##") + ")" :
+                     "▲ NORMAL     (" + str.tostring(zScore, "#.##") + ")"
+zColor = zScore > 2.0 ? color.red : zScore > 1.75 ? color.yellow : color.lime
+
+// — Ichimoku —
+ichiStr =
+     ichiAboveCloud ? "▲ ABOVE CLOUD" :
+     ichiBelowCloud ? "▼ BELOW CLOUD" : "↔ IN CLOUD"
+ichiColor =
+     ichiAboveCloud ? color.lime   :
+     ichiBelowCloud ? color.red    : color.yellow
+
+// — Golden Cross —
+gcStr =
+     justGolden    ? "⚡ JUST GOLDEN X" :
+     justDeath     ? "💀 JUST DEATH X"  :
+     isGoldenCross ? "✅ GOLDEN CROSS"  : "❌ DEATH CROSS"
+gcColor =
+     justGolden    ? color.yellow :
+     justDeath     ? color.orange :
+     isGoldenCross ? color.lime   : color.red
+
+// — Market Condition (RSI + Z combined overbought risk) —
+marketStr =
+     (rsiValue > 70 and zScore > 2.0) ? "⚠ OVERBOUGHT++" :
+     (rsiValue > 70 or  zScore > 2.0) ? "⚠ OVERBOUGHT"   :
+     (rsiValue <= 60 and zScore <= 1.75) ? "✅ HEALTHY"    : "— NORMAL"
+marketColor =
+     (rsiValue > 70 and zScore > 2.0) ? color.purple :
+     (rsiValue > 70 or  zScore > 2.0) ? color.red    :
+     (rsiValue <= 60 and zScore <= 1.75) ? color.lime : color.gray
+
+// — Support / Resistance (only show levels still valid vs current price) —
+supStr = na(supportLevel)    ? "— NONE" : str.tostring(supportLevel,    format.mintick)
+resStr = na(resistanceLevel) ? "— NONE" : str.tostring(resistanceLevel, format.mintick)
+
+// ══════════════════════════════════════════════════════════════
+// TABLE — 3 columns: INDICATOR | STATUS | VOTE
+//  Row  0 : Header
+//  Row 1–7 : 7 Layers (CDC, ADX, MACD, OBV, RSI, Z-Score, Ichi)
+//  Row  8 : Golden Cross
+//  Row  9 : Support
+//  Row 10 : Resistance
+//  Row 11 : Market Condition (context, no vote)
+//  Row 12 : Score  +  Bull/Bear vote tally
+//  Row 13 : Confidence %  +  Strength
+//  Row 14 : ▶ SIGNAL  (highlighted)
+// ══════════════════════════════════════════════════════════════
+
+var color HDR_BG  = color.new(#1a1a2e, 10)
+var color ROW_BG  = color.new(#0d0d1a, 30)
+var color ALT_BG  = color.new(#0f0f20, 30)
+var color HDR_TXT = color.new(color.white, 0)
+var color LBL_TXT = color.new(#a0a8c0, 0)
+
+var table tbl = table.new(
+     position     = position.top_right,
+     columns      = 3,
+     rows         = 15,
+     border_width = 1,
+     border_color = color.new(#3a3a5c, 0),
+     bgcolor      = color.new(#0d0d1a, 20),
+     frame_width  = 2,
+     frame_color  = color.new(#3a3a5c, 0))
+
+if barstate.islast
+
+    // ── Row 0 : Header ──
+    table.cell(tbl, 0, 0, "INDICATOR",
+         text_color=HDR_TXT, bgcolor=HDR_BG,
+         text_size=size.small, text_halign=text.align_center,
+         text_font_family=font.family_monospace)
+    table.cell(tbl, 1, 0, "STATUS",
+         text_color=HDR_TXT, bgcolor=HDR_BG,
+         text_size=size.small, text_halign=text.align_center,
+         text_font_family=font.family_monospace)
+
+    // ── Row 1 : CDC Zone ──
+    table.cell(tbl, 0, 1, "CDC Zone",
+         text_color=LBL_TXT, bgcolor=ROW_BG,
+         text_size=size.small, text_halign=text.align_left,
+         text_font_family=font.family_monospace)
+    table.cell(tbl, 1, 1, cdcStr,
+         text_color=cdcColor, bgcolor=ROW_BG,
+         text_size=size.small, text_halign=text.align_center,
+         text_font_family=font.family_monospace)
+
+    // ── Row 2 : Trend (ADX) ──
+    table.cell(tbl, 0, 2, "Trend (ADX)",
+         text_color=LBL_TXT, bgcolor=ALT_BG,
+         text_size=size.small, text_halign=text.align_left,
+         text_font_family=font.family_monospace)
+    table.cell(tbl, 1, 2, trendStr,
+         text_color=trendColor, bgcolor=ALT_BG,
+         text_size=size.small, text_halign=text.align_center,
+         text_font_family=font.family_monospace)
+
+    // ── Row 3 : MACD ──
+    table.cell(tbl, 0, 3, "MACD",
+         text_color=LBL_TXT, bgcolor=ROW_BG,
+         text_size=size.small, text_halign=text.align_left,
+         text_font_family=font.family_monospace)
+    table.cell(tbl, 1, 3, macdStr,
+         text_color=macdColor, bgcolor=ROW_BG,
+         text_size=size.small, text_halign=text.align_center,
+         text_font_family=font.family_monospace)
+
+    // ── Row 4 : OBV ──
+    table.cell(tbl, 0, 4, "OBV Volume",
+         text_color=LBL_TXT, bgcolor=ALT_BG,
+         text_size=size.small, text_halign=text.align_left,
+         text_font_family=font.family_monospace)
+    table.cell(tbl, 1, 4, obvStr,
+         text_color=obvColor, bgcolor=ALT_BG,
+         text_size=size.small, text_halign=text.align_center,
+         text_font_family=font.family_monospace)
+
+    // ── Row 5 : RSI ──
+    table.cell(tbl, 0, 5, "RSI",
+         text_color=LBL_TXT, bgcolor=ROW_BG,
+         text_size=size.small, text_halign=text.align_left,
+         text_font_family=font.family_monospace)
+    table.cell(tbl, 1, 5, rsiStr,
+         text_color=rsiColor, bgcolor=ROW_BG,
+         text_size=size.small, text_halign=text.align_center,
+         text_font_family=font.family_monospace)
+
+    // ── Row 6 : Z-Score ──
+    table.cell(tbl, 0, 6, "Z-Score",
+         text_color=LBL_TXT, bgcolor=ALT_BG,
+         text_size=size.small, text_halign=text.align_left,
+         text_font_family=font.family_monospace)
+    table.cell(tbl, 1, 6, zStr,
+         text_color=zColor, bgcolor=ALT_BG,
+         text_size=size.small, text_halign=text.align_center,
+         text_font_family=font.family_monospace)
+
+    // ── Row 7 : Ichimoku ──
+    table.cell(tbl, 0, 7, "Ichimoku ☁",
+         text_color=LBL_TXT, bgcolor=ROW_BG,
+         text_size=size.small, text_halign=text.align_left,
+         text_font_family=font.family_monospace)
+    table.cell(tbl, 1, 7, ichiStr,
+         text_color=ichiColor, bgcolor=ROW_BG,
+         text_size=size.small, text_halign=text.align_center,
+         text_font_family=font.family_monospace)
+
+    // ── Row 8 : Golden Cross ──
+    table.cell(tbl, 0, 8, "Golden Cross",
+         text_color=LBL_TXT, bgcolor=ROW_BG,
+         text_size=size.small, text_halign=text.align_left,
+         text_font_family=font.family_monospace)
+    table.cell(tbl, 1, 8, gcStr,
+         text_color=gcColor, bgcolor=ROW_BG,
+         text_size=size.small, text_halign=text.align_center,
+         text_font_family=font.family_monospace)
+
+    // ── Row 9 : Support ──
+    table.cell(tbl, 0, 9, "Support",
+         text_color=LBL_TXT, bgcolor=ALT_BG,
+         text_size=size.small, text_halign=text.align_left,
+         text_font_family=font.family_monospace)
+    table.cell(tbl, 1, 9, supStr,
+         text_color=color.new(#00e676, 0), bgcolor=ALT_BG,
+         text_size=size.small, text_halign=text.align_center,
+         text_font_family=font.family_monospace)
+
+    // ── Row 10 : Resistance ──
+    table.cell(tbl, 0, 10, "Resistance",
+         text_color=LBL_TXT, bgcolor=ROW_BG,
+         text_size=size.small, text_halign=text.align_left,
+         text_font_family=font.family_monospace)
+    table.cell(tbl, 1, 10, resStr,
+         text_color=color.new(#ff5252, 0), bgcolor=ROW_BG,
+         text_size=size.small, text_halign=text.align_center,
+         text_font_family=font.family_monospace)
+
+    // ── Row 11 : Market Condition (contextual, no vote) ──
+    table.cell(tbl, 0, 11, "Condition",
+         text_color=LBL_TXT, bgcolor=ALT_BG,
+         text_size=size.small, text_halign=text.align_left,
+         text_font_family=font.family_monospace)
+    table.cell(tbl, 1, 11, marketStr,
+         text_color=marketColor, bgcolor=ALT_BG,
+         text_size=size.small, text_halign=text.align_center,
+         text_font_family=font.family_monospace)
+
+    // ── Row 12 : Score + vote tally ──
+    scoreColor = totalScore > 0 ? color.lime : totalScore < 0 ? color.red : color.gray
+    tallyStr   = str.tostring(bullVotes) + "▲  " + str.tostring(bearVotes) + "▼"
+    tallyColor = bullVotes > bearVotes ? color.lime : bearVotes > bullVotes ? color.red : color.gray
+    table.cell(tbl, 0, 12, "Score",
+         text_color=LBL_TXT, bgcolor=ROW_BG,
+         text_size=size.small, text_halign=text.align_left,
+         text_font_family=font.family_monospace)
+    table.cell(tbl, 1, 12, scoreStr,
+         text_color=scoreColor, bgcolor=ROW_BG,
+         text_size=size.small, text_halign=text.align_center,
+         text_font_family=font.family_monospace)
+
+    // ── Row 13 : Confidence % + Strength ──
+    confBg  = confidence >= 86 ? color.new(color.green,  88) :
+              confidence >= 57 ? color.new(color.orange, 88) :
+                                 color.new(color.gray,   88)
+    table.cell(tbl, 0, 13, "Confidence",
+         text_color=LBL_TXT, bgcolor=confBg,
+         text_size=size.small, text_halign=text.align_left,
+         text_font_family=font.family_monospace)
+    table.cell(tbl, 1, 13, str.tostring(confidence) + "%",
+         text_color=strengthColor, bgcolor=confBg,
+         text_size=size.small, text_halign=text.align_center,
+         text_font_family=font.family_monospace)
+
+    // ── Row 14 : SIGNAL (highlighted) ──
+    sigBg = isBuy  ? color.new(color.green, 75) : isSell ? color.new(color.red,   75) : color.new(color.gray,  80)
+    table.cell(tbl, 0, 14, "▶ SIGNAL",
+         text_color=color.white, bgcolor=sigBg,
+         text_size=size.normal, text_halign=text.align_left,
+         text_font_family=font.family_monospace)
+    table.cell(tbl, 1, 14, signalStr,
+         text_color=signalColor, bgcolor=sigBg,
+         text_size=size.normal, text_halign=text.align_center,
+         text_font_family=font.family_monospace)
+
+// ══════════════════════════════════════════════════════════════
+// BUY SIGNAL — Labels + TP/SL Boxes  (CDC zone transition)
+// ══════════════════════════════════════════════════════════════
+if buySignal
+    n          = str.tostring(sigCount)
+    entryPrice = close
+    tpPrice    = close + atr * tpMult
+    slPrice    = close - atr * slMult
+
+    label.new(bar_index, low,
+         text="BUY " + n, style=label.style_label_up,
+         color=color.new(color.green, 0), textcolor=color.black, size=size.small)
+
+    line.new(bar_index, entryPrice, bar_index + boxLen, entryPrice,
+         color=color.white, width=2, style=line.style_solid)
+    label.new(bar_index + boxLen, entryPrice,
+         text="● ENTRY " + n + " (" + str.tostring(entryPrice) + ")",
+         style=label.style_label_left,
+         color=color.new(color.white, 100), textcolor=color.white, size=size.small)
+
+    box.new(bar_index, tpPrice, bar_index + boxLen, entryPrice,
+         border_color=color.new(color.green, 0), border_width=1,
+         border_style=line.style_dashed, bgcolor=color.new(color.green, 85))
+    label.new(bar_index + boxLen, tpPrice,
+         text="TP " + n + " (" + str.tostring(tpPrice) + ")",
+         style=label.style_label_left,
+         color=color.new(color.green, 100), textcolor=color.green, size=size.small)
+
+    box.new(bar_index, entryPrice, bar_index + boxLen, slPrice,
+         border_color=color.new(color.red, 0), border_width=1,
+         border_style=line.style_dashed, bgcolor=color.new(color.red, 85))
+    label.new(bar_index + boxLen, slPrice,
+         text="SL " + n + " (" + str.tostring(slPrice) + ")",
+         style=label.style_label_left,
+         color=color.new(color.red, 100), textcolor=color.red, size=size.small)
+
+// ══════════════════════════════════════════════════════════════
+// SELL SIGNAL — Labels + TP/SL Boxes  (CDC zone transition)
+// ══════════════════════════════════════════════════════════════
+if sellSignal
+    n          = str.tostring(sigCount)
+    entryPrice = close
+    tpPrice    = close - atr * tpMult
+    slPrice    = close + atr * slMult
+
+    label.new(bar_index, high,
+         text="SELL " + n, style=label.style_label_down,
+         color=color.new(color.red, 0), textcolor=color.white, size=size.small)
+
+    line.new(bar_index, entryPrice, bar_index + boxLen, entryPrice,
+         color=color.white, width=2, style=line.style_solid)
+    label.new(bar_index + boxLen, entryPrice,
+         text="● ENTRY " + n + " (" + str.tostring(entryPrice) + ")",
+         style=label.style_label_left,
+         color=color.new(color.white, 100), textcolor=color.white, size=size.small)
+
+    box.new(bar_index, slPrice, bar_index + boxLen, entryPrice,
+         border_color=color.new(color.red, 0), border_width=1,
+         border_style=line.style_dashed, bgcolor=color.new(color.red, 85))
+    label.new(bar_index + boxLen, slPrice,
+         text="SL " + n + " (" + str.tostring(slPrice) + ")",
+         style=label.style_label_left,
+         color=color.new(color.red, 100), textcolor=color.red, size=size.small)
+
+    box.new(bar_index, entryPrice, bar_index + boxLen, tpPrice,
+         border_color=color.new(color.green, 0), border_width=1,
+         border_style=line.style_dashed, bgcolor=color.new(color.green, 85))
+    label.new(bar_index + boxLen, tpPrice,
+         text="TP " + n + " (" + str.tostring(tpPrice) + ")",
+         style=label.style_label_left,
+         color=color.new(color.green, 100), textcolor=color.green, size=size.small)
+
+// ══════════════════════════════════════════════════════════════
+// ALERTS
+// ══════════════════════════════════════════════════════════════
+alertcondition(longCond,  title="Ichi Buy",          message="Ichimoku Buy Signal")
+alertcondition(shortCond, title="Ichi Sell",         message="Ichimoku Sell Signal")
+alertcondition(buycloud,  title="Cloud Buy",         message="Ichimoku Cloud Bullish Crossover")
+alertcondition(sellcloud, title="Cloud Sell",        message="Ichimoku Cloud Bearish Crossover")
+alertcondition(conflBuy,  title="Confluence BUY",    message="🟢 Confluence BUY — score crossed threshold")
+alertcondition(conflSell, title="Confluence SELL",   message="🔴 Confluence SELL — score crossed threshold")

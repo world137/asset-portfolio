@@ -1,11 +1,22 @@
 /* eslint-disable */
 /* WalletCalendar.jsx — Monthly calendar view of income / expense transactions */
 
+function useIsMobile(breakpoint = 640) {
+  const [mobile, setMobile] = React.useState(() => window.innerWidth < breakpoint);
+  React.useEffect(() => {
+    const fn = () => setMobile(window.innerWidth < breakpoint);
+    window.addEventListener('resize', fn);
+    return () => window.removeEventListener('resize', fn);
+  }, [breakpoint]);
+  return mobile;
+}
+
 function WalletCalendar() {
   useStore();
   const wallet   = Store.getWallet();
   const settings = Store.settings();
   const sym      = window.ccySymbol(settings.displayCcy);
+  const isMobile = useIsMobile(700);
 
   const now = new Date();
   const [year,  setYear]  = React.useState(now.getFullYear());
@@ -102,7 +113,7 @@ function WalletCalendar() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: selectedDay ? '1fr 320px' : '1fr', gap: 16, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: selectedDay && !isMobile ? '1fr 320px' : '1fr', gap: 16, alignItems: 'start' }}>
         {/* Calendar card */}
         <div className="card">
           {/* Month navigation */}
