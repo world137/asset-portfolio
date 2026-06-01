@@ -471,9 +471,10 @@ function App() {
   const [route,   setRoute]  = React.useState('dashboard');
   const [drawer,  setDrawer] = React.useState(false);
   const [modal,   setModal]  = React.useState({ open: false, classKey: null, lot: null });
-  const [syncing,   setSyncing]   = React.useState(false);
-  const [dbReady,   setDbReady]   = React.useState(false);
-  const [dtOpen,    setDtOpen]    = React.useState(false);
+  const [syncing,     setSyncing]   = React.useState(false);
+  const [dbReady,     setDbReady]   = React.useState(false);
+  const [dtOpen,      setDtOpen]    = React.useState(false);
+  const [mobileMenu,  setMobileMenu] = React.useState(false);
 
   React.useEffect(() => { document.documentElement.setAttribute('data-theme', settings.theme); }, [settings.theme]);
 
@@ -547,33 +548,39 @@ function App() {
       <div className={'drawer-scrim' + (drawer ? ' show' : '')} onClick={() => setDrawer(false)} />
       <Nav route={route} setRoute={setRoute} totals={totals} open={drawer} onClose={() => setDrawer(false)} />
       <div className="workspace">
+        {mobileMenu && <div className="tb-menu-scrim" onClick={() => setMobileMenu(false)} />}
         <div className="tb">
           <button className="icon-toggle menu" onClick={() => setDrawer(true)}><Icon name="list" size={17} /></button>
           <h2>{title}</h2>
           <div className="grow" />
-          <DbStatusBadge />
-          <span className="sync">
-            {syncing
-              ? 'Syncing…'
-              : <React.Fragment>{Store.get().priceMode === 'api' ? 'Live' : 'Crypto+FX'} · <b>{window.timeAgo(Store.get().lastPriceSync)}</b></React.Fragment>}
-          </span>
-          <Button variant="secondary" size="sm" icon="history" onClick={refresh} disabled={syncing}>
-            <span className="tb-refresh-text">{syncing ? 'Syncing' : 'Refresh'}</span>
-          </Button>
-          <div className="pill-toggle">
-            <button className={settings.displayCcy === 'THB' ? 'on' : ''} onClick={() => Store.setSetting('displayCcy', 'THB')}>฿ THB</button>
-            <button className={settings.displayCcy === 'USD' ? 'on' : ''} onClick={() => Store.setSetting('displayCcy', 'USD')}>$ USD</button>
+          <div className={'tb-actions' + (mobileMenu ? ' open' : '')}>
+            <DbStatusBadge />
+            <span className="sync">
+              {syncing
+                ? 'Syncing…'
+                : <React.Fragment>{Store.get().priceMode === 'api' ? 'Live' : 'Crypto+FX'} · <b>{window.timeAgo(Store.get().lastPriceSync)}</b></React.Fragment>}
+            </span>
+            <Button variant="secondary" size="sm" icon="history" onClick={refresh} disabled={syncing}>
+              <span className="tb-refresh-text">{syncing ? 'Syncing' : 'Refresh'}</span>
+            </Button>
+            <div className="pill-toggle">
+              <button className={settings.displayCcy === 'THB' ? 'on' : ''} onClick={() => Store.setSetting('displayCcy', 'THB')}>฿ THB</button>
+              <button className={settings.displayCcy === 'USD' ? 'on' : ''} onClick={() => Store.setSetting('displayCcy', 'USD')}>$ USD</button>
+            </div>
+            <button className="icon-toggle" title={settings.hideAmounts ? 'Show amounts' : 'Hide amounts'}
+              onClick={() => Store.setSetting('hideAmounts', !settings.hideAmounts)}
+              style={{ color: settings.hideAmounts ? 'var(--accent)' : undefined }}>
+              <Icon name={settings.hideAmounts ? 'eye-off' : 'eye'} size={16} />
+            </button>
+            <button className="icon-toggle" title="Backup & Restore" onClick={() => setDtOpen(true)}>
+              <Icon name="archive" size={16} />
+            </button>
+            <button className="icon-toggle" title="Toggle theme" onClick={() => Store.setSetting('theme', settings.theme === 'light' ? 'dark' : 'light')}>
+              <Icon name={settings.theme === 'light' ? 'moon' : 'sun'} size={16} />
+            </button>
           </div>
-          <button className="icon-toggle" title={settings.hideAmounts ? 'Show amounts' : 'Hide amounts'}
-            onClick={() => Store.setSetting('hideAmounts', !settings.hideAmounts)}
-            style={{ color: settings.hideAmounts ? 'var(--accent)' : undefined }}>
-            <Icon name={settings.hideAmounts ? 'eye-off' : 'eye'} size={16} />
-          </button>
-          <button className="icon-toggle" title="Backup & Restore" onClick={() => setDtOpen(true)}>
-            <Icon name="archive" size={16} />
-          </button>
-          <button className="icon-toggle" title="Toggle theme" onClick={() => Store.setSetting('theme', settings.theme === 'light' ? 'dark' : 'light')}>
-            <Icon name={settings.theme === 'light' ? 'moon' : 'sun'} size={16} />
+          <button className="icon-toggle tb-more" title="Settings" onClick={() => setMobileMenu(m => !m)}>
+            <Icon name="sliders" size={16} />
           </button>
         </div>
         <div className="scrollarea" key={route}>
