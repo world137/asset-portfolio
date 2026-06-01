@@ -206,6 +206,7 @@
   }
 
   async function doWalletSave() {
+    _walletSaveTimer = null;
     if (!_walletInitialized) return;
     try {
       await fetch('/api/wallet', {
@@ -223,7 +224,11 @@
     if (!/^[a-zA-Z0-9_-]{6,64}$/.test(id)) { _walletInitialized = true; return; }
     try {
       const r = await fetch('/api/wallet?id=' + encodeURIComponent(id));
-      if (!r.ok) { _walletInitialized = true; return; }
+      if (!r.ok) {
+        // Don't mark as initialized on error — block saves until a successful load.
+        console.warn('[wallet] load failed:', r.status);
+        return;
+      }
       const j = await r.json();
       if (j && j.data) {
         const saved = JSON.parse(j.data);
@@ -231,14 +236,19 @@
           wallet = restoreWalletFromSaved(saved);
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      console.warn('[wallet] load error:', e.message);
+      return;
+    }
     _walletInitialized = true;
     subs.forEach(fn => fn());
   }
 
-  // Flush pending wallet save on tab close.
+  // Flush pending wallet save on tab close — only if a save is actually queued.
   window.addEventListener('beforeunload', () => {
-    if (!_walletInitialized) return;
+    if (!_walletInitialized || _walletSaveTimer === null) return;
+    clearTimeout(_walletSaveTimer);
+    _walletSaveTimer = null;
     try {
       navigator.sendBeacon('/api/wallet', new Blob([
         JSON.stringify({ id: portfolioId, data: JSON.stringify(wallet) }),
