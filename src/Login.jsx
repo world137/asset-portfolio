@@ -34,7 +34,7 @@ function LoginPage({ onSuccess }) {
         setAuth();
         onSuccess();
       } else {
-        setError('Incorrect password.');
+        setError('Wrong password. Try again.');
         setPw('');
       }
       setBusy(false);
@@ -45,31 +45,31 @@ function LoginPage({ onSuccess }) {
     <div className="login-shell">
       <div className="login-card">
         <div className="login-brand">
-          <span className="login-mark">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <div className="login-mark">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M4 19V9M10 19V5M16 19v-7M22 19H2" />
             </svg>
-          </span>
-          <div>
-            <div className="login-title">Portfolio</div>
-            <div className="login-sub">Asset Tracker</div>
           </div>
+          <div className="login-title">Sign in</div>
+          <div className="login-sub">to continue to Portfolio Tracker</div>
         </div>
         <form className="login-form" onSubmit={submit} autoComplete="off">
-          <label className="login-label" htmlFor="ptf-pw">Password</label>
-          <input
-            id="ptf-pw"
-            className={'login-input' + (error ? ' err' : '')}
-            type="password"
-            placeholder="Enter password"
-            value={pw}
-            onChange={e => { setPw(e.target.value); setError(''); }}
-            autoFocus
-            required
-          />
-          {error && <div className="login-error">{error}</div>}
+          <div className="login-field">
+            <label className="login-label" htmlFor="ptf-pw">Password</label>
+            <input
+              id="ptf-pw"
+              className={'login-input' + (error ? ' err' : '')}
+              type="password"
+              placeholder="Enter your password"
+              value={pw}
+              onChange={e => { setPw(e.target.value); setError(''); }}
+              autoFocus
+              required
+            />
+            {error && <div className="login-error">{error}</div>}
+          </div>
           <button className="login-btn" type="submit" disabled={busy || !pw}>
-            {busy ? 'Checking…' : 'Sign in'}
+            {busy ? 'Checking…' : 'Next'}
           </button>
         </form>
       </div>

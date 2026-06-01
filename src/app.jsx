@@ -12,11 +12,13 @@ function Nav({ route, setRoute, totals, open, onClose }) {
   const settings = Store.settings();
   const sym      = window.ccySymbol(settings.displayCcy);
 
+  const NO_VAL_ROUTES = new Set(['dashboard','summary','networth','wallet','transactions','debts','walletsummary','walletcalendar','pixelworld','watchlist','sectors','selllog','technical']);
+
   const item = (key, label, icon, color) => (
     <div key={key} className={'item' + (route === key ? ' active' : '')} onClick={() => { setRoute(key); onClose(); }}>
       {color ? <span className="dot" style={{ background: color }} /> : <span className="ic"><Icon name={icon} size={16} /></span>}
       <span>{label}</span>
-      {key !== 'dashboard' && key !== 'summary' && key !== 'networth' && key !== 'wallet' && key !== 'transactions' && key !== 'debts' && key !== 'walletsummary' && key !== 'walletcalendar' && (
+      {!NO_VAL_ROUTES.has(key) && (
         <span className="val">{sym}{window.fmtBig((totals.classes.find(c => c.key === key) || {}).value || 0)}</span>
       )}
     </div>
@@ -39,12 +41,16 @@ function Nav({ route, setRoute, totals, open, onClose }) {
         {item('sectors', 'By Sector', 'pie-chart')}
         {item('summary', 'Cost vs Price', 'bar-chart-2')}
         {item('selllog', 'Sell Log', 'trending-down')}
+        {item('watchlist', 'Watchlist', 'eye')}
+        {item('technical', 'Technical', 'activity')}
         <div className="grp-h">Wallet</div>
         {item('wallet',         'Accounts',     'wallet')}
         {item('transactions',   'Transactions', 'repeat')}
         {item('debts',          'Debts',        'credit-card')}
         {item('walletsummary',  'Summary',      'sliders')}
         {item('walletcalendar', 'Calendar',     'calendar')}
+        <div className="grp-h">Fun</div>
+        {item('pixelworld', 'Pixel Office', 'cpu')}
       </div>
       <div className="foot">
         <span className="av">PT</span>
@@ -502,13 +508,21 @@ function App() {
 
   if (!dbReady) {
     return (
-      <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 14 }}>
-        <div style={{ width: 52, height: 52, borderRadius: 14, background: 'linear-gradient(135deg, #5e5ce6, #bf5af2)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 28px rgba(94,92,230,0.45)', animation: 'pulse 1.5s infinite' }}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M4 19V9M10 19V5M16 19v-7M22 19H2" />
-          </svg>
+      <div className="goog-loading-shell">
+        {/* Google-style top progress bar */}
+        <div className="goog-loading-bar">
+          <div className="goog-loading-bar-fill" />
         </div>
-        <div style={{ color: 'var(--fg-2)', fontSize: 15, fontWeight: 600, letterSpacing: '-0.01em' }}>Loading portfolio…</div>
+        {/* Centered content */}
+        <div className="goog-loading-body">
+          <div className="goog-loading-icon">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 19V9M10 19V5M16 19v-7M22 19H2" />
+            </svg>
+          </div>
+          <div className="goog-loading-product">Portfolio Tracker</div>
+          <div className="goog-loading-sub">Loading your portfolio…</div>
+        </div>
       </div>
     );
   }
@@ -523,6 +537,9 @@ function App() {
     : route === 'debts'         ? 'Debts'
     : route === 'walletsummary' ? 'Wallet Summary'
     : route === 'walletcalendar' ? 'Calendar'
+    : route === 'pixelworld'    ? 'Pixel Office'
+    : route === 'watchlist'     ? 'Watchlist'
+    : route === 'technical'     ? 'Technical Analysis'
     : (Store.classByKey(route) || {}).label;
 
   return (
@@ -565,6 +582,9 @@ function App() {
           {route === 'debts'        && <DebtTracker />}
           {route === 'walletsummary'  && <WalletSummary />}
           {route === 'walletcalendar' && <WalletCalendar />}
+          {route === 'pixelworld'    && <PixelWorld />}
+          {route === 'watchlist'     && <WatchlistView />}
+          {route === 'technical'     && <TechnicalAnalysis />}
           {Store.classByKey(route) && <HoldingsView classKey={route} onAdd={openAdd} onEditLot={openEdit} />}
         </div>
       </div>

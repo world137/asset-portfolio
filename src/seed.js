@@ -35,9 +35,23 @@ window.CLASS_COLORS = {
 
 // ── Crypto → CoinGecko id mapping ─────────────────────────────────────────────
 window.CRYPTO_MAP = {
-  SOL:    { id: 'solana',   sym: 'SOL' },
-  BTCTHB: { id: 'bitcoin',  sym: 'BTC' },
-  ETHTHB: { id: 'ethereum', sym: 'ETH' },
+  BTC:    { id: 'bitcoin',       sym: 'BTC' },
+  ETH:    { id: 'ethereum',      sym: 'ETH' },
+  BNB:    { id: 'binancecoin',   sym: 'BNB' },
+  SOL:    { id: 'solana',        sym: 'SOL' },
+  XRP:    { id: 'ripple',        sym: 'XRP' },
+  USDT:   { id: 'tether',        sym: 'USDT' },
+  USDC:   { id: 'usd-coin',      sym: 'USDC' },
+  ADA:    { id: 'cardano',       sym: 'ADA' },
+  DOGE:   { id: 'dogecoin',      sym: 'DOGE' },
+  DOT:    { id: 'polkadot',      sym: 'DOT' },
+  AVAX:   { id: 'avalanche-2',   sym: 'AVAX' },
+  LINK:   { id: 'chainlink',     sym: 'LINK' },
+  LTC:    { id: 'litecoin',      sym: 'LTC' },
+  MATIC:  { id: 'matic-network', sym: 'MATIC' },
+  // legacy holding-name keys (kept for backward compat with existing holdings)
+  BTCTHB: { id: 'bitcoin',       sym: 'BTC' },
+  ETHTHB: { id: 'ethereum',      sym: 'ETH' },
 };
 
 // ── Default sector tags per ticker ("<class>:<ticker>" → sector) ──────────────

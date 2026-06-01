@@ -541,3 +541,30 @@ do $$ begin
     execute 'create policy "deny anon" on holding_tags for all using (false)';
   end if;
 end $$;
+
+-- ── watchlist ─────────────────────────────────────────────────────────────────
+-- Stores the set of tickers a portfolio wants to watch.
+-- Price data is cached here (nullable) so a refresh isn't needed on every load.
+create table if not exists watchlist (
+  id               uuid        default gen_random_uuid() primary key,
+  portfolio_id     text        not null references users(id) on delete cascade,
+  ticker           text        not null check (length(ticker) between 1 and 20),
+  type             text        not null default 'stock'
+                               check (type in ('stock', 'crypto')),
+  name             text,                       -- display name (cached)
+  price            numeric,                    -- last fetched price (USD)
+  price_updated_at timestamptz,               -- when price was last fetched
+  created_at       timestamptz not null default now(),
+  constraint watchlist_portfolio_ticker_key unique (portfolio_id, ticker)
+);
+
+create index if not exists watchlist_portfolio_id_idx on watchlist (portfolio_id);
+
+alter table watchlist enable row level security;
+do $$ begin
+  if not exists (
+    select 1 from pg_policies where tablename = 'watchlist' and policyname = 'deny anon'
+  ) then
+    execute 'create policy "deny anon" on watchlist for all using (false)';
+  end if;
+end $$;
