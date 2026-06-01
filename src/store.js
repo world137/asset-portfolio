@@ -53,6 +53,7 @@
       sales: [],
       tags: [],        // [{ id, name, color }]
       holdingTags: {}, // { "classKey:name": [tagId, ...] }
+      prePostPrices: {}, // { "classKey:name": { price, pct, type: 'pre'|'post' } } — not persisted
     };
   }
 
@@ -593,6 +594,7 @@
     subscribe(fn) { subs.add(fn); return () => subs.delete(fn); },
     get() { return state; },
     settings() { return state.settings; },
+    prePostPrice(classKey, name) { return state.prePostPrices[`${classKey}:${name}`] || null; },
 
     // ── Settings mutations ─────────────────────────────────────────────────────
     setSetting(k, v) { state.settings[k] = v; emit(); },
@@ -1029,6 +1031,7 @@
         const data = await r.json();
         if (!data || typeof data.prices !== 'object') throw new Error('bad-api');
         applyPrices(data.prices);
+        state.prePostPrices = (data.prePost && typeof data.prePost === 'object') ? data.prePost : {};
         if (data.fx && data.fx.USDTHB) {
           state.fx = {
             USDTHB: data.fx.USDTHB,

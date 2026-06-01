@@ -110,6 +110,22 @@ function PositionTagCell({ classKey, positionName }) {
   );
 }
 
+function PrePostBadge({ classKey, name, ccy }) {
+  const data = Store.prePostPrice(classKey, name);
+  if (!data) return null;
+  const isPos = data.pct >= 0;
+  const pctStr = data.pct != null
+    ? (isPos ? '+' : '') + data.pct.toFixed(2) + '%'
+    : null;
+  return (
+    <div style={{ fontSize: 11, marginTop: 2, color: isPos ? 'var(--up,#1a9e5c)' : 'var(--down,#d63b3b)', whiteSpace: 'nowrap' }}>
+      <span style={{ color: 'var(--fg-4)', marginRight: 3 }}>{data.type === 'pre' ? 'Pre' : 'Post'}</span>
+      {window.fmtPrice(data.price, ccy)}
+      {pctStr && <span style={{ marginLeft: 3 }}>({pctStr})</span>}
+    </div>
+  );
+}
+
 function PriceEdit({ position, classKey, ccy }) {
   const [editing, setEditing] = React.useState(false);
   const [v, setV] = React.useState('');
@@ -380,6 +396,7 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
                     <td className="num" style={{ color: 'var(--fg-3)' }}>{window.fmtPrice(p.avgPrice, cls.ccy)}</td>
                     <td className="num" onClick={e => e.stopPropagation()}>
                       <PriceEdit position={p} classKey={classKey} ccy={cls.ccy} />
+                      <PrePostBadge classKey={classKey} name={p.name} ccy={cls.ccy} />
                     </td>
                     <td className="num">{window.fmtMoney(p.value, cls.ccy, 2)}</td>
                     <td className={'num ' + (p.profit >= 0 ? 'up' : 'down')}>{(p.profit >= 0 ? '+' : '−') + window.fmtMoney(Math.abs(p.profit), cls.ccy, 0)}</td>
