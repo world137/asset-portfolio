@@ -1,36 +1,61 @@
 /* eslint-disable */
 /* PixelWorld.jsx — Pixel art office: your investments have a company */
 
-// ── Pixel art character ───────────────────────────────────────────────────────
-// 8×12 pixel grid, each "pixel" rendered as a 4-unit SVG rect
-function PixelChar({ color, happy, tired }) {
-  const SK = '#f7c59f', EY = '#1a1a2e', HR = '#3d2b1f', PN = '#2d3561', BT = '#1a1a1a', T = null;
+// ── Pixel art character — Game Dev Story chibi style ─────────────────────────
+// 8 wide × 10 tall grid: head:body = 1:1 = true chibi proportions
+function PixelChar({ color, happy, tired, hairColor }) {
+  const SK = '#f5c99a', EY = '#1a1a2e', HR = hairColor || '#3d2b1f',
+        PN = '#2d3561', BT = '#111', BL = '#fca5a5', MO = '#d97706', T = null;
 
-  // Mouth: happy = smile pixels, sad = frown pixels
-  const mouth = happy
-    ? [T, SK, T, SK, SK, T, SK, T]
-    : [T, SK, SK, T, T, SK, SK, T];
+  // Big round eyes (2px wide) — GDS signature
+  const eyeRow   = [T, SK, EY, EY, SK, EY, EY, T];
+  // Mouth: smile dots vs sad corners
+  const mouthRow = happy
+    ? [T, SK, BL, SK, SK, BL, SK, T]  // rosy cheeks = happy blush
+    : [T, MO, SK, MO, MO, SK, MO, T]; // corners down
+  // Chin: slightly pink when happy (tired effect)
+  const chinRow  = tired
+    ? [T, SK, SK, BL, BL, SK, SK, T]
+    : [T, SK, SK, SK, SK, SK, SK, T];
 
   const rows = [
-    [T,  T,  HR, HR, HR, HR, T,  T ],  // 0 hair
-    [T,  HR, SK, SK, SK, SK, HR, T ],  // 1 head
-    [T,  SK, EY, SK, SK, EY, SK, T ],  // 2 eyes
-    mouth,                              // 3 mouth
-    [T,  SK, SK, SK, SK, SK, SK, T ],  // 4 chin
-    [T,  color,color,color,color,color,color, T],  // 5 collar
-    [SK, color,color,color,color,color,color, SK], // 6 arm+body
-    [SK, color,color,color,color,color,color, SK], // 7 arm+body
-    [T,  color,color,color,color,color,color, T],  // 8 lower
-    [T,  PN,  PN, T,  T,  PN,  PN, T ],  // 9 legs
-    [T,  PN,  PN, T,  T,  PN,  PN, T ],  // 10 legs
-    [T,  BT,  BT, T,  T,  BT,  BT, T ],  // 11 boots
+    [T,  T,  HR, HR, HR, HR, T,  T ],  // 0 hair top
+    [T,  HR, HR, SK, SK, HR, HR, T ],  // 1 hair sides
+    eyeRow,                             // 2 big eyes
+    mouthRow,                           // 3 expression
+    chinRow,                            // 4 chin
+    [T,  color,color,color,color,color,color,T ],  // 5 collar
+    [SK, color,color,color,color,color,color,SK],  // 6 arms+body
+    [T,  color,color,color,color,color,color,T ],  // 7 lower body
+    [T,  PN,  PN, T,  T,  PN,  PN, T ],  // 8 legs
+    [T,  BT,  BT, T,  T,  BT,  BT, T ],  // 9 boots
   ];
 
-  const S = 4; // px per pixel
+  const S = 4;
   return (
-    <svg width={8*S} height={12*S} style={{ imageRendering:'pixelated', shapeRendering:'crispEdges', display:'block' }}>
+    <svg width={8*S} height={10*S} style={{ imageRendering:'pixelated', shapeRendering:'crispEdges', display:'block' }}>
       {rows.map((row, y) => row.map((fill, x) =>
         fill ? <rect key={`${x}-${y}`} x={x*S} y={y*S} width={S} height={S} fill={fill} /> : null
+      ))}
+    </svg>
+  );
+}
+
+// ── GDS-style mood star ───────────────────────────────────────────────────────
+function PixelStar({ mood }) {
+  const C = mood === 'good' ? '#fbbf24' : mood === 'great' ? '#22c55e' : '#ef4444';
+  const T = null, S = 3;
+  const rows = [
+    [T, T, C, T, T],
+    [T, C, C, C, T],
+    [C, C, C, C, C],
+    [T, C, C, C, T],
+    [T, T, C, T, T],
+  ];
+  return (
+    <svg width={5*S} height={5*S} style={{ imageRendering:'pixelated', shapeRendering:'crispEdges', display:'block' }}>
+      {rows.map((row,y) => row.map((fill,x) =>
+        fill ? <rect key={`${x}${y}`} x={x*S} y={y*S} width={S} height={S} fill={fill} /> : null
       ))}
     </svg>
   );
@@ -204,7 +229,7 @@ function PixelDepartment({ cls, sym }) {
           <div className="px-worker-wrap">
             <SpeechBubble text={speech} />
             <div className={animClass}>
-              <PixelChar color={color} happy={happy} tired={tired} />
+              <PixelChar color={color} happy={happy} tired={tired} hairColor={color} />
             </div>
           </div>
         </div>
@@ -323,6 +348,257 @@ function PixelSummary({ totals, sym, classes }) {
   );
 }
 
+// ── Pixel walking character (moves left→right in a room) ─────────────────────
+function PixelWalker({ color, happy, direction, style }) {
+  return (
+    <div className="px-walker" style={{ transform: direction === 'left' ? 'scaleX(-1)' : 'none', ...style }}>
+      <PixelChar color={color} happy={happy} />
+    </div>
+  );
+}
+
+// ── Pixel art desk with laptop ─────────────────────────────────────────────────
+function PixelLaptop({ color }) {
+  const S = 3, SC = '#0d1117', FR = color || '#4b5563', GN = '#22d3ee';
+  const w = 12, h = 8;
+  return (
+    <svg width={w*S} height={h*S} style={{ imageRendering: 'pixelated', shapeRendering: 'crispEdges', display: 'block' }}>
+      {/* Screen */}
+      {[...Array(4)].map((_,y) => [...Array(10)].map((_,x) =>
+        <rect key={`s${x}${y}`} x={(x+1)*S} y={y*S} width={S} height={S} fill={SC} />
+      ))}
+      {/* Screen border */}
+      {[...Array(12)].map((_,x) => [
+        <rect key={`st${x}`} x={x*S} y={0} width={S} height={S} fill={x===0||x===11?'none':FR} />,
+        <rect key={`sb${x}`} x={x*S} y={4*S} width={S} height={S} fill={FR} />,
+      ])}
+      <rect x={0} y={S} width={S} height={3*S} fill={FR} />
+      <rect x={11*S} y={S} width={S} height={3*S} fill={FR} />
+      {/* Cursor blink */}
+      <rect x={2*S} y={S} width={S} height={S} fill={GN} className="px-cursor" />
+      {/* Code lines */}
+      <rect x={2*S} y={2*S} width={4*S} height={S} fill={GN} opacity="0.5" />
+      <rect x={2*S} y={3*S} width={6*S} height={S} fill={GN} opacity="0.3" />
+      {/* Base */}
+      <rect x={4*S} y={5*S} width={4*S} height={S} fill={FR} />
+      <rect x={2*S} y={6*S} width={8*S} height={S} fill={FR} />
+      <rect x={S}   y={7*S} width={10*S} height={S} fill={FR} opacity="0.6" />
+    </svg>
+  );
+}
+
+// ── Pixel art whiteboard with chart ──────────────────────────────────────────
+function PixelWhiteboard() {
+  const S = 3, FR = '#374151', WH = '#f9fafb', BL = '#3b82f6', RD = '#ef4444';
+  const w = 14, h = 10;
+  const bars = [3, 5, 4, 6, 4, 5];
+  return (
+    <svg width={w*S} height={h*S} style={{ imageRendering: 'pixelated', shapeRendering: 'crispEdges', display: 'block' }}>
+      {/* Frame */}
+      {[...Array(w)].map((_,x) => [
+        <rect key={`t${x}`} x={x*S} y={0} width={S} height={S} fill={FR} />,
+        <rect key={`b${x}`} x={x*S} y={9*S} width={S} height={S} fill={FR} />,
+      ])}
+      {[...Array(8)].map((_,y) => [
+        <rect key={`l${y}`} x={0} y={(y+1)*S} width={S} height={S} fill={FR} />,
+        <rect key={`r${y}`} x={13*S} y={(y+1)*S} width={S} height={S} fill={FR} />,
+      ])}
+      {/* White board */}
+      {[...Array(8)].map((_,y) => [...Array(12)].map((_,x) =>
+        <rect key={`w${x}${y}`} x={(x+1)*S} y={(y+1)*S} width={S} height={S} fill={WH} />
+      ))}
+      {/* Chart bars */}
+      {bars.map((h, i) => (
+        [...Array(h)].map((_,j) =>
+          <rect key={`b${i}${j}`} x={(2+i*1.8)*S} y={(8-j)*S} width={S} height={S} fill={i % 2 === 0 ? BL : RD} />
+        )
+      ))}
+      {/* Stand */}
+      <rect x={6*S} y={9*S} width={2*S} height={S} fill={FR} />
+    </svg>
+  );
+}
+
+// ── HQ room types — colors match Game Dev Story palette ──────────────────────
+const HQ_ROOMS = [
+  { id: 'ceo',    title: 'CEO OFFICE',    icon: '👔', color: '#f59e0b', charColor: '#fbbf24', hairColor: '#92400e' },
+  { id: 'invest', title: 'INVESTOR DEPT', icon: '📈', color: '#10b981', charColor: '#34d399', hairColor: '#065f46' },
+  { id: 'acct',   title: 'ACCOUNTING',    icon: '📊', color: '#3b82f6', charColor: '#60a5fa', hairColor: '#1e3a8a' },
+  { id: 'dev',    title: 'DEV DEPT',      icon: '💻', color: '#8b5cf6', charColor: '#a78bfa', hairColor: '#4c1d95' },
+  { id: 'ba',     title: 'BA & ANALYSIS', icon: '🔍', color: '#ec4899', charColor: '#f472b6', hairColor: '#831843' },
+];
+
+function PixelHQRoom({ room, totals, sym, classes }) {
+  const { id, title, icon, color, charColor, hairColor } = room;
+
+  // Per-room data + character action
+  let items = [], charAnim = 'px-anim-idle', happy = totals.pct >= 0;
+  switch (id) {
+    case 'ceo': {
+      charAnim = totals.pct >= 0 ? 'px-anim-bob' : 'px-anim-slouch';
+      items = [
+        { label: 'TOTAL AUM',  value: sym + window.fmtBig(totals.value) },
+        { label: 'OVERALL',    value: (totals.profit >= 0 ? '+' : '') + totals.pct.toFixed(1) + '%', cls: totals.pct >= 0 ? 'up' : 'down' },
+      ];
+      break;
+    }
+    case 'invest': {
+      const best = classes.length ? [...classes].sort((a,b) => b.pct - a.pct)[0] : null;
+      charAnim = 'px-anim-jump';
+      happy = true;
+      items = best
+        ? [
+            { label: 'TOP PICK', value: best.label.slice(0,12).toUpperCase() },
+            { label: 'RETURN',   value: '+' + best.pct.toFixed(1) + '%', cls: 'up' },
+          ]
+        : [{ label: 'STATUS', value: 'SCOUTING…' }];
+      break;
+    }
+    case 'acct': {
+      const pl = totals.profit;
+      charAnim = 'px-anim-type';
+      happy = pl >= 0;
+      items = [
+        { label: 'COST BASIS', value: sym + window.fmtBig(totals.cost) },
+        { label: 'UNRLZD P/L', value: (pl >= 0 ? '+' : '−') + sym + window.fmtBig(Math.abs(pl)), cls: pl >= 0 ? 'up' : 'down' },
+      ];
+      break;
+    }
+    case 'dev': {
+      const nItems = classes.reduce((a,c) => a + c.positions.length, 0);
+      charAnim = 'px-anim-type';
+      happy = true;
+      items = [
+        { label: 'ASSETS',  value: nItems + ' items' },
+        { label: 'CLASSES', value: classes.length + ' types' },
+      ];
+      break;
+    }
+    case 'ba': {
+      charAnim = 'px-anim-analyze';
+      const secs = Store.sectorTotals();
+      const topSec = secs.length ? [...secs].sort((a,b) => b.value - a.value)[0] : null;
+      items = topSec
+        ? [
+            { label: 'TOP SECTOR', value: (topSec.sector || 'N/A').slice(0,11).toUpperCase() },
+            { label: 'SECTORS',    value: secs.length + ' tracked' },
+          ]
+        : [{ label: 'STATUS', value: 'ANALYZING…' }];
+      break;
+    }
+  }
+
+  const Decoration = () => {
+    if (id === 'dev' || id === 'acct') return <PixelLaptop color={color} />;
+    if (id === 'ba') return <PixelWhiteboard />;
+    return <PixelMonitor pct={id === 'ceo' ? totals.pct : id === 'invest' ? (classes[0] ? classes[0].pct : 0) : 0} />;
+  };
+
+  return (
+    <div className="px-hq-room" style={{ '--room-clr': color }}>
+      <div className="px-hq-room-header">
+        <span className="px-hq-room-icon">{icon}</span>
+        <span className="px-hq-room-title">{title}</span>
+      </div>
+
+      <div className="px-hq-room-scene" style={{ background: '#0f1018' }}>
+        {/* GDS-style warm wood floor strip */}
+        <div className="px-hq-floor-strip" />
+
+        {/* Decoration on desk */}
+        <div className="px-hq-deco">
+          <Decoration />
+        </div>
+
+        {/* Mood star (GDS style) above character */}
+        <div className="px-hq-star">
+          <PixelStar mood={happy ? (totals.pct > 10 ? 'great' : 'good') : 'bad'} />
+        </div>
+
+        {/* Animated character */}
+        <div className={'px-hq-worker ' + charAnim}>
+          <PixelChar color={charColor} happy={happy} tired={id === 'dev' && totals.pct < -10} hairColor={hairColor} />
+        </div>
+
+        {/* Desk surface — warm GDS wood color */}
+        <div className="px-hq-desk-bar" style={{ background: 'linear-gradient(to bottom, #a16207, #78350f)' }} />
+
+        {/* Coffee always present */}
+        <div className="px-hq-coffee"><PixelCoffee /></div>
+      </div>
+
+      <div className="px-hq-room-data">
+        {items.map((it, i) => (
+          <div key={i} className="px-hq-data-row">
+            <span className="px-hq-data-label">{it.label}</span>
+            <span className={'px-hq-data-value' + (it.cls ? ' ' + it.cls : '')}>{it.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PixelHQBuilding({ totals, sym, classes }) {
+  const topRooms = HQ_ROOMS.slice(0, 3); // CEO · INVESTOR · ACCOUNTING
+  const botRooms = HQ_ROOMS.slice(3);    // DEV · BA & ANALYSIS
+
+  return (
+    <div className="px-hq-building">
+      {/* Building sign */}
+      <div className="px-hq-sign">
+        <span className="px-hq-sign-text">◆ PORTFOLIO INC. — CORPORATE FLOOR 1 ◆</span>
+      </div>
+
+      {/* Floor plan */}
+      <div className="px-hq-floorplan">
+
+        {/* Top row: 3 rooms */}
+        <div className="px-hq-floor-row">
+          {topRooms.map((room, i) => (
+            <React.Fragment key={room.id}>
+              {i > 0 && <div className="px-hq-room-wall" />}
+              <PixelHQRoom room={room} totals={totals} sym={sym} classes={classes} />
+            </React.Fragment>
+          ))}
+        </div>
+
+        {/* Main corridor */}
+        <div className="px-hq-corridor">
+          <span className="px-hq-corridor-label">— MAIN CORRIDOR —</span>
+          {/* Two characters walking in opposite directions */}
+          <div className="px-hq-walker px-hq-walker-r">
+            <PixelChar color="#6366f1" happy={true} />
+          </div>
+          <div className="px-hq-walker px-hq-walker-l">
+            <PixelChar color="#f59e0b" happy={totals.pct >= 0} />
+          </div>
+        </div>
+
+        {/* Bottom row: 2 rooms + empty fill */}
+        <div className="px-hq-floor-row">
+          {botRooms.map((room, i) => (
+            <React.Fragment key={room.id}>
+              {i > 0 && <div className="px-hq-room-wall" />}
+              <PixelHQRoom room={room} totals={totals} sym={sym} classes={classes} />
+            </React.Fragment>
+          ))}
+          {/* Empty lobby space — fills remaining width to match top row */}
+          <div className="px-hq-room-wall" />
+          <div className="px-hq-lobby">
+            <div className="px-hq-lobby-sign">LOBBY</div>
+            <div className="px-anim-idle" style={{ margin: '0 auto' }}>
+              <PixelChar color="#4b5563" happy={true} />
+            </div>
+            <PixelPlant big={false} />
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
 // ── Main view ─────────────────────────────────────────────────────────────────
 function PixelWorld() {
   const [, force] = React.useReducer(x => x + 1, 0);
@@ -388,7 +664,16 @@ function PixelWorld() {
       {/* Ticker tape */}
       {classes.length > 0 && <PixelTicker classes={classes} totals={totals} sym={sym} />}
 
-      {/* Office floor */}
+      {/* Corporate HQ departments */}
+      <PixelHQBuilding totals={totals} sym={sym} classes={classes} />
+
+      {/* Asset class office floor */}
+      {classes.length > 0 && (
+        <div className="px-hq-building-header" style={{ marginBottom: 0 }}>
+          <span className="px-hq-building-title">◆ INVESTMENT DEPARTMENTS ◆</span>
+          <span className="px-hq-building-sub">one department per asset class</span>
+        </div>
+      )}
       <div className="px-office">
         {classes.length === 0 ? (
           <div className="px-empty">
