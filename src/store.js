@@ -54,6 +54,7 @@
       tags: [],        // [{ id, name, color }]
       holdingTags: {}, // { "classKey:name": [tagId, ...] }
       prePostPrices: {}, // { "classKey:name": { price, pct, type: 'pre'|'post' } } — not persisted
+      dayChangePrices: {}, // { "classKey:name": prevClose } — not persisted, used for %day column
     };
   }
 
@@ -128,6 +129,8 @@
       sales: saved.sales || [],
       tags: saved.tags || [],
       holdingTags: saved.holdingTags || {},
+      prePostPrices: {},   // not persisted — reset on every load
+      dayChangePrices: {}, // not persisted — populated by refreshPrices
     };
   }
 
@@ -605,6 +608,13 @@
     get() { return state; },
     settings() { return state.settings; },
     prePostPrice(classKey, name) { return state.prePostPrices[`${classKey}:${name}`] || null; },
+    dayChangePct(classKey, name) {
+      const prevClose = (state.dayChangePrices || {})[`${classKey}:${name}`];
+      if (prevClose == null || prevClose === 0) return null;
+      const lot = (state.holdings[classKey] || []).find(l => l.name === name);
+      if (!lot || lot.cur == null) return null;
+      return ((lot.cur - prevClose) / prevClose) * 100;
+    },
 
     // ── Settings mutations ─────────────────────────────────────────────────────
     setSetting(k, v) { state.settings[k] = v; emit(); },
@@ -1041,7 +1051,8 @@
         const data = await r.json();
         if (!data || typeof data.prices !== 'object') throw new Error('bad-api');
         applyPrices(data.prices);
-        state.prePostPrices = (data.prePost && typeof data.prePost === 'object') ? data.prePost : {};
+        state.prePostPrices   = (data.prePost    && typeof data.prePost    === 'object') ? data.prePost    : {};
+        state.dayChangePrices = (data.prevCloses && typeof data.prevCloses === 'object') ? data.prevCloses : {};
         if (data.fx && data.fx.USDTHB) {
           state.fx = {
             USDTHB: data.fx.USDTHB,

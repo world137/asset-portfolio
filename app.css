@@ -1418,3 +1418,23 @@ body { background: var(--bg-app); display: block; padding: 0; }
 @media (max-width: 480px) {
   .t-h1 { font-size: 17px; }
 }
+
+/* ============================================================================
+   Candle chart + price chart additions
+   ============================================================================ */
+.linechart-svg { width: 100%; display: block; max-height: 240px; }
+
+/* Range buttons used in PriceChartModal */
+.range-btns { display: inline-flex; gap: 2px; background: var(--bg-sunken); border: 1px solid var(--border-1); border-radius: 9px; padding: 3px; }
+.range-btns button { border: 0; background: transparent; padding: 5px 10px; font: 600 11px/1 var(--font-mono); color: var(--fg-3); border-radius: 6px; cursor: pointer; white-space: nowrap; }
+.range-btns button.on { background: var(--bg-surface); color: var(--fg-1); box-shadow: var(--shadow-sm, 0 1px 4px rgba(0,0,0,0.12)); }
+
+/* Sell log — ensure grid inputs don't overflow on mobile */
+.mgrid > div { min-width: 0; }
+.mgrid input, .mgrid select { max-width: 100%; box-sizing: border-box; }
+
+/* Bento box container responsive */
+@media (max-width: 600px) {
+  .range-btns { flex-wrap: wrap; }
+  .range-btns button { padding: 5px 8px; font-size: 10px; }
+}

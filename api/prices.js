@@ -60,7 +60,12 @@ async function yahooPrice(symbol) {
         }
       }
 
-      return { price, pre, post };
+      return {
+        price,
+        prevClose: meta.chartPreviousClose ?? meta.previousClose ?? null,
+        pre,
+        post,
+      };
     } catch (e) { lastErr = e; }
   }
   throw lastErr || new Error('yahoo failed');
@@ -101,7 +106,7 @@ async function fundNav(ticker) {
 async function cryptoPrices(ids) {
   const uniq = [...new Set(ids)];
   if (!uniq.length) return {};
-  const url = `https://api.coingecko.com/api/v3/simple/price?ids=${uniq.join(',')}&vs_currencies=thb`;
+  const url = `https://api.coingecko.com/api/v3/simple/price?ids=${uniq.join(',')}&vs_currencies=thb&include_24hr_change=true`;
   const r = await fetch(url, { headers: { Accept: 'application/json' } });
   if (!r.ok) throw new Error('coingecko HTTP ' + r.status);
   return r.json();
@@ -148,14 +153,16 @@ export default async function handler(req, res) {
   const body = await readBody(req);
   const prices = {};
   const prePost = {};
+  const prevCloses = {};
   const errors = [];
   const tasks = [];
 
   for (const it of (body.yahoo || [])) {
     tasks.push(yahooPrice(it.symbol)
-      .then(({ price, pre, post }) => {
+      .then(({ price, prevClose, pre, post }) => {
         const k = `${it.key}:${it.name}`;
         prices[k] = price;
+        if (prevClose != null) prevCloses[k] = prevClose;
         const active = post || pre;
         if (active) prePost[k] = { ...active, type: post ? 'post' : 'pre' };
       })
@@ -171,7 +178,22 @@ export default async function handler(req, res) {
   const cryptoList = body.crypto || [];
   if (cryptoList.length) {
     tasks.push(cryptoPrices(cryptoList.map(c => c.id))
-      .then(map => { for (const c of cryptoList) { const v = map[c.id] && map[c.id].thb; if (v != null) prices[`${c.key}:${c.name}`] = v; } })
+      .then(map => {
+        for (const c of cryptoList) {
+          const entry = map[c.id];
+          if (!entry) continue;
+          const thbPrice = entry.thb;
+          if (thbPrice != null) {
+            const k = `${c.key}:${c.name}`;
+            prices[k] = thbPrice;
+            // Derive prevClose from 24h change percentage
+            const pct24h = entry.thb_24h_change;
+            if (pct24h != null && thbPrice != null) {
+              prevCloses[k] = thbPrice / (1 + pct24h / 100);
+            }
+          }
+        }
+      })
       .catch(e => errors.push('crypto ' + e.message)));
   }
   if (body.fx) {
@@ -182,5 +204,5 @@ export default async function handler(req, res) {
 
   // light caching at the edge (30s)
   res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=120');
-  return res.status(200).json({ prices, prePost, fx, errors, ts: Date.now() });
+  return res.status(200).json({ prices, prePost, prevCloses, fx, errors, ts: Date.now() });
 }

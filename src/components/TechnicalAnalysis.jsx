@@ -150,38 +150,30 @@ function computeConfluence(bars, cfg) {
   const close = bars.map(b => b.c), high = bars.map(b => b.h);
   const low   = bars.map(b => b.l), vol  = bars.map(b => b.v ?? 0);
 
-  // CDC Zone
   const emaFast = taEma(close, fastLen), emaSlow = taEma(close, slowLen);
   const lc = close[last], lef = emaFast[last], les = emaSlow[last];
   const green=lc>lef&&lef>les, yellow=lc>lef&&lef<les, blue=lc<lef&&lef>les, red=lc<lef&&lef<les;
 
-  // RSI
   const rsiArr = taRsi(close, rsiLen);
   const lRsi = rsiArr[last];
 
-  // MACD
   const { line: ml, signal: ms } = taMacd(close, macdFastLen, macdSlowLen, macdSigLen);
   const macdUp = ml[last] != null && ms[last] != null && ml[last] > ms[last];
 
-  // Z-Score
   const zMean = taSma(close, zLen), zStd = taStdev(close, zLen, zMean);
   const lZ = zStd[last] && zStd[last] !== 0 ? (lc - zMean[last]) / zStd[last] : 0;
 
-  // ADX/DMI
   const { plusDI, minusDI, adx } = taDmi(high, low, close, adxLen, adxSmooth);
   const lPDI=plusDI[last], lMDI=minusDI[last], lAdx=adx[last];
   const trendStrong = lAdx != null && lAdx >= adxThresh;
 
-  // OBV
   const obvArr = taObv(close, vol), obvSig = taEma(obvArr, obvSigLen);
   const obvBull = obvArr[last] > obvSig[last];
 
-  // Golden Cross
   const gcFastArr = taSma(close, gcFastLen), gcSlowArr = taSma(close, gcSlowLen);
   const lGcF = gcFastArr[last], lGcS = gcSlowArr[last];
   const isGolden = lGcF != null && lGcS != null && lGcF > lGcS;
 
-  // Ichimoku
   const iConv = taDonchian(high, low, ichiConvLen);
   const iBase = taDonchian(high, low, ichiBaseLen);
   const iSpanA = iConv.map((v, i) => v != null && iBase[i] != null ? (v + iBase[i])/2 : null);
@@ -192,7 +184,6 @@ function computeConfluence(bars, cfg) {
   const ichiAbove = spA!=null && spB!=null && lc>spA && lc>spB && lConv>lBase;
   const ichiBelow = spA!=null && spB!=null && lc<spA && lc<spB && lConv<lBase;
 
-  // Raw votes
   const cdcRaw  = green?1:red?-1:0;
   const macdRaw = macdUp?1:-1;
   const adxRaw  = trendStrong?(lPDI>lMDI?1:-1):0;
@@ -202,7 +193,6 @@ function computeConfluence(bars, cfg) {
   const ichiRaw = ichiAbove?1:ichiBelow?-1:0;
   const gcRaw   = isGolden?1:-1;
 
-  // Gated scores
   const scores = [
     useCDC ?cdcRaw:0, useMacd?macdRaw:0, useAdx?adxRaw:0, useObv?obvRaw:0,
     useRsi ?rsiRaw:0, useZ   ?zRaw   :0, useIchi?ichiRaw:0, useGC ?gcRaw:0,
@@ -295,8 +285,7 @@ function VoteChip({ raw, active }) {
 
 function ScoreBar({ totalScore, activeCount }) {
   const max = activeCount || 8;
-  const pct = max > 0 ? totalScore / max : 0; // -1 to +1
-  // bar fills from center; left half = bear, right half = bull
+  const pct = max > 0 ? totalScore / max : 0;
   const center = 50;
   const width  = Math.abs(pct) * 50;
   const left   = pct >= 0 ? center : center - width;
@@ -304,7 +293,6 @@ function ScoreBar({ totalScore, activeCount }) {
 
   return (
     <div>
-      {/* Bar */}
       <div style={{ position:'relative', height:8, borderRadius:999, background:'var(--bg-sunken)', overflow:'hidden', margin:'10px 0 6px' }}>
         <div style={{ position:'absolute', left:0, right:0, top:0, bottom:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
           <div style={{ width:1, height:'100%', background:'var(--border-2)' }} />
@@ -317,7 +305,6 @@ function ScoreBar({ totalScore, activeCount }) {
           }} />
         )}
       </div>
-      {/* Labels */}
       <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, color:'var(--fg-3)' }}>
         <span style={{ color:'var(--red-600)', fontWeight:600 }}>Bear</span>
         <span style={{ color:'var(--fg-3)' }}>
@@ -355,16 +342,19 @@ const LAYER_CFG = [
   { key:'useGC',   label:'GC'       },
 ];
 
-// ── Main view ───────────────────────────────────────────────────────────────
+const CANDLE_DAYS_OPTS = [30, 60, 90, 120];
 
-function TechnicalAnalysis() {
-  const [inputVal, setInputVal] = React.useState('');
+// ── Core analysis content (shared by page and modal) ────────────────────────
+
+function TechnicalAnalysisCore({ initSymbol, compact }) {
+  const [inputVal, setInputVal] = React.useState(initSymbol || '');
   const [symbol,   setSymbol]   = React.useState('');
   const [bars,     setBars]     = React.useState(null);
   const [meta,     setMeta]     = React.useState(null);
   const [loading,  setLoading]  = React.useState(false);
   const [err,      setErr]      = React.useState(null);
   const [showCfg,  setShowCfg]  = React.useState(false);
+  const [candleDays, setCandleDays] = React.useState(60);
   const [cfg, setCfg] = React.useState({
     fastLen:12, slowLen:26, rsiLen:14,
     macdFastLen:12, macdSlowLen:26, macdSigLen:9,
@@ -376,9 +366,7 @@ function TechnicalAnalysis() {
     buyThresh:4, sellThresh:4,
   });
 
-
-
-  const analyze = async (sym) => {
+  const analyze = React.useCallback(async (sym) => {
     const s = (sym || inputVal).trim().toUpperCase();
     if (!s) return;
     setSymbol(s);
@@ -396,7 +384,12 @@ function TechnicalAnalysis() {
       setErr(e.message);
     }
     setLoading(false);
-  };
+  }, [inputVal]);
+
+  // Auto-analyze when initiated with a symbol
+  React.useEffect(() => {
+    if (initSymbol) analyze(initSymbol);
+  }, []);
 
   const result = React.useMemo(() => {
     if (!bars || bars.length < 60) return null;
@@ -410,8 +403,17 @@ function TechnicalAnalysis() {
   const priceUp     = priceChange > 0;
   const ccy = meta?.currency === 'USD' ? '$' : meta?.currency === 'THB' ? '฿' : '';
 
+  // Convert bars from seconds to ms for CandleChart
+  const candleBars = React.useMemo(() =>
+    bars ? bars.map(b => ({ ...b, t: b.t * 1000 })) : [],
+  [bars]);
+
+  const outerStyle = compact
+    ? { display: 'flex', flexDirection: 'column', gap: 14 }
+    : { maxWidth: 680, margin: '0 auto', padding: '24px 16px 48px', display: 'flex', flexDirection: 'column', gap: 16 };
+
   return (
-    <div style={{ maxWidth: 680, margin: '0 auto', padding: '24px 16px 48px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={outerStyle}>
 
       {/* ── Search ── */}
       <div style={{ display:'flex', gap:8 }}>
@@ -423,13 +425,12 @@ function TechnicalAnalysis() {
             value={inputVal}
             onChange={e => setInputVal(e.target.value.toUpperCase())}
             onKeyDown={e => e.key === 'Enter' && analyze()}
-            placeholder="Ticker symbol — AAPL · BTC-USD · ADVANC.BK"
+            placeholder="Ticker — AAPL · BTC-USD · ADVANC.BK"
             style={{
               width:'100%', boxSizing:'border-box',
               padding:'9px 12px 9px 36px', borderRadius:10, fontSize:14,
               background:'var(--bg-surface)', border:'1px solid var(--border-2)',
-              color:'var(--fg-1)', fontFamily:'var(--font-sans)',
-              outline:'none',
+              color:'var(--fg-1)', fontFamily:'var(--font-sans)', outline:'none',
             }}
           />
         </div>
@@ -451,7 +452,6 @@ function TechnicalAnalysis() {
         </button>
       </div>
 
-
       {/* ── Settings panel ── */}
       {showCfg && (
         <div className="card" style={{ padding:16 }}>
@@ -466,7 +466,7 @@ function TechnicalAnalysis() {
                     fontWeight:600, border:'1.5px solid',
                     borderColor: on ? 'var(--accent)' : 'var(--border-2)',
                     background:  on ? 'var(--bg-selected)' : 'transparent',
-                    color:        on ? 'var(--accent-light, var(--accent))' : 'var(--fg-3)',
+                    color:       on ? 'var(--accent-light, var(--accent))' : 'var(--fg-3)',
                   }}>
                   {l.label}
                 </button>
@@ -501,7 +501,7 @@ function TechnicalAnalysis() {
 
       {/* ── Loading ── */}
       {loading && (
-        <div className="card" style={{ padding:48, textAlign:'center', color:'var(--fg-3)' }}>
+        <div className="card" style={{ padding:compact ? 24 : 48, textAlign:'center', color:'var(--fg-3)' }}>
           <div style={{ fontSize:13 }}>Fetching {symbol} data…</div>
         </div>
       )}
@@ -536,7 +536,6 @@ function TechnicalAnalysis() {
                 </div>
               </div>
 
-              {/* Confidence ring-ish display */}
               <div style={{ textAlign:'center', minWidth:90 }}>
                 <div style={{ fontSize:32, fontWeight:800, letterSpacing:-1, fontVariantNumeric:'tabular-nums',
                   color: result.confidence>=57 ? (result.isBuy?'var(--green-600)':result.isSell?'var(--red-600)':'var(--fg-1)') : 'var(--fg-2)' }}>
@@ -548,10 +547,8 @@ function TechnicalAnalysis() {
               </div>
             </div>
 
-            {/* Score bar */}
             <ScoreBar totalScore={result.totalScore} activeCount={result.activeCount} />
 
-            {/* Vote summary pills */}
             <div style={{ display:'flex', gap:8, marginTop:12 }}>
               <span style={{ padding:'4px 12px', borderRadius:999, fontSize:12, fontWeight:600, background:'var(--green-50)', color:'var(--green-600)' }}>
                 {result.bullVotes} Bull
@@ -562,6 +559,26 @@ function TechnicalAnalysis() {
               <span style={{ padding:'4px 12px', borderRadius:999, fontSize:12, fontWeight:600, background:'var(--bg-sunken)', color:'var(--fg-3)' }}>
                 {result.activeCount - result.bullVotes - result.bearVotes} Neutral
               </span>
+            </div>
+          </div>
+
+          {/* ── Candle Chart ── */}
+          <div className="card" style={{ overflow:'hidden' }}>
+            <div className="card-h" style={{ padding:'12px 18px' }}>
+              <div>
+                <div className="t">Price Chart (Daily)</div>
+                <div className="s">{candleDays}D · {candleBars.slice(-candleDays).length} candles</div>
+              </div>
+              <div className="layoutseg" style={{ flexShrink: 0 }}>
+                {CANDLE_DAYS_OPTS.map(d => (
+                  <button key={d} className={candleDays === d ? 'on' : ''} onClick={() => setCandleDays(d)}>
+                    {d}D
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ padding: '0 8px 12px' }}>
+              <CandleChart bars={candleBars} daysBack={candleDays} />
             </div>
           </div>
 
@@ -604,8 +621,6 @@ function TechnicalAnalysis() {
                     </td>
                   </tr>
                 ))}
-
-                {/* Market condition */}
                 <tr style={{ background:'var(--bg-sunken)' }}>
                   <td style={{ padding:'11px 18px', fontSize:13, fontWeight:500, color:'var(--fg-2)' }}>Market Condition</td>
                   <td colSpan={2} style={{
@@ -651,7 +666,7 @@ function TechnicalAnalysis() {
 
       {/* ── Empty state ── */}
       {!result && !loading && !err && (
-        <div className="card" style={{ padding:'60px 20px', textAlign:'center' }}>
+        <div className="card" style={{ padding: compact ? '32px 20px' : '60px 20px', textAlign:'center' }}>
           <div style={{ width:48, height:48, borderRadius:14, background:'var(--bg-selected)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 14px', color:'var(--accent)' }}>
             <Icon name="activity" size={24} />
           </div>
@@ -666,3 +681,25 @@ function TechnicalAnalysis() {
     </div>
   );
 }
+
+// ── Page wrapper ─────────────────────────────────────────────────────────────
+
+function TechnicalAnalysis() {
+  return <TechnicalAnalysisCore initSymbol="" compact={false} />;
+}
+
+// ── Modal wrapper ─────────────────────────────────────────────────────────────
+
+function TechnicalModal({ symbol, onClose }) {
+  return (
+    <Modal open onClose={onClose}
+           title={`Technical Analysis${symbol ? ' — ' + symbol : ''}`}
+           width={740}>
+      <div style={{ maxHeight: '80vh', overflowY: 'auto', overflowX: 'hidden' }}>
+        <TechnicalAnalysisCore initSymbol={symbol || ''} compact={true} />
+      </div>
+    </Modal>
+  );
+}
+
+window.TechnicalModal = TechnicalModal;
