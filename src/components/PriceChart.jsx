@@ -1,15 +1,17 @@
 /* eslint-disable */
-/* PriceChart.jsx — Historical price chart modal for individual assets */
+/* PriceChart.jsx — Historical price chart modal + shared CandleChart component */
 
 const CHART_CACHE_TTL = 12 * 60 * 60 * 1000; // 12 hours
 
 const RANGE_OPTS = [
-  { label: '1D', range: '1d' },
-  { label: '1W', range: '5d' },
-  { label: '1M', range: '1mo' },
-  { label: '3M', range: '3mo' },
-  { label: '6M', range: '6mo' },
-  { label: '1Y', range: '1y' },
+  { label: '1D',  range: '1d'  },
+  { label: '5D',  range: '5d'  },
+  { label: '1M',  range: '1mo' },
+  { label: '6M',  range: '6mo' },
+  { label: 'YTD', range: 'ytd' },
+  { label: '1Y',  range: '1y'  },
+  { label: '5Y',  range: '5y'  },
+  { label: 'Max', range: 'max' },
 ];
 
 function resolveChartSymbol(classKey, name) {
@@ -43,6 +45,7 @@ function fmtChartDate(ts, range) {
   const d = new Date(ts);
   if (range === '1d') return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   if (range === '5d') return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+  if (range === '5y' || range === 'max') return d.toLocaleDateString([], { month: 'short', year: '2-digit' });
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
@@ -57,6 +60,138 @@ function fmtChartPrice(v, decimals) {
   const d = decimals != null ? decimals : v >= 1000 ? 2 : v >= 10 ? 2 : v >= 1 ? 4 : 6;
   return v.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
 }
+
+// ── Shared Candle Chart (used by TechnicalAnalysis too via window.CandleChart) ─
+
+function CandleChart({ bars, daysBack }) {
+  const [hoverIdx, setHoverIdx] = React.useState(null);
+  const svgRef = React.useRef(null);
+
+  // bars: { t (ms), o, h, l, c, v? }  — t in milliseconds
+  const display = bars.slice(-(daysBack || bars.length));
+  if (!display.length) return <div className="linechart-empty">No candle data.</div>;
+
+  const W = 680, H = 220;
+  const PAD = { t: 10, r: 10, b: 28, l: 64 };
+  const iW = W - PAD.l - PAD.r;
+  const iH = H - PAD.t - PAD.b;
+
+  const yMax = Math.max(...display.map(b => b.h || b.c));
+  const yMin = Math.min(...display.map(b => b.l || b.c));
+  const ySpan = (yMax - yMin) || yMax * 0.02 || 1;
+  const yPad  = ySpan * 0.08;
+  const yLo   = yMin - yPad;
+  const yHi   = yMax + yPad;
+  const yRange = yHi - yLo;
+
+  const n    = display.length;
+  const step = iW / n;
+  const cw   = Math.max(2, step * 0.6);
+
+  const xOf = i => PAD.l + i * step + step / 2;
+  const yOf = v => PAD.t + (1 - (v - yLo) / yRange) * iH;
+
+  const yTicks = [0, 0.25, 0.5, 0.75, 1].map(f => ({
+    y: PAD.t + (1 - f) * iH,
+    v: yLo + f * yRange,
+  }));
+
+  // Month change labels for x-axis
+  const xLabels = [];
+  let lastMon = -1;
+  for (let i = 0; i < n; i++) {
+    const d = new Date(display[i].t);
+    const m = d.getMonth();
+    if (m !== lastMon) { xLabels.push({ i, label: d.toLocaleString([], { month: 'short' }) }); lastMon = m; }
+  }
+
+  const hovered = hoverIdx != null ? display[hoverIdx] : null;
+
+  return (
+    <div>
+      <div className="price-chart-tip">
+        {hovered ? (
+          <>
+            <span className="price-chart-tip-date">
+              {new Date(hovered.t).toLocaleDateString([], { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
+            </span>
+            <span style={{ fontSize: 11, color: 'var(--fg-3)', marginLeft: 4 }}>
+              O:{fmtChartPrice(hovered.o)} H:{fmtChartPrice(hovered.h)} L:{fmtChartPrice(hovered.l)}
+            </span>
+            <span className="price-chart-tip-val"
+                  style={{ color: hovered.c >= (hovered.o || hovered.c) ? 'var(--green-600)' : 'var(--red-600)' }}>
+              C:{fmtChartPrice(hovered.c)}
+            </span>
+          </>
+        ) : (
+          <span style={{ color: 'var(--fg-4)', fontSize: 12 }}>{n} candles · hover to inspect</span>
+        )}
+      </div>
+
+      <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className="linechart-svg"
+        onMouseMove={e => {
+          const svg = svgRef.current;
+          if (!svg) return;
+          const rect = svg.getBoundingClientRect();
+          const mx = (e.clientX - rect.left) * (W / rect.width) - PAD.l;
+          setHoverIdx(Math.max(0, Math.min(n - 1, Math.floor(mx / step))));
+        }}
+        onMouseLeave={() => setHoverIdx(null)}>
+
+        {/* Y gridlines */}
+        {yTicks.map((tk, i) => (
+          <g key={i}>
+            <line x1={PAD.l} x2={W - PAD.r} y1={tk.y.toFixed(1)} y2={tk.y.toFixed(1)}
+                  stroke="var(--border-1)" strokeWidth="0.8" strokeDasharray="3 5" />
+            <text x={PAD.l - 6} y={tk.y + 4} textAnchor="end" fontSize="9.5"
+                  fill="var(--fg-4)" fontFamily="var(--font-mono)">
+              {fmtChartPrice(tk.v)}
+            </text>
+          </g>
+        ))}
+
+        <line x1={PAD.l} x2={W - PAD.r} y1={PAD.t + iH} y2={PAD.t + iH}
+              stroke="var(--border-2)" strokeWidth="0.8" />
+
+        {/* X labels */}
+        {xLabels.map(({ i, label }) => (
+          <text key={i} x={xOf(i).toFixed(1)} y={H - 4} textAnchor="middle"
+                fontSize="9.5" fill="var(--fg-4)" fontFamily="var(--font-mono)">
+            {label}
+          </text>
+        ))}
+
+        {/* Candles */}
+        {display.map((b, i) => {
+          const up  = b.c >= (b.o ?? b.c);
+          const col = up ? 'var(--green-600)' : 'var(--red-600)';
+          const cx  = xOf(i);
+          const bTop = yOf(Math.max(b.o ?? b.c, b.c));
+          const bBot = yOf(Math.min(b.o ?? b.c, b.c));
+          const bH   = Math.max(1, bBot - bTop);
+          return (
+            <g key={i}>
+              <line x1={cx.toFixed(1)} x2={cx.toFixed(1)}
+                    y1={yOf(b.h ?? b.c).toFixed(1)} y2={yOf(b.l ?? b.c).toFixed(1)}
+                    stroke={col} strokeWidth={i === hoverIdx ? 1.5 : 0.9} />
+              <rect x={(cx - cw / 2).toFixed(1)} y={bTop.toFixed(1)}
+                    width={cw.toFixed(1)} height={bH.toFixed(1)}
+                    fill={col} opacity={i === hoverIdx ? 1 : 0.85} />
+            </g>
+          );
+        })}
+
+        {hoverIdx != null && (
+          <line x1={xOf(hoverIdx).toFixed(1)} x2={xOf(hoverIdx).toFixed(1)}
+                y1={PAD.t} y2={PAD.t + iH}
+                stroke="var(--fg-3)" strokeWidth="0.8" strokeDasharray="3 4" />
+        )}
+      </svg>
+    </div>
+  );
+}
+
+// ── Line chart (price modal) ──────────────────────────────────────────────────
 
 function PriceLineChart({ points, range }) {
   const [hoverIdx, setHoverIdx] = React.useState(null);
@@ -99,7 +234,6 @@ function PriceLineChart({ points, range }) {
     v: yMin + f * ySpan,
   }));
 
-  // pick ~4 evenly spaced x-axis labels
   const xStep = Math.max(1, Math.floor(points.length / 4));
   const xTicks = [];
   for (let i = 0; i < points.length; i += xStep) {
@@ -124,7 +258,6 @@ function PriceLineChart({ points, range }) {
 
   return (
     <div>
-      {/* Hover tooltip row */}
       <div className="price-chart-tip">
         {hovered ? (
           <>
@@ -150,7 +283,6 @@ function PriceLineChart({ points, range }) {
           </linearGradient>
         </defs>
 
-        {/* Y-axis gridlines + labels */}
         {yTicks.map((tk, i) => (
           <g key={i}>
             <line x1={PAD.l} x2={W - PAD.r} y1={tk.y.toFixed(1)} y2={tk.y.toFixed(1)}
@@ -162,11 +294,9 @@ function PriceLineChart({ points, range }) {
           </g>
         ))}
 
-        {/* X-axis baseline */}
         <line x1={PAD.l} x2={W - PAD.r} y1={PAD.t + iH} y2={PAD.t + iH}
               stroke="var(--border-2)" strokeWidth="0.8" />
 
-        {/* X-axis date labels */}
         {xTicks.map((idx, i) => {
           const anchor = i === 0 ? 'start' : i === xTicks.length - 1 ? 'end' : 'middle';
           return (
@@ -177,14 +307,10 @@ function PriceLineChart({ points, range }) {
           );
         })}
 
-        {/* Gradient fill */}
         <path d={areaD} fill={`url(#${gradId})`} />
-
-        {/* Price line */}
         <path d={lineD} fill="none" stroke={color} strokeWidth="2"
               strokeLinejoin="round" strokeLinecap="round" />
 
-        {/* Hover crosshair + dot */}
         {hovered && (
           <g>
             <line x1={xOf(hoverIdx).toFixed(1)} x2={xOf(hoverIdx).toFixed(1)}
@@ -199,6 +325,8 @@ function PriceLineChart({ points, range }) {
   );
 }
 
+// ── Modal ─────────────────────────────────────────────────────────────────────
+
 function PriceChartModal({ classKey, name, onClose }) {
   const symbol = resolveChartSymbol(classKey, name);
   const [rangeIdx, setRangeIdx] = React.useState(2); // default 1M
@@ -206,6 +334,7 @@ function PriceChartModal({ classKey, name, onClose }) {
   const [loading, setLoading]       = React.useState(false);
   const [error, setError]           = React.useState(null);
   const [cachedAt, setCachedAt]     = React.useState(null);
+  const [chartType, setChartType]   = React.useState('line'); // 'line' | 'candle'
 
   const opt = RANGE_OPTS[rangeIdx];
 
@@ -237,10 +366,14 @@ function PriceChartModal({ classKey, name, onClose }) {
   const points     = chartData?.points || [];
   const price      = chartData?.price;
   const ccy        = chartData?.currency || cls.ccy || '';
-  const firstClose = points[0]?.c;
   const lastClose  = points[points.length - 1]?.c ?? price;
-  const change     = lastClose != null && firstClose != null ? lastClose - firstClose : null;
-  const changePct  = change != null && firstClose ? (change / firstClose) * 100 : null;
+
+  // Fix: use prevClose from API for accurate day change on 1D range
+  const baseline = opt.range === '1d'
+    ? (chartData?.prevClose ?? points[0]?.c)
+    : points[0]?.c;
+  const change     = lastClose != null && baseline != null ? lastClose - baseline : null;
+  const changePct  = change != null && baseline ? (change / baseline) * 100 : null;
   const isUp       = change == null ? null : change >= 0;
 
   const displayName = classKey === 'crypto' ? name.replace(/THB$/, '') : name;
@@ -263,6 +396,9 @@ function PriceChartModal({ classKey, name, onClose }) {
     );
   }
 
+  // For candle chart, convert points to candle-compatible format (t already in ms)
+  const candleBars = points.filter(p => p.h != null && p.l != null && p.o != null);
+
   return (
     <Modal open onClose={onClose}
            title={displayName}
@@ -281,12 +417,15 @@ function PriceChartModal({ classKey, name, onClose }) {
           <span style={{ fontSize: 13, fontWeight: 600, color: isUp ? 'var(--green-600)' : 'var(--red-600)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
             {isUp ? '+' : ''}{fmtChartPrice(change)}
             {' '}({isUp ? '+' : ''}{changePct.toFixed(2)}%)
+            <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--fg-3)', marginLeft: 6 }}>
+              {opt.range === '1d' ? 'vs prev close' : `vs ${opt.label} ago`}
+            </span>
           </span>
         )}
       </div>
 
-      {/* Range selector + refresh */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+      {/* Range selector + chart type toggle + refresh */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
         <div className="range-btns">
           {RANGE_OPTS.map((r, i) => (
             <button key={r.range}
@@ -296,6 +435,12 @@ function PriceChartModal({ classKey, name, onClose }) {
             </button>
           ))}
         </div>
+        {candleBars.length > 1 && (
+          <div className="pill-toggle" style={{ flexShrink: 0 }}>
+            <button className={chartType === 'line'   ? 'on' : ''} onClick={() => setChartType('line')}>Line</button>
+            <button className={chartType === 'candle' ? 'on' : ''} onClick={() => setChartType('candle')}>Candle</button>
+          </div>
+        )}
         <div style={{ flex: 1 }} />
         {cachedAt && (
           <span style={{ fontSize: 11, color: 'var(--fg-4)' }}>
@@ -319,12 +464,16 @@ function PriceChartModal({ classKey, name, onClose }) {
           <span>Could not load chart data: {error}</span>
         </div>
       )}
-      {!error && chartData && (
+      {!error && chartData && chartType === 'line' && (
         <PriceLineChart points={points} range={opt.range} />
+      )}
+      {!error && chartData && chartType === 'candle' && candleBars.length > 1 && (
+        <CandleChart bars={candleBars} />
       )}
     </Modal>
   );
 }
 
-window.PriceChartModal   = PriceChartModal;
+window.PriceChartModal    = PriceChartModal;
 window.resolveChartSymbol = resolveChartSymbol;
+window.CandleChart        = CandleChart;

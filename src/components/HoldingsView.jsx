@@ -169,7 +169,7 @@ function SectorChip({ position, classKey }) {
 function LotRows({ position, classKey, ccy, onEdit }) {
   return (
     <tr className="lotrow">
-      <td colSpan={9}>
+      <td colSpan={11}>
         <div className="lotinner">
           <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
             <table className="lottable">
@@ -265,6 +265,85 @@ function ClassAnalysis({ classKey }) {
   );
 }
 
+// ── Bento Box View ────────────────────────────────────────────────────────────
+
+function getDayChangeBg(pct, totalPct) {
+  // Use day change if available, fallback to total P/L %
+  const v = pct != null ? pct : totalPct;
+  if (v == null) return { bg: 'var(--bg-sunken)', text: 'var(--fg-2)', border: 'var(--border-1)' };
+  if (v >= 3)   return { bg: 'rgba(48,209,88,0.72)',  text: '#fff', border: 'transparent' };
+  if (v >= 0)   return { bg: 'rgba(48,209,88,0.20)',  text: 'var(--fg-1)', border: 'rgba(48,209,88,0.3)' };
+  if (v >= -3)  return { bg: 'rgba(255,69,58,0.20)',  text: 'var(--fg-1)', border: 'rgba(255,69,58,0.3)' };
+  return              { bg: 'rgba(255,69,58,0.72)',  text: '#fff', border: 'transparent' };
+}
+
+function BentoView({ classKey }) {
+  const positions  = Store.positions(classKey);
+  const cls        = Store.classByKey(classKey);
+  const grandTotal = Store.grandTotals().value;
+  const settings   = Store.settings();
+  const sym        = window.ccySymbol(settings.displayCcy);
+
+  if (!positions.length) return (
+    <div className="empty" style={{ padding: '40px 20px' }}>No holdings yet.</div>
+  );
+
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: 4 }}>
+      {positions.map(p => {
+        const value     = Store.toDisplay(p.value, cls.ccy);
+        const portPct   = grandTotal > 0 ? (value / grandTotal) * 100 : 0;
+        const dayPct    = Store.dayChangePct(classKey, p.name);
+        const colors    = getDayChangeBg(dayPct, p.pct);
+        const dispName  = p.name.replace(/THB$/, '');
+        const minFlex   = Math.max(portPct, 3);
+
+        return (
+          <div key={p.name} style={{
+            flex: `${minFlex} 0 auto`,
+            minWidth: 88,
+            maxWidth: 220,
+            minHeight: 90,
+            background: colors.bg,
+            border: `1px solid ${colors.border}`,
+            borderRadius: 14,
+            padding: '12px 14px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            transition: 'opacity 0.15s',
+            cursor: 'default',
+            boxSizing: 'border-box',
+          }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: colors.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {dispName}
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: colors.text, opacity: 0.75, marginBottom: 2 }}>
+                {portPct.toFixed(1)}% of portfolio
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: colors.text, fontVariantNumeric: 'tabular-nums' }}>
+                {sym}{window.fmtBig(value)}
+              </div>
+              {dayPct != null ? (
+                <div style={{ fontSize: 13, fontWeight: 700, color: colors.text, marginTop: 2 }}>
+                  {dayPct >= 0 ? '+' : ''}{dayPct.toFixed(2)}% today
+                </div>
+              ) : (
+                <div style={{ fontSize: 11, color: colors.text, opacity: 0.6, marginTop: 2 }}>
+                  {p.pct >= 0 ? '+' : ''}{p.pct.toFixed(2)}% total
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Holdings table + view ─────────────────────────────────────────────────────
+
 function HoldingsView({ classKey, onAdd, onEditLot }) {
   const cls       = Store.classByKey(classKey);
   const settings  = Store.settings();
@@ -273,14 +352,16 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
   const [expanded, setExpanded] = React.useState({});
   const [q, setQ] = React.useState('');
   const [chartName, setChartName] = React.useState(null);
+  const [techSymbol, setTechSymbol] = React.useState(null);
+  const [viewMode, setViewMode] = React.useState('table'); // 'table' | 'bento'
   const { sortBy, sortDir, handleSort } = useSortState();
 
-  const hasChart = cls.live && cls.live !== 'settrade';
-
-  const isLive  = !!cls.live;
-  const isOther  = classKey === 'other';
-  const isCrypto = classKey === 'crypto';
-  const liveNow = cls.live === 'crypto' || (isLive && Store.get().priceMode === 'api');
+  const hasChart   = cls.live && cls.live !== 'settrade';
+  const hasDayChg  = !!cls.live; // all live-price classes show day change
+  const isLive     = !!cls.live;
+  const isOther    = classKey === 'other';
+  const isCrypto   = classKey === 'crypto';
+  const liveNow    = cls.live === 'crypto' || (isLive && Store.get().priceMode === 'api');
 
   const filtered = positions.filter(p =>
     p.name.toLowerCase().includes(q.toLowerCase()) ||
@@ -294,6 +375,12 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
     if (typeof av === 'string') return sortDir * bv.localeCompare(av);
     return sortDir * (bv - av);
   }) : filtered;
+
+  // Resolve Yahoo symbol for technical modal
+  function openTechnical(name) {
+    const sym = window.resolveChartSymbol && window.resolveChartSymbol(classKey, name);
+    if (sym) setTechSymbol(sym);
+  }
 
   return (
     <React.Fragment>
@@ -311,7 +398,14 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
             {!isOther && ' · click a current price to set it manually'}
           </div>
         </div>
-        <Button variant="accent" icon="plus" onClick={() => onAdd(classKey)}>Add holding</Button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {/* View toggle */}
+          <div className="pill-toggle" style={{ flexShrink: 0 }}>
+            <button className={viewMode === 'table' ? 'on' : ''} onClick={() => setViewMode('table')}>Table</button>
+            <button className={viewMode === 'bento' ? 'on' : ''} onClick={() => setViewMode('bento')}>Bento</button>
+          </div>
+          <Button variant="accent" icon="plus" onClick={() => onAdd(classKey)}>Add holding</Button>
+        </div>
       </div>
 
       {/* Class summary strip */}
@@ -336,83 +430,127 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
 
       <ClassAnalysis classKey={classKey} />
 
-      <div className="toolbar2">
-        <div className="search-inp">
-          <Icon name="search" size={14} />
-          <input placeholder={'Search ' + cls.label + '…'} value={q} onChange={e => setQ(e.target.value)} />
+      {/* ── Bento view ── */}
+      {viewMode === 'bento' && (
+        <div className="card" style={{ marginBottom: 18 }}>
+          <div className="card-h">
+            <div>
+              <div className="t">Portfolio Bento</div>
+              <div className="s">Box size = portfolio weight · color = today's return</div>
+            </div>
+          </div>
+          <div className="card-b">
+            <BentoView classKey={classKey} />
+          </div>
         </div>
-        <div className="grow" />
-        <span className="t-small">{filtered.length} of {positions.length}</span>
-      </div>
+      )}
 
-      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
-        <table className="ptable">
-          <thead>
-            <tr>
-              <SortTh col="name"     label={isOther ? 'Name' : 'Ticker'}      sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
-              <SortTh col="sector"   label={isOther ? 'Type' : 'Sector'}       sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
-              <th>Tags</th>
-              <SortTh col="qty"      label="Units"    right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
-              <SortTh col="avgPrice" label="Avg cost" right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
-              <SortTh col="cur"      label="Current"  right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
-              <SortTh col="value"    label="Value"    right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
-              <SortTh col="profit"   label="P/L"      right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
-              <SortTh col="pct"      label="%"        right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
-            </tr>
-          </thead>
-          <tbody>
-            {sortedFiltered.length === 0 && (
-              <tr><td colSpan={9}><div className="empty">No holdings yet. <a className="t-link" onClick={() => onAdd(classKey)}>Add your first one →</a></div></td></tr>
-            )}
-            {sortedFiltered.map(p => {
-              const color = window.CLASS_COLORS[classKey];
-              const open  = !!expanded[p.name];
-              return (
-                <React.Fragment key={p.name}>
-                  <tr className="pos" onClick={() => toggle(p.name)}>
-                    <td>
-                      <span className={'tk' + (open ? ' open' : '')}>
-                        <span className="caret"><Icon name="chev-r" size={14} /></span>
-                        <span className="av" style={{ background: color }}>{p.name.replace(/THB$/, '').slice(0, 3).toUpperCase()}</span>
-                        <span>
-                          {p.name.replace(/THB$/, '')}
-                          {p.lots.length > 1 && <span style={{ font: '500 11px/1 var(--font-mono)', color: 'var(--fg-4)', marginLeft: 7 }}>{p.lots.length} lots</span>}
-                        </span>
-                        {hasChart && (
-                          <button className="chart-open-btn" title="Price chart"
-                                  onClick={e => { e.stopPropagation(); setChartName(p.name); }}>
-                            <Icon name="bar-chart-2" size={12} />
-                          </button>
+      {/* ── Table view ── */}
+      {viewMode === 'table' && (
+        <React.Fragment>
+          <div className="toolbar2">
+            <div className="search-inp">
+              <Icon name="search" size={14} />
+              <input placeholder={'Search ' + cls.label + '…'} value={q} onChange={e => setQ(e.target.value)} />
+            </div>
+            <div className="grow" />
+            <span className="t-small">{filtered.length} of {positions.length}</span>
+          </div>
+
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
+            <table className="ptable">
+              <thead>
+                <tr>
+                  <SortTh col="name"     label={isOther ? 'Name' : 'Ticker'}      sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                  <SortTh col="sector"   label={isOther ? 'Type' : 'Sector'}       sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                  <th>Tags</th>
+                  <SortTh col="qty"      label="Units"    right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                  <SortTh col="avgPrice" label="Avg cost" right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                  <SortTh col="cur"      label="Current"  right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                  {hasDayChg && !isOther && <th className="num" style={{ whiteSpace: 'nowrap' }}>% Day</th>}
+                  <SortTh col="value"    label="Value"    right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                  <SortTh col="profit"   label="P/L"      right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                  <SortTh col="pct"      label="%"        right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                </tr>
+              </thead>
+              <tbody>
+                {sortedFiltered.length === 0 && (
+                  <tr><td colSpan={hasDayChg && !isOther ? 10 : 9}><div className="empty">No holdings yet. <a className="t-link" onClick={() => onAdd(classKey)}>Add your first one →</a></div></td></tr>
+                )}
+                {sortedFiltered.map(p => {
+                  const color   = window.CLASS_COLORS[classKey];
+                  const open    = !!expanded[p.name];
+                  const dayPct  = hasDayChg && !isOther ? Store.dayChangePct(classKey, p.name) : null;
+                  const techSym = hasChart ? (window.resolveChartSymbol && window.resolveChartSymbol(classKey, p.name)) : null;
+
+                  return (
+                    <React.Fragment key={p.name}>
+                      <tr className="pos" onClick={() => toggle(p.name)}>
+                        <td>
+                          <span className={'tk' + (open ? ' open' : '')}>
+                            <span className="caret"><Icon name="chev-r" size={14} /></span>
+                            <span className="av" style={{ background: color }}>{p.name.replace(/THB$/, '').slice(0, 3).toUpperCase()}</span>
+                            <span>
+                              {p.name.replace(/THB$/, '')}
+                              {p.lots.length > 1 && <span style={{ font: '500 11px/1 var(--font-mono)', color: 'var(--fg-4)', marginLeft: 7 }}>{p.lots.length} lots</span>}
+                            </span>
+                            {hasChart && (
+                              <button className="chart-open-btn" title="Price chart"
+                                      onClick={e => { e.stopPropagation(); setChartName(p.name); }}>
+                                <Icon name="bar-chart-2" size={12} />
+                              </button>
+                            )}
+                            {techSym && (
+                              <button className="chart-open-btn" title="Technical analysis"
+                                      style={{ color: 'var(--accent)' }}
+                                      onClick={e => { e.stopPropagation(); setTechSymbol(techSym); }}>
+                                <Icon name="activity" size={12} />
+                              </button>
+                            )}
+                          </span>
+                        </td>
+                        <td onClick={e => e.stopPropagation()}>
+                          {isOther ? <span className="tag">{p.type || '—'}</span> : isCrypto ? <span className="tag">Crypto</span> : <SectorChip position={p} classKey={classKey} />}
+                        </td>
+                        <td onClick={e => e.stopPropagation()}>
+                          <PositionTagCell classKey={classKey} positionName={p.name} />
+                        </td>
+                        <td className="num">{window.fmtQty(p.qty)}</td>
+                        <td className="num" style={{ color: 'var(--fg-3)' }}>{window.fmtPrice(p.avgPrice, cls.ccy)}</td>
+                        <td className="num" onClick={e => e.stopPropagation()}>
+                          <PriceEdit position={p} classKey={classKey} ccy={cls.ccy} />
+                          <PrePostBadge classKey={classKey} name={p.name} ccy={cls.ccy} />
+                        </td>
+                        {hasDayChg && !isOther && (
+                          <td className="num">
+                            {dayPct != null
+                              ? <span className={dayPct >= 0 ? 'up' : 'down'} style={{ fontWeight: 600, fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
+                                  {dayPct >= 0 ? '+' : ''}{dayPct.toFixed(2)}%
+                                </span>
+                              : <span style={{ color: 'var(--fg-4)', fontSize: 11 }}>—</span>
+                            }
+                          </td>
                         )}
-                      </span>
-                    </td>
-                    <td onClick={e => e.stopPropagation()}>
-                      {isOther ? <span className="tag">{p.type || '—'}</span> : isCrypto ? <span className="tag">Crypto</span> : <SectorChip position={p} classKey={classKey} />}
-                    </td>
-                    <td onClick={e => e.stopPropagation()}>
-                      <PositionTagCell classKey={classKey} positionName={p.name} />
-                    </td>
-                    <td className="num">{window.fmtQty(p.qty)}</td>
-                    <td className="num" style={{ color: 'var(--fg-3)' }}>{window.fmtPrice(p.avgPrice, cls.ccy)}</td>
-                    <td className="num" onClick={e => e.stopPropagation()}>
-                      <PriceEdit position={p} classKey={classKey} ccy={cls.ccy} />
-                      <PrePostBadge classKey={classKey} name={p.name} ccy={cls.ccy} />
-                    </td>
-                    <td className="num">{window.fmtMoney(p.value, cls.ccy, 2)}</td>
-                    <td className={'num ' + (p.profit >= 0 ? 'up' : 'down')}>{(p.profit >= 0 ? '+' : '−') + window.fmtMoney(Math.abs(p.profit), cls.ccy, 0)}</td>
-                    <td className={'num ' + (p.profit >= 0 ? 'up' : 'down')}>{window.fmtPct(p.pct)}</td>
-                  </tr>
-                  {open && <LotRows position={p} classKey={classKey} ccy={cls.ccy} onEdit={onEditLot} />}
-                </React.Fragment>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                        <td className="num">{window.fmtMoney(p.value, cls.ccy, 2)}</td>
+                        <td className={'num ' + (p.profit >= 0 ? 'up' : 'down')}>{(p.profit >= 0 ? '+' : '−') + window.fmtMoney(Math.abs(p.profit), cls.ccy, 0)}</td>
+                        <td className={'num ' + (p.profit >= 0 ? 'up' : 'down')}>{window.fmtPct(p.pct)}</td>
+                      </tr>
+                      {open && <LotRows position={p} classKey={classKey} ccy={cls.ccy} onEdit={onEditLot} />}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </React.Fragment>
+      )}
     </div>
 
     {chartName && (
       <PriceChartModal classKey={classKey} name={chartName} onClose={() => setChartName(null)} />
+    )}
+    {techSymbol && (
+      <TechnicalModal symbol={techSymbol} onClose={() => setTechSymbol(null)} />
     )}
     </React.Fragment>
   );

@@ -636,7 +636,12 @@ body { background: var(--bg-app); display: block; padding: 0; }
 @keyframes px-idle   { 0%,100% { transform: translateY(0) scaleX(1); } 40% { transform: translateY(-1px); } 80% { transform: translateY(0) scaleX(-1); } }
 @keyframes px-ticker { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
 @keyframes px-blink  { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
-@keyframes px-bubble-in { 0% { opacity:0; transform: scale(.8) translateY(4px); } 100% { opacity:1; transform: scale(1) translateY(0); } }
+@keyframes px-bubble-in  { 0% { opacity:0; transform: scale(.8) translateY(4px); } 100% { opacity:1; transform: scale(1) translateY(0); } }
+@keyframes px-svg-bubble { 0% { opacity:0; } 15% { opacity:1; } 80% { opacity:1; } 100% { opacity:0; } }
+@keyframes px-char-bob  { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-2px); } }
+@keyframes px-char-sway { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-1px); } }
+.px-char-walk { animation: px-char-bob  0.32s steps(2,end) infinite; }
+.px-char-idle { animation: px-char-sway 2.4s  ease-in-out   infinite; }
 
 .px-anim-bob    { animation: px-bob    2s ease-in-out infinite; display: inline-block; }
 .px-anim-jump   { animation: px-jump   0.8s ease-in-out infinite; display: inline-block; }
@@ -1412,4 +1417,24 @@ body { background: var(--bg-app); display: block; padding: 0; }
 }
 @media (max-width: 480px) {
   .t-h1 { font-size: 17px; }
+}
+
+/* ============================================================================
+   Candle chart + price chart additions
+   ============================================================================ */
+.linechart-svg { width: 100%; display: block; max-height: 240px; }
+
+/* Range buttons used in PriceChartModal */
+.range-btns { display: inline-flex; gap: 2px; background: var(--bg-sunken); border: 1px solid var(--border-1); border-radius: 9px; padding: 3px; }
+.range-btns button { border: 0; background: transparent; padding: 5px 10px; font: 600 11px/1 var(--font-mono); color: var(--fg-3); border-radius: 6px; cursor: pointer; white-space: nowrap; }
+.range-btns button.on { background: var(--bg-surface); color: var(--fg-1); box-shadow: var(--shadow-sm, 0 1px 4px rgba(0,0,0,0.12)); }
+
+/* Sell log — ensure grid inputs don't overflow on mobile */
+.mgrid > div { min-width: 0; }
+.mgrid input, .mgrid select { max-width: 100%; box-sizing: border-box; }
+
+/* Bento box container responsive */
+@media (max-width: 600px) {
+  .range-btns { flex-wrap: wrap; }
+  .range-btns button { padding: 5px 8px; font-size: 10px; }
 }

@@ -7,6 +7,35 @@ function resolveWlChart(item) {
   return                             { classKey: 'usaStock', name: item.ticker };
 }
 
+// Resolve Yahoo Finance symbol for technical modal
+function resolveWlTechSymbol(item) {
+  if (item.type === 'crypto') {
+    const m = window.CRYPTO_MAP && window.CRYPTO_MAP[item.ticker];
+    return m ? `${m.sym}-USD` : null;
+  }
+  return item.ticker; // stocks/ETFs use ticker directly
+}
+
+// Check if any relevant market is currently open
+function isAnyMarketOpen() {
+  const d = new Date();
+  const day = d.getUTCDay(); // 0=Sun, 6=Sat
+  if (day === 0 || day === 6) return false;
+
+  const h = d.getUTCHours(), m = d.getUTCMinutes();
+  const utcMin = h * 60 + m;
+
+  // Thai SET (UTC+7): morning 10:00-12:30, afternoon 14:30-16:30
+  // => UTC: 03:00-05:30 and 07:30-09:30
+  const thaiOpen = (utcMin >= 180 && utcMin < 330) || (utcMin >= 450 && utcMin < 570);
+
+  // US NYSE/NASDAQ 9:30-16:00 ET. EST = UTC-5, EDT = UTC-4
+  // Conservative window: 13:00-21:00 UTC
+  const usOpen = utcMin >= 780 && utcMin < 1260;
+
+  return thaiOpen || usOpen;
+}
+
 // ── API helpers ───────────────────────────────────────────────────────────────
 async function dbLoad() {
   try {
@@ -26,11 +55,11 @@ async function dbSave(items) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, items: minimal }),
     });
-  } catch (_) { /* non-critical — items are still visible in state */ }
+  } catch (_) {}
 }
 
 // ── Single watchlist card ─────────────────────────────────────────────────────
-function WatchlistCard({ item, onRemove, onChart }) {
+function WatchlistCard({ item, onRemove, onChart, onTechnical }) {
   const hasPrice = item.price != null;
   const isUp     = (item.chgPct || 0) >= 0;
 
@@ -45,10 +74,20 @@ function WatchlistCard({ item, onRemove, onChart }) {
             </div>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           <span className={'wl-type-badge wl-type-' + item.type}>
             {item.type === 'crypto' ? 'CRYPTO' : 'STOCK/ETF'}
           </span>
+          {onTechnical && (
+            <button
+              className="wl-remove-btn"
+              style={{ color: 'var(--accent)' }}
+              onClick={e => { e.stopPropagation(); onTechnical(); }}
+              title="Technical analysis"
+            >
+              <Icon name="activity" size={13} />
+            </button>
+          )}
           <button
             className="wl-remove-btn"
             onClick={e => { e.stopPropagation(); onRemove(item.ticker); }}
@@ -110,6 +149,12 @@ function WatchlistView() {
   const [addErr,    setAddErr]    = React.useState('');
   const [filter,    setFilter]    = React.useState('all');
   const [chartItem, setChartItem] = React.useState(null);
+  const [techSym,   setTechSym]   = React.useState(null);
+  const [marketOpen, setMarketOpen] = React.useState(isAnyMarketOpen());
+  const itemsRef = React.useRef(items);
+
+  // Keep ref in sync for auto-refresh closure
+  React.useEffect(() => { itemsRef.current = items; }, [items]);
 
   // Load from DB on mount, then immediately fetch live prices
   React.useEffect(() => {
@@ -124,6 +169,27 @@ function WatchlistView() {
       }
     });
   }, []);
+
+  // Auto-refresh every minute when market is open
+  React.useEffect(() => {
+    const checkMarket = () => setMarketOpen(isAnyMarketOpen());
+    const marketTimer = setInterval(checkMarket, 60000);
+
+    let refreshTimer = null;
+    if (marketOpen) {
+      refreshTimer = setInterval(async () => {
+        const current = itemsRef.current;
+        if (!current.length) return;
+        const updated = await fetchPricesFor(current);
+        setItems(updated);
+      }, 60000);
+    }
+
+    return () => {
+      clearInterval(marketTimer);
+      if (refreshTimer) clearInterval(refreshTimer);
+    };
+  }, [marketOpen]);
 
   const normalTicker = ticker.trim().toUpperCase();
 
@@ -156,11 +222,27 @@ function WatchlistView() {
       const now    = Date.now();
 
       return list.map(item => {
-        const raw = data.prices['watchlist:' + item.ticker];
+        const k      = 'watchlist:' + item.ticker;
+        const raw    = data.prices[k];
         if (raw == null) return item;
-        const priceUsd = item.type === 'crypto' ? raw / usdthb : raw;
-        const prePost  = (data.prePost && data.prePost['watchlist:' + item.ticker]) || null;
-        return { ...item, price: priceUsd, updatedAt: now, prePost };
+
+        const priceUsd  = item.type === 'crypto' ? raw / usdthb : raw;
+        const prePost   = (data.prePost   && data.prePost[k])   || null;
+        const prevClose = (data.prevCloses && data.prevCloses[k]) ?? null;
+
+        // Compute day change % from prevClose
+        let chgPct = null;
+        if (prevClose != null && prevClose !== 0) {
+          if (item.type === 'crypto') {
+            // prevClose is in THB; raw is in THB → convert both to USD for % (same result)
+            const prevCloseUsd = prevClose / usdthb;
+            chgPct = ((priceUsd - prevCloseUsd) / prevCloseUsd) * 100;
+          } else {
+            chgPct = ((priceUsd - prevClose) / prevClose) * 100;
+          }
+        }
+
+        return { ...item, price: priceUsd, chgPct, updatedAt: now, prePost };
       });
     } catch (_) { return list; }
   }
@@ -212,8 +294,15 @@ function WatchlistView() {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         <div>
           <h1 className="t-h1" style={{ margin: '0 0 2px' }}>Watchlist</h1>
-          <div className="t-small">
+          <div className="t-small" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             Track US stocks, ETFs &amp; crypto · {items.length} item{items.length !== 1 ? 's' : ''}
+            {marketOpen
+              ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--green-600)', fontWeight: 600 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green-600)', animation: 'pulse 2s infinite', display: 'inline-block' }} />
+                  Market open · auto-refresh 1m
+                </span>
+              : <span style={{ fontSize: 11, color: 'var(--fg-4)' }}>Market closed</span>
+            }
           </div>
         </div>
         <Button variant="secondary" size="sm" icon="refresh-cw" onClick={handleRefresh} disabled={loading || !items.length}>
@@ -276,14 +365,18 @@ function WatchlistView() {
         </div>
       ) : (
         <div className="wl-grid">
-          {displayed.map(item => (
-            <WatchlistCard
-              key={item.ticker}
-              item={item}
-              onRemove={handleRemove}
-              onChart={() => setChartItem(item)}
-            />
-          ))}
+          {displayed.map(item => {
+            const techSymbol = resolveWlTechSymbol(item);
+            return (
+              <WatchlistCard
+                key={item.ticker}
+                item={item}
+                onRemove={handleRemove}
+                onChart={() => setChartItem(item)}
+                onTechnical={techSymbol ? () => setTechSym(techSymbol) : null}
+              />
+            );
+          })}
         </div>
       )}
 
@@ -294,6 +387,11 @@ function WatchlistView() {
           name={chart.name}
           onClose={() => setChartItem(null)}
         />
+      )}
+
+      {/* Technical modal */}
+      {techSym && (
+        <TechnicalModal symbol={techSym} onClose={() => setTechSym(null)} />
       )}
     </div>
   );

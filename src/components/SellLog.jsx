@@ -132,21 +132,21 @@ function SellLogView() {
             <div className="s">Fill in sale details — buy price auto-fills from avg cost</div>
           </div>
           <div className="card-b">
-            <div className="mgrid">
-              <div>
+            <div className="mgrid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
+              <div style={{ minWidth: 0 }}>
                 <label className="flabel">Asset Class</label>
-                <select className="input" value={classKey} onChange={e => setClassKey(e.target.value)}>
+                <select className="input" style={{ width: '100%', minWidth: 0, boxSizing: 'border-box' }} value={classKey} onChange={e => setClassKey(e.target.value)}>
                   {window.ASSET_CLASSES.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
                 </select>
               </div>
-              <div>
+              <div style={{ minWidth: 0 }}>
                 <label className="flabel">Sale Date</label>
-                <input className="input" type="date" value={date} onChange={e => setDate(e.target.value)} />
+                <input className="input" type="date" style={{ width: '100%', minWidth: 0, boxSizing: 'border-box' }} value={date} onChange={e => setDate(e.target.value)} />
               </div>
 
-              <div className="full">
+              <div className="full" style={{ minWidth: 0 }}>
                 <label className="flabel">Ticker / Asset Name</label>
-                <input className="input" value={name} onChange={e => setName(e.target.value)}
+                <input className="input" style={{ width: '100%', minWidth: 0, boxSizing: 'border-box' }} value={name} onChange={e => setName(e.target.value)}
                        list="sell-ticker-list"
                        placeholder={posInClass[0] ? 'e.g. ' + posInClass[0].name : 'e.g. AAPL'} />
                 <datalist id="sell-ticker-list">
@@ -164,20 +164,20 @@ function SellLogView() {
                 )}
               </div>
 
-              <div>
+              <div style={{ minWidth: 0 }}>
                 <label className="flabel">Buy Price ({cls?.ccy})</label>
-                <input className="input" type="number" step="any" value={buyPrice}
+                <input className="input" type="number" step="any" style={{ width: '100%', minWidth: 0, boxSizing: 'border-box' }} value={buyPrice}
                        onChange={e => setBuyPrice(e.target.value)} placeholder="Cost per unit" />
               </div>
-              <div>
+              <div style={{ minWidth: 0 }}>
                 <label className="flabel">Sell Price ({cls?.ccy})</label>
-                <input className="input" type="number" step="any" value={sellPrice}
+                <input className="input" type="number" step="any" style={{ width: '100%', minWidth: 0, boxSizing: 'border-box' }} value={sellPrice}
                        onChange={e => setSellPrice(e.target.value)} placeholder="Sale price per unit" />
               </div>
 
-              <div className="full">
+              <div className="full" style={{ minWidth: 0 }}>
                 <label className="flabel">Quantity / Units Sold</label>
-                <input className="input" type="number" step="any" value={qty}
+                <input className="input" type="number" step="any" style={{ width: '100%', minWidth: 0, boxSizing: 'border-box' }} value={qty}
                        onChange={e => setQty(e.target.value)} placeholder="Number of units sold" />
                 {overQty && (
                   <div className="t-small" style={{ marginTop: 5, color: '#f59e0b' }}>

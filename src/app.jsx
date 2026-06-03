@@ -325,6 +325,90 @@ function SummaryView() {
   );
 }
 
+// ── Sector drill-down modal ───────────────────────────────────────────────────
+function SectorDrillModal({ sector, color, onClose }) {
+  const settings = Store.settings();
+  const sym      = window.ccySymbol(settings.displayCcy);
+
+  // Gather all positions in this sector, grouped by asset class
+  const byClass = new Map();
+  for (const cls of window.ASSET_CLASSES) {
+    for (const p of Store.positions(cls.key)) {
+      const sec = cls.key === 'crypto' ? 'Crypto' : (p.sector || '—');
+      if (sec !== sector) continue;
+      if (!byClass.has(cls.key)) byClass.set(cls.key, { cls, positions: [] });
+      byClass.get(cls.key).positions.push(p);
+    }
+  }
+
+  const groups = [...byClass.values()];
+  const totalValue = groups.reduce((a, g) =>
+    a + g.positions.reduce((s, p) => s + Store.toDisplay(p.value, g.cls.ccy), 0), 0);
+
+  return (
+    <Modal open onClose={onClose} title={`Sector: ${sector}`} width={640}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+        <span style={{ width: 12, height: 12, borderRadius: 3, background: color, display: 'inline-block' }} />
+        <span style={{ fontSize: 13, color: 'var(--fg-3)' }}>
+          {groups.reduce((a, g) => a + g.positions.length, 0)} positions ·{' '}
+          <strong style={{ color: 'var(--fg-1)' }}>{sym}{window.fmtBig(totalValue)}</strong> total
+        </span>
+      </div>
+
+      {groups.length === 0 && (
+        <div style={{ color: 'var(--fg-3)', fontSize: 13, padding: '20px 0' }}>No positions found in this sector.</div>
+      )}
+
+      {groups.map(({ cls, positions }) => (
+        <div key={cls.key} style={{ marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: window.CLASS_COLORS[cls.key], display: 'inline-block' }} />
+            <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--fg-1)' }}>{cls.label}</span>
+            <span style={{ fontSize: 11, color: 'var(--fg-3)' }}>{positions.length} position{positions.length !== 1 ? 's' : ''}</span>
+          </div>
+          <table className="ptable" style={{ fontSize: 12 }}>
+            <thead>
+              <tr>
+                <th>Ticker</th>
+                <th className="num">Units</th>
+                <th className="num">Current</th>
+                <th className="num">Value</th>
+                <th className="num">P/L</th>
+                <th className="num">%</th>
+              </tr>
+            </thead>
+            <tbody>
+              {positions.map(p => {
+                const dispVal  = Store.toDisplay(p.value, cls.ccy);
+                const dispProf = Store.toDisplay(p.profit, cls.ccy);
+                return (
+                  <tr key={p.name} className="pos">
+                    <td>
+                      <span className="tk">
+                        <span className="av" style={{ background: window.CLASS_COLORS[cls.key] }}>
+                          {p.name.replace(/THB$/, '').slice(0, 3).toUpperCase()}
+                        </span>
+                        {p.name.replace(/THB$/, '')}
+                      </span>
+                    </td>
+                    <td className="num">{window.fmtQty(p.qty)}</td>
+                    <td className="num">{window.fmtPrice(p.cur, cls.ccy)}</td>
+                    <td className="num">{sym}{window.fmtBig(dispVal)}</td>
+                    <td className={'num ' + (p.profit >= 0 ? 'up' : 'down')}>
+                      {(p.profit >= 0 ? '+' : '−')}{sym}{window.fmtBig(Math.abs(dispProf))}
+                    </td>
+                    <td className={'num ' + (p.pct >= 0 ? 'up' : 'down')}>{window.fmtPct(p.pct)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ))}
+    </Modal>
+  );
+}
+
 // ── Allocation by Sector view ─────────────────────────────────────────────────
 function SectorView() {
   const settings   = Store.settings();
@@ -333,6 +417,7 @@ function SectorView() {
   const totalCost  = secs.reduce((a, s) => a + s.cost,  0) || 1;
   const sym        = window.ccySymbol(settings.displayCcy);
   const [hot, setHot] = React.useState(null);
+  const [drillSector, setDrillSector] = React.useState(null);
   const { sortBy, sortDir, handleSort } = useSortState();
 
   const segs = secs.map((s, i) => ({
@@ -351,10 +436,12 @@ function SectorView() {
     return sortDir * (bv - av);
   }) : segs;
 
+  const drillSeg = drillSector ? segs.find(s => s.label === drillSector) : null;
+
   return (
     <div className="page">
       <h1 className="t-h1" style={{ margin: '0 0 2px' }}>Allocation by Sector</h1>
-      <div className="t-small" style={{ marginBottom: 20 }}>Across every asset class, valued in {settings.displayCcy}. Edit a holding's sector from its class page.</div>
+      <div className="t-small" style={{ marginBottom: 20 }}>Across every asset class, valued in {settings.displayCcy}. Edit a holding's sector from its class page. Click a row to drill down.</div>
       <div className="dash dash-2col">
         <div className="card">
           <div className="card-h"><div className="t">Cost by Sector</div><div className="s">Total invested</div></div>
@@ -364,7 +451,8 @@ function SectorView() {
                      center={<React.Fragment><div className="c-lab">Cost</div><div className="c-val">{sym}{window.fmtBig(totalCost)}</div></React.Fragment>} />
               <div className="legend">
                 {segs.map((s, i) => (
-                  <div className="row" key={s.label} onMouseEnter={() => setHot(i)} onMouseLeave={() => setHot(null)}>
+                  <div className="row" key={s.label} onMouseEnter={() => setHot(i)} onMouseLeave={() => setHot(null)}
+                       onClick={() => setDrillSector(s.label)} style={{ cursor: 'pointer' }}>
                     <span className="sw" style={{ background: s.color }} />
                     <span className="nm">{s.label}</span>
                     <span className="vv">{sym}{window.fmtBig(s.cost)}</span>
@@ -383,7 +471,8 @@ function SectorView() {
                      center={<React.Fragment><div className="c-lab">Value</div><div className="c-val">{sym}{window.fmtBig(totalValue)}</div></React.Fragment>} />
               <div className="legend">
                 {segs.map((s, i) => (
-                  <div className="row" key={s.label} onMouseEnter={() => setHot(i)} onMouseLeave={() => setHot(null)}>
+                  <div className="row" key={s.label} onMouseEnter={() => setHot(i)} onMouseLeave={() => setHot(null)}
+                       onClick={() => setDrillSector(s.label)} style={{ cursor: 'pointer' }}>
                     <span className="sw" style={{ background: s.color }} />
                     <span className="nm">{s.label}</span>
                     <span className="vv">{sym}{window.fmtBig(s.value)}</span>
@@ -396,7 +485,7 @@ function SectorView() {
         </div>
       </div>
       <div className="card" style={{ marginTop: 16 }}>
-        <div className="card-h"><div className="t">Sector Breakdown</div><div className="s">Click headers to sort</div></div>
+        <div className="card-h"><div className="t">Sector Breakdown</div><div className="s">Click a row to see assets in that sector</div></div>
         <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <table className="ptable">
             <thead><tr>
@@ -409,7 +498,10 @@ function SectorView() {
             </tr></thead>
             <tbody>
               {sortedSegs.map((s) => (
-                <tr key={s.label} onMouseEnter={() => setHot(s.origIdx)} onMouseLeave={() => setHot(null)}>
+                <tr key={s.label} className="pos"
+                    style={{ cursor: 'pointer' }}
+                    onMouseEnter={() => setHot(s.origIdx)} onMouseLeave={() => setHot(null)}
+                    onClick={() => setDrillSector(s.label)}>
                   <td><span className="tk"><span className="d" style={{ width: 10, height: 10, borderRadius: 3, background: s.color, display: 'inline-block' }} />{s.label}</span></td>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -419,14 +511,22 @@ function SectorView() {
                   </td>
                   <td className="num">{sym}{window.fmtBig(s.cost)}</td>
                   <td className="num">{sym}{window.fmtBig(s.value)}</td>
-                  <td className="num" style={{ color: s.profit >= 0 ? 'var(--green)' : 'var(--red)' }}>{s.profit >= 0 ? '+' : ''}{sym}{window.fmtBig(s.profit)}</td>
-                  <td className="num" style={{ color: s.pct >= 0 ? 'var(--green)' : 'var(--red)' }}>{s.pct >= 0 ? '+' : ''}{s.pct.toFixed(2)}%</td>
+                  <td className="num" style={{ color: s.profit >= 0 ? 'var(--green-600)' : 'var(--red-600)' }}>{s.profit >= 0 ? '+' : ''}{sym}{window.fmtBig(s.profit)}</td>
+                  <td className="num" style={{ color: s.pct >= 0 ? 'var(--green-600)' : 'var(--red-600)' }}>{s.pct >= 0 ? '+' : ''}{s.pct.toFixed(2)}%</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </div>
+
+      {drillSector && drillSeg && (
+        <SectorDrillModal
+          sector={drillSector}
+          color={drillSeg.color}
+          onClose={() => setDrillSector(null)}
+        />
+      )}
     </div>
   );
 }

@@ -13,6 +13,8 @@ const INTERVAL_MAP = {
   '6mo': '1wk',
   '1y':  '1wk',
   '5y':  '1mo',
+  'ytd': '1d',
+  'max': '3mo',
 };
 
 export default async function handler(req, res) {
