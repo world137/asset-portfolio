@@ -207,18 +207,28 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(204).end();
 
-  if (!BOT_TOKEN)    return res.status(400).json({ error: 'TELEGRAM_BOT_TOKEN not set' });
-  if (!CHAT_ID)      return res.status(400).json({ error: 'TELEGRAM_CHAT_ID not set' });
-  if (!PORTFOLIO_ID) return res.status(400).json({ error: 'PORTFOLIO_ID not set' });
+  if (!BOT_TOKEN) return res.status(400).json({ error: 'TELEGRAM_BOT_TOKEN not set' });
+  if (!CHAT_ID)   return res.status(400).json({ error: 'TELEGRAM_CHAT_ID not set' });
   if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(400).json({ error: 'Supabase not configured' });
 
+  // Manual POST from browser sends portfolioId in body; cron GET uses env var.
+  let pid = PORTFOLIO_ID;
+  if (req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      if (body && body.portfolioId) pid = body.portfolioId;
+    } catch (_) {}
+  }
+
+  if (!pid) return res.status(400).json({ error: 'PORTFOLIO_ID not configured — set it in Vercel env vars or check your sync ID' });
+
   try {
-    const holdings = await loadHoldings(PORTFOLIO_ID);
-    if (!holdings.length) return res.status(200).json({ ok: true, note: 'no holdings' });
+    const holdings = await loadHoldings(pid);
+    if (!holdings.length) return res.status(200).json({ ok: true, note: 'no holdings found for this portfolio ID' });
 
     const groups = await buildReport(holdings);
     if (!groups.length) {
-      return res.status(200).json({ ok: true, note: 'no live price data available' });
+      return res.status(200).json({ ok: true, note: 'no live price data available yet — prices refresh every 12h' });
     }
 
     const message = formatMessage(groups);

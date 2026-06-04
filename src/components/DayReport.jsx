@@ -134,7 +134,7 @@ function DayReportView() {
       const r = await fetch('/api/telegram', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manual: true }),
+        body: JSON.stringify({ manual: true, portfolioId: Store.getPortfolioId() }),
       });
       const j = await r.json();
       if (r.ok && j.ok) {
