@@ -75,6 +75,10 @@
   let _dbSavedAt = null;
   // Guard: never write before loadFromCloud has run at least once.
   let _initialized = false;
+  // Guard: block saves if the initial load returned a server/network error.
+  // Prevents wiping DB data when we get an empty freshState() due to a load failure.
+  // Set to true only when the server confirms: data loaded OK, or truly a new user (no data).
+  let _initialLoadOk = false;
 
   // ── Wallet sync state ──────────────────────────────────────────────────────
   let _walletInitialized = false;
@@ -142,7 +146,7 @@
   }
 
   async function doCloudSave() {
-    if (!_initialized) { _dbStatus = 'idle'; subs.forEach(fn => fn()); return; }
+    if (!_initialized || !_initialLoadOk) { _dbStatus = 'idle'; subs.forEach(fn => fn()); return; }
     _dbStatus = 'saving';
     subs.forEach(fn => fn());
     try {
@@ -169,6 +173,7 @@
   // Flush any pending save when the tab closes.
   window.addEventListener('beforeunload', () => {
     if (_dbStatus !== 'pending' && _dbStatus !== 'saving') return;
+    if (!_initialLoadOk) return;
     clearTimeout(_saveTimer);
     try {
       const data = buildSavePayload();
@@ -183,21 +188,22 @@
     if (!/^[a-zA-Z0-9_-]{6,64}$/.test(id)) { _initialized = true; return false; }
     try {
       const r = await fetch('/api/portfolio?id=' + encodeURIComponent(id));
-      if (!r.ok) { _initialized = true; return false; }
+      if (!r.ok) { _initialized = true; return false; } // server error — _initialLoadOk stays false, saves blocked
       const j = await r.json();
-      if (!j || !j.data) { _initialized = true; return false; }
+      if (!j || !j.data) { _initialized = true; _initialLoadOk = true; return false; } // confirmed new user, safe to save
       const saved = JSON.parse(j.data);
-      if (!saved || typeof saved !== 'object') { _initialized = true; return false; }
+      if (!saved || typeof saved !== 'object') { _initialized = true; return false; } // corrupted data — saves blocked
       if (overrideId && overrideId !== portfolioId) {
         portfolioId = overrideId;
         try { localStorage.setItem(USER_ID_KEY, overrideId); } catch (_) {}
       }
       state = restoreFromSaved(saved);
       _initialized = true;
+      _initialLoadOk = true;
       subs.forEach(fn => fn());
       return true;
     } catch (_) {
-      _initialized = true;
+      _initialized = true; // network/parse error — _initialLoadOk stays false, saves blocked
       return false;
     }
   }

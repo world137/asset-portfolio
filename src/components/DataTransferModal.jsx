@@ -1,20 +1,32 @@
 /* eslint-disable */
-/* DataTransferModal.jsx — ZIP export and import (override / topup) */
+/* DataTransferModal.jsx — ZIP export and import (override / topup)
+   Also accepts raw portfolio.json / wallet.json files (extracted from a ZIP).  */
+
+// Detect whether a parsed JSON object is portfolio or wallet data.
+function detectJsonType(obj) {
+  if (!obj || typeof obj !== 'object') return null;
+  if ('holdings' in obj || 'sectors' in obj || 'snapshots' in obj || 'sales' in obj) return 'portfolio';
+  if ('accounts' in obj || 'transactions' in obj || 'debts' in obj) return 'wallet';
+  return null;
+}
 
 function DataTransferModal({ open, onClose }) {
   const [tab,      setTab]      = React.useState('export');
   const [mode,     setMode]     = React.useState('topup');
-  const [file,     setFile]     = React.useState(null);
-  const [fileName, setFileName] = React.useState('');
   const [busy,     setBusy]     = React.useState(false);
   const [result,   setResult]   = React.useState(null); // { ok, msg }
+
+  // Detected import source — set after file(s) are chosen.
+  // { kind: 'zip', file: File }
+  // { kind: 'json', portfolio: obj|null, wallet: obj|null, names: string[] }
+  const [source, setSource] = React.useState(null);
+
   const fileRef = React.useRef();
 
   React.useEffect(() => {
     if (!open) {
       setTab('export'); setMode('topup');
-      setFile(null); setFileName('');
-      setBusy(false); setResult(null);
+      setSource(null); setBusy(false); setResult(null);
     }
   }, [open]);
 
@@ -49,23 +61,69 @@ function DataTransferModal({ open, onClose }) {
     setBusy(false);
   };
 
-  // ── Import ──────────────────────────────────────────────────────────────────
-  const handleFileChange = (e) => {
-    const f = e.target.files?.[0];
-    if (f) { setFile(f); setFileName(f.name); setResult(null); }
+  // ── File selection ──────────────────────────────────────────────────────────
+  const handleFileChange = async (e) => {
+    const picked = Array.from(e.target.files || []);
     e.target.value = '';
+    setResult(null);
+    if (!picked.length) return;
+
+    // Single ZIP
+    if (picked.length === 1 && picked[0].name.endsWith('.zip')) {
+      setSource({ kind: 'zip', file: picked[0] });
+      return;
+    }
+
+    // One or more JSON files
+    const jsonFiles = picked.filter(f => f.name.endsWith('.json'));
+    if (!jsonFiles.length) {
+      setResult({ ok: false, msg: 'Please select a .zip backup or one/both of portfolio.json and wallet.json.' });
+      return;
+    }
+
+    let portfolio = null, wallet = null;
+    const names = [];
+
+    for (const f of jsonFiles) {
+      try {
+        const text = await f.text();
+        const obj  = JSON.parse(text);
+        const type = detectJsonType(obj);
+        if (type === 'portfolio') { portfolio = obj; names.push('portfolio.json'); }
+        else if (type === 'wallet') { wallet = obj; names.push('wallet.json'); }
+        else names.push(`${f.name} (unrecognised)`);
+      } catch (_) {
+        names.push(`${f.name} (parse error)`);
+      }
+    }
+
+    if (!portfolio && !wallet) {
+      setResult({ ok: false, msg: 'Could not detect portfolio.json or wallet.json content in the selected files.' });
+      return;
+    }
+
+    setSource({ kind: 'json', portfolio, wallet, names });
   };
 
+  // ── Import ──────────────────────────────────────────────────────────────────
   const handleImport = async () => {
-    if (!file) return;
+    if (!source) return;
     setBusy(true); setResult(null);
     try {
-      const zip           = await JSZip.loadAsync(file);
-      const portfolioFile = zip.file('portfolio.json');
-      const walletFile    = zip.file('wallet.json');
-      if (!portfolioFile && !walletFile) throw new Error('ZIP must contain portfolio.json or wallet.json');
-      const portfolio = portfolioFile ? JSON.parse(await portfolioFile.async('string')) : null;
-      const wallet    = walletFile    ? JSON.parse(await walletFile.async('string'))    : null;
+      let portfolio = null, wallet = null;
+
+      if (source.kind === 'zip') {
+        const zip           = await JSZip.loadAsync(source.file);
+        const portfolioFile = zip.file('portfolio.json');
+        const walletFile    = zip.file('wallet.json');
+        if (!portfolioFile && !walletFile) throw new Error('ZIP must contain portfolio.json or wallet.json');
+        portfolio = portfolioFile ? JSON.parse(await portfolioFile.async('string')) : null;
+        wallet    = walletFile    ? JSON.parse(await walletFile.async('string'))    : null;
+      } else {
+        portfolio = source.portfolio;
+        wallet    = source.wallet;
+      }
+
       await Store.importData({ portfolio, wallet, mode });
       const modeLabel = mode === 'override' ? 'All data replaced.' : 'New items merged in.';
       setResult({ ok: true, msg: `Import successful. ${modeLabel}` });
@@ -75,9 +133,30 @@ function DataTransferModal({ open, onClose }) {
     setBusy(false);
   };
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // ── Helpers ─────────────────────────────────────────────────────────────────
   const switchTab = (t) => { setTab(t); setResult(null); };
 
+  function sourceLabel() {
+    if (!source) return null;
+    if (source.kind === 'zip') return source.file.name;
+    return source.names.join(' + ');
+  }
+
+  function sourceSummary() {
+    if (!source) return null;
+    if (source.kind === 'zip') return 'ZIP archive';
+    const parts = [];
+    if (source.portfolio) {
+      const h = Object.values(source.portfolio.holdings || {}).reduce((s, a) => s + a.length, 0);
+      parts.push(`portfolio: ${h} holdings`);
+    }
+    if (source.wallet) {
+      parts.push(`wallet: ${(source.wallet.accounts || []).length} accounts`);
+    }
+    return parts.join(' · ');
+  }
+
+  // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div className="scrim" onClick={onClose}>
       <div className="modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()}>
@@ -95,7 +174,7 @@ function DataTransferModal({ open, onClose }) {
           {/* Tab switcher */}
           <div className="pill-toggle" style={{ marginBottom: 20 }}>
             <button className={tab === 'export' ? 'on' : ''} onClick={() => switchTab('export')}>Export ZIP</button>
-            <button className={tab === 'import' ? 'on' : ''} onClick={() => switchTab('import')}>Import ZIP</button>
+            <button className={tab === 'import' ? 'on' : ''} onClick={() => switchTab('import')}>Import</button>
           </div>
 
           {/* ── Export tab ── */}
@@ -103,7 +182,7 @@ function DataTransferModal({ open, onClose }) {
             <div>
               <p style={{ color: 'var(--fg-2)', fontSize: 13, margin: '0 0 14px', lineHeight: 1.55 }}>
                 Downloads a <code style={{ background: 'var(--bg-2)', padding: '1px 5px', borderRadius: 4 }}>.zip</code> file
-                with all your data. Keep it somewhere safe to restore later.
+                with all your data. Keep it somewhere safe — do <b>not</b> extract it, as you can import the ZIP directly.
               </p>
               <div style={{ background: 'var(--bg-2)', borderRadius: 10, padding: '10px 14px', marginBottom: 20, fontSize: 12.5, color: 'var(--fg-3)', lineHeight: 1.6 }}>
                 <b style={{ color: 'var(--fg-2)' }}>Includes:</b>{' '}
@@ -120,8 +199,10 @@ function DataTransferModal({ open, onClose }) {
           {tab === 'import' && (
             <div>
               <p style={{ color: 'var(--fg-2)', fontSize: 13, margin: '0 0 16px', lineHeight: 1.55 }}>
-                Upload a previously exported <code style={{ background: 'var(--bg-2)', padding: '1px 5px', borderRadius: 4 }}>.zip</code> backup
-                to restore your data.
+                Upload a <code style={{ background: 'var(--bg-2)', padding: '1px 5px', borderRadius: 4 }}>.zip</code> backup,
+                or select <code style={{ background: 'var(--bg-2)', padding: '1px 5px', borderRadius: 4 }}>portfolio.json</code>{' '}
+                and/or <code style={{ background: 'var(--bg-2)', padding: '1px 5px', borderRadius: 4 }}>wallet.json</code> directly
+                from an extracted folder.
               </p>
 
               {/* Mode selector */}
@@ -173,22 +254,38 @@ function DataTransferModal({ open, onClose }) {
               </div>
 
               {/* File picker */}
-              <input ref={fileRef} type="file" accept=".zip,application/zip"
-                     onChange={handleFileChange} style={{ display: 'none' }} />
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 14 }}>
+              <input ref={fileRef} type="file"
+                     accept=".zip,.json,application/zip,application/json"
+                     multiple
+                     onChange={handleFileChange}
+                     style={{ display: 'none' }} />
+
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: source ? 10 : 14 }}>
                 <Button variant="secondary" icon="upload" onClick={() => fileRef.current?.click()} disabled={busy}>
-                  Choose ZIP
+                  Choose file(s)
                 </Button>
-                {fileName
-                  ? <span style={{ fontSize: 13, color: 'var(--fg-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{fileName}</span>
+                {source
+                  ? <span style={{ fontSize: 13, color: 'var(--fg-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                      {sourceLabel()}
+                    </span>
                   : <span style={{ fontSize: 13, color: 'var(--fg-3)' }}>No file selected</span>}
               </div>
+
+              {/* Detected content summary */}
+              {source && (
+                <div style={{
+                  marginBottom: 14, padding: '7px 12px', borderRadius: 8, fontSize: 12,
+                  background: 'var(--bg-2)', color: 'var(--fg-3)', lineHeight: 1.5,
+                }}>
+                  {sourceSummary()}
+                </div>
+              )}
 
               <Button
                 variant={mode === 'override' ? 'danger' : 'primary'}
                 icon="upload"
                 onClick={handleImport}
-                disabled={!file || busy}
+                disabled={!source || busy}
                 style={{ width: '100%', justifyContent: 'center' }}
               >
                 {busy ? 'Importing…' : mode === 'override' ? 'Override & Import' : 'Merge & Import'}
