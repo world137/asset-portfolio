@@ -1,0 +1,372 @@
+{
+  "accounts": [
+    {
+      "id": "zevpy1q",
+      "name": "Dime USD",
+      "type": "bank",
+      "currency": "USD",
+      "color": "#76bb40",
+      "initialBal": 0,
+      "creditLimit": null,
+      "sortOrder": 0,
+      "archived": false
+    },
+    {
+      "id": "wkzhsis",
+      "name": "Cash",
+      "type": "cash",
+      "currency": "THB",
+      "color": null,
+      "initialBal": 101,
+      "creditLimit": null,
+      "sortOrder": 1,
+      "archived": false
+    },
+    {
+      "id": "utoe5vu",
+      "name": "Cash-JPY",
+      "type": "bank",
+      "currency": "JPY",
+      "color": null,
+      "initialBal": 1169,
+      "creditLimit": null,
+      "sortOrder": 2,
+      "archived": false
+    },
+    {
+      "id": "vdelu0g",
+      "name": "MuvMi",
+      "type": "ewallet",
+      "currency": "THB",
+      "color": "#2962ab",
+      "initialBal": 100,
+      "creditLimit": null,
+      "sortOrder": 3,
+      "archived": false
+    },
+    {
+      "id": "lgllt7h",
+      "name": "starbucks",
+      "type": "ewallet",
+      "currency": "THB",
+      "color": "#1f7a4d",
+      "initialBal": 30,
+      "creditLimit": null,
+      "sortOrder": 4,
+      "archived": false
+    },
+    {
+      "id": "z93whdt",
+      "name": "Paotang",
+      "type": "ewallet",
+      "currency": "THB",
+      "color": "#0891b2",
+      "initialBal": 20,
+      "creditLimit": null,
+      "sortOrder": 5,
+      "archived": false
+    },
+    {
+      "id": "z7ovdpn",
+      "name": "BTS",
+      "type": "ewallet",
+      "currency": "THB",
+      "color": "#feb43f",
+      "initialBal": 226.5,
+      "creditLimit": null,
+      "sortOrder": 6,
+      "archived": false
+    },
+    {
+      "id": "0nmzb8y",
+      "name": "True",
+      "type": "ewallet",
+      "currency": "THB",
+      "color": "#ff6a00",
+      "initialBal": 255.95,
+      "creditLimit": null,
+      "sortOrder": 7,
+      "archived": false
+    },
+    {
+      "id": "2y820wb",
+      "name": "Dime",
+      "type": "bank",
+      "currency": "THB",
+      "color": "#76bb40",
+      "initialBal": 21016.21,
+      "creditLimit": null,
+      "sortOrder": 8,
+      "archived": false
+    },
+    {
+      "id": "zijnjyx",
+      "name": "K-bank",
+      "type": "bank",
+      "currency": "THB",
+      "color": "#4e7a27",
+      "initialBal": 16104.34,
+      "creditLimit": null,
+      "sortOrder": 9,
+      "archived": false
+    },
+    {
+      "id": "4r8fvmf",
+      "name": "KTC",
+      "type": "credit_card",
+      "currency": "THB",
+      "color": null,
+      "initialBal": -9049.07,
+      "creditLimit": 99000,
+      "sortOrder": 10,
+      "archived": false
+    }
+  ],
+  "categories": [
+    {
+      "id": "cat_food",
+      "name": "Food & Drink",
+      "flow": "expense",
+      "icon": "layers",
+      "color": "#f59e0b"
+    },
+    {
+      "id": "cat_transport",
+      "name": "Transport",
+      "flow": "expense",
+      "icon": "trending-down",
+      "color": "#3b82f6"
+    },
+    {
+      "id": "cat_shopping",
+      "name": "Shopping",
+      "flow": "expense",
+      "icon": "list",
+      "color": "#ec4899"
+    },
+    {
+      "id": "cat_bills",
+      "name": "Bills",
+      "flow": "expense",
+      "icon": "file",
+      "color": "#ef4444"
+    },
+    {
+      "id": "cat_health",
+      "name": "Health",
+      "flow": "expense",
+      "icon": "shield",
+      "color": "#10b981"
+    },
+    {
+      "id": "cat_travel",
+      "name": "Travel",
+      "flow": "expense",
+      "icon": "layers",
+      "color": "#8b5cf6"
+    },
+    {
+      "id": "cat_other_exp",
+      "name": "Other",
+      "flow": "expense",
+      "icon": "dot",
+      "color": "#6b7280"
+    },
+    {
+      "id": "cat_salary",
+      "name": "Salary",
+      "flow": "income",
+      "icon": "check",
+      "color": "#10b981"
+    },
+    {
+      "id": "cat_invest_in",
+      "name": "Investment",
+      "flow": "income",
+      "icon": "trending-down",
+      "color": "#2962ab"
+    },
+    {
+      "id": "cat_gift",
+      "name": "Gift",
+      "flow": "income",
+      "icon": "success",
+      "color": "#f59e0b"
+    },
+    {
+      "id": "cat_other_inc",
+      "name": "Other Income",
+      "flow": "income",
+      "icon": "dot",
+      "color": "#6b7280"
+    },
+    {
+      "id": "g2yi4lv",
+      "name": "Tax",
+      "flow": "expense",
+      "icon": null,
+      "color": "#ef4444"
+    }
+  ],
+  "transactions": [
+    {
+      "id": "0ctahb1",
+      "accountId": "zevpy1q",
+      "date": "2026-06-01",
+      "amount": 71.43,
+      "flow": "income",
+      "categoryId": "cat_invest_in",
+      "note": "Sell 0.459219 AAOI",
+      "toAccountId": null,
+      "fxRate": null
+    },
+    {
+      "id": "0g24oz8",
+      "accountId": "zevpy1q",
+      "date": "2026-06-01",
+      "amount": 63.09,
+      "flow": "income",
+      "categoryId": "cat_invest_in",
+      "note": "Sell 0.076933 LITE",
+      "toAccountId": null,
+      "fxRate": null
+    },
+    {
+      "id": "fzmdv47",
+      "accountId": "zevpy1q",
+      "date": "2026-06-01",
+      "amount": 61.5,
+      "flow": "income",
+      "categoryId": "cat_invest_in",
+      "note": "Sell 0.063827 GEV",
+      "toAccountId": null,
+      "fxRate": null
+    },
+    {
+      "id": "6ounqz9",
+      "accountId": "zevpy1q",
+      "date": "2026-06-01",
+      "amount": 0.22,
+      "flow": "expense",
+      "categoryId": "g2yi4lv",
+      "note": "",
+      "toAccountId": null,
+      "fxRate": null
+    },
+    {
+      "id": "dvps3lm",
+      "accountId": "zevpy1q",
+      "date": "2026-06-01",
+      "amount": 195.49,
+      "flow": "expense",
+      "categoryId": "cat_invest_in",
+      "note": "Buy 0.519771 GOOGL",
+      "toAccountId": null,
+      "fxRate": null
+    },
+    {
+      "id": "5h1vq02",
+      "accountId": "zevpy1q",
+      "date": "2026-06-01",
+      "amount": 0.31,
+      "flow": "expense",
+      "categoryId": "g2yi4lv",
+      "note": "",
+      "toAccountId": null,
+      "fxRate": null
+    },
+    {
+      "id": "kxa4htn",
+      "accountId": "zijnjyx",
+      "date": "2026-06-03",
+      "amount": 200,
+      "flow": "transfer",
+      "categoryId": null,
+      "note": "",
+      "toAccountId": "z93whdt",
+      "fxRate": null
+    },
+    {
+      "id": "hvg6kcv",
+      "accountId": "2y820wb",
+      "date": "2026-06-03",
+      "amount": 300,
+      "flow": "expense",
+      "categoryId": "cat_other_exp",
+      "note": "",
+      "toAccountId": null,
+      "fxRate": null
+    },
+    {
+      "id": "wwghhqf",
+      "accountId": "wkzhsis",
+      "date": "2026-06-03",
+      "amount": 68,
+      "flow": "expense",
+      "categoryId": "cat_food",
+      "note": "",
+      "toAccountId": null,
+      "fxRate": null
+    },
+    {
+      "id": "a4e9cfa",
+      "accountId": "z93whdt",
+      "date": "2026-06-03",
+      "amount": 60,
+      "flow": "expense",
+      "categoryId": "cat_food",
+      "note": "",
+      "toAccountId": null,
+      "fxRate": null
+    },
+    {
+      "id": "2hmm2gt",
+      "accountId": "z93whdt",
+      "date": "2026-06-03",
+      "amount": 36,
+      "flow": "income",
+      "categoryId": "cat_other_inc",
+      "note": "",
+      "toAccountId": null,
+      "fxRate": null
+    },
+    {
+      "id": "6iwhg8p",
+      "accountId": "4r8fvmf",
+      "date": "2026-06-03",
+      "amount": 323,
+      "flow": "expense",
+      "categoryId": "cat_other_exp",
+      "note": "",
+      "toAccountId": null,
+      "fxRate": null
+    },
+    {
+      "id": "uv9mag7",
+      "accountId": "2y820wb",
+      "date": "2026-06-03",
+      "amount": 1849.54,
+      "flow": "expense",
+      "categoryId": "cat_other_exp",
+      "note": "",
+      "toAccountId": null,
+      "fxRate": null
+    }
+  ],
+  "debts": [
+    {
+      "id": "c2dpmlg",
+      "direction": "borrowed",
+      "counterparty": "KTC",
+      "amount": 323,
+      "currency": "THB",
+      "dateStart": "2026-06-03",
+      "dateDue": null,
+      "note": "Charged to KTC",
+      "settled": false,
+      "settledDate": null,
+      "linkedAccountId": "4r8fvmf",
+      "installment": null
+    }
+  ]
+}

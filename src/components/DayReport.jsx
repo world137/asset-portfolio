@@ -58,6 +58,44 @@ function formatTelegramText(groups) {
     }
     msg += `——————————————————\n`;
   }
+
+  const rows = buildDayRows();
+  if (!rows.length) return msg;
+
+  const sorted = [...rows].sort((a, b) => b.dayPct - a.dayPct);
+  const ccySym = ccy => ccy === 'USD' ? '$' : '฿';
+
+  function fmtChange(v, ccy) {
+    const abs = Math.abs(v);
+    let s;
+    if (abs >= 10000) s = Math.round(abs).toLocaleString('en');
+    else if (abs >= 100) s = abs.toFixed(2);
+    else if (abs >= 1)   s = abs.toFixed(3);
+    else                 s = abs.toFixed(5);
+    return (v >= 0 ? '+' : '-') + ccySym(ccy) + s;
+  }
+
+  const fmt = sorted.map(r => ({
+    name: r.name,
+    cls:  r.classLabel,
+    pct:  (r.dayPct >= 0 ? '+' : '') + r.dayPct.toFixed(2) + '%',
+    chg:  fmtChange(r.changeAbs, r.ccy),
+  }));
+
+  const nW = Math.max(5, ...fmt.map(r => r.name.length));
+  const cW = Math.max(5, ...fmt.map(r => r.cls.length));
+  const pW = Math.max(4, ...fmt.map(r => r.pct.length));
+  const gW = Math.max(6, ...fmt.map(r => r.chg.length));
+
+  const pad  = (s, n) => String(s).padEnd(n);
+  const padR = (s, n) => String(s).padStart(n);
+
+  const header = `${pad('Asset', nW)}  ${pad('Class', cW)}  ${padR('Day%', pW)}  ${padR('Change', gW)}`;
+  const sep    = '─'.repeat(header.length);
+  const body   = fmt.map(r =>
+    `${pad(r.name, nW)}  ${pad(r.cls, cW)}  ${padR(r.pct, pW)}  ${padR(r.chg, gW)}`
+  ).join('\n');
+  msg += `\n${header}\n${sep}\n${body}`;
   return msg;
 }
 
