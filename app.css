@@ -147,6 +147,8 @@ body { background: var(--bg-app); display: block; padding: 0; }
 .icon-toggle { width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--border-2); background: var(--bg-surface); color: var(--fg-2); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .icon-toggle:hover { background: var(--bg-hover); color: var(--fg-1); }
 
+.group-buttons {display: inline-flex; gap: 10px;}
+
 /* ============================================================================
    KPI cards
    ============================================================================ */
@@ -341,7 +343,7 @@ body { background: var(--bg-app); display: block; padding: 0; }
   .icon-toggle.tb-more { display: inline-flex; }
   .tb-actions { display: none; }
   .tb-actions.open {
-    display: flex;
+    display: grid;
     flex-wrap: wrap;
     align-items: center;
     gap: 8px;

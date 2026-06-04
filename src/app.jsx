@@ -669,7 +669,8 @@ function App() {
               <button className={settings.displayCcy === 'THB' ? 'on' : ''} onClick={() => Store.setSetting('displayCcy', 'THB')}>฿ THB</button>
               <button className={settings.displayCcy === 'USD' ? 'on' : ''} onClick={() => Store.setSetting('displayCcy', 'USD')}>$ USD</button>
             </div>
-            <button className="icon-toggle" title={settings.hideAmounts ? 'Show amounts' : 'Hide amounts'}
+            <div className="group-buttons">
+              <button className="icon-toggle" title={settings.hideAmounts ? 'Show amounts' : 'Hide amounts'}
               onClick={() => Store.setSetting('hideAmounts', !settings.hideAmounts)}
               style={{ color: settings.hideAmounts ? 'var(--accent)' : undefined }}>
               <Icon name={settings.hideAmounts ? 'eye-off' : 'eye'} size={16} />
@@ -680,6 +681,7 @@ function App() {
             <button className="icon-toggle" title="Toggle theme" onClick={() => Store.setSetting('theme', settings.theme === 'light' ? 'dark' : 'light')}>
               <Icon name={settings.theme === 'light' ? 'moon' : 'sun'} size={16} />
             </button>
+            </div>
           </div>
           <button className="icon-toggle tb-more" title="Settings" onClick={() => setMobileMenu(m => !m)}>
             <Icon name="sliders" size={16} />
