@@ -331,6 +331,288 @@ function StatChip({ label, value, bull, bear }) {
   );
 }
 
+// ── Macro Dashboard ─────────────────────────────────────────────────────────
+
+const MACRO_IMPACT_MATRIX = [
+  { indicator: 'Fed Rate ↑', impacts: ['Tech ↓↓↓', 'Gold ↓',      'BTC ↓↓↓', 'USD ↑'   ] },
+  { indicator: 'US10Y ↑',   impacts: ['Tech ↓↓↓', 'REIT ↓↓↓',   'Gold ↓',   'USD ↑'   ] },
+  { indicator: 'CPI ↑',     impacts: ['Growth ↓',  'Energy ↑↑',  'Gold ↑',   'Mixed'   ] },
+  { indicator: 'DXY ↑',     impacts: ['EM ↓↓↓',   'Gold ↓',     'BTC ↓↓',   'USD ↑'   ] },
+  { indicator: 'VIX ↑',     impacts: ['Stocks ↓↓↓','Bonds ↑',   'Cash ↑',   'Risk Off'] },
+  { indicator: 'M2 ↑',      impacts: ['Stocks ↑↑', 'BTC ↑↑↑',   'Gold ↑',   'Risk On' ] },
+];
+
+const MACRO_INFO = {
+  fedRate: {
+    title: 'Federal Funds Rate',
+    description: 'The target interest rate set by the Fed\'s FOMC 8 times per year. Banks charge each other this rate for overnight lending — it cascades into all borrowing costs: mortgages, corporate bonds, credit cards.',
+    levels: [
+      { max: 1.5,      label: 'Very Low',    color: '#34c759', note: 'Ultra-accommodative. Cheap money era — strong tailwind for equities, real estate, and growth stocks.' },
+      { max: 3.0,      label: 'Low',         color: '#34c759', note: 'Accommodative. Supportive for risk assets. Bond yields typically low, equity valuations elevated.' },
+      { max: 4.5,      label: 'Elevated',    color: '#ff9f0a', note: 'Restrictive. Pressure on growth stocks, REITs, and bonds. USD tends to strengthen.' },
+      { max: Infinity, label: 'High',        color: '#ff453a', note: 'Highly restrictive. Significant headwind for risk assets. Recession risk elevated. Cash/bonds attractive.' },
+    ],
+  },
+  us10y: {
+    title: 'US 10-Year Treasury Yield',
+    description: 'Yield on 10-year US government bonds — the global benchmark "risk-free rate." It anchors mortgage rates, corporate borrowing costs, and equity valuations (P/E multiples) worldwide.',
+    levels: [
+      { max: 2.0,      label: 'Low',         color: '#34c759', note: 'Low cost of capital. Favorable for equities, especially growth/tech. Bond prices are high.' },
+      { max: 3.5,      label: 'Normal',      color: '#8e8e93', note: 'Historically normal range. Balanced between growth and inflation expectations.' },
+      { max: 5.0,      label: 'Elevated',    color: '#ff9f0a', note: 'High yields compress P/E multiples and pressure REITs. Bonds start competing with equities.' },
+      { max: Infinity, label: 'High',        color: '#ff453a', note: 'Very high yields. Bonds become a strong competitor to stocks. Watch for equity outflows.' },
+    ],
+  },
+  cpi: {
+    title: 'CPI Inflation (Year-over-Year)',
+    description: 'Consumer Price Index — the primary inflation gauge. The Fed targets ~2%. Persistent high CPI forces the Fed to keep rates high, hurting bond prices and growth stocks.',
+    levels: [
+      { max: 1.0,      label: 'Low',         color: '#ff9f0a', note: 'Below target. Deflation risk. Fed may cut rates aggressively to stimulate the economy.' },
+      { max: 2.5,      label: 'Stable',      color: '#34c759', note: 'Near Fed\'s 2% target — ideal. Rate cuts possible, earnings forecasts stable, risk assets supported.' },
+      { max: 4.0,      label: 'Elevated',    color: '#ff9f0a', note: 'Above target. Fed stays hawkish. Bond prices fall. Commodities and energy tend to outperform.' },
+      { max: Infinity, label: 'High',        color: '#ff453a', note: 'High inflation. Rate cuts off the table. Real returns eroded. Gold, oil, and commodities favored.' },
+    ],
+  },
+  vix: {
+    title: 'VIX — Volatility Index',
+    description: 'CBOE Volatility Index measuring implied 30-day volatility of S&P 500 options. Known as the "Fear Index." Spikes during selloffs and crashes, drops in calm trending markets.',
+    levels: [
+      { max: 15,       label: 'Low',         color: '#34c759', note: 'Markets calm. Low fear — possibly complacent. Good environment for carry trades and income.' },
+      { max: 20,       label: 'Normal',      color: '#8e8e93', note: 'Normal volatility. Healthy risk environment with no extreme fear or greed.' },
+      { max: 30,       label: 'Elevated',    color: '#ff9f0a', note: 'Fear rising. Selloff may be in progress. Consider reducing risk or adding hedges.' },
+      { max: Infinity, label: 'High',        color: '#ff453a', note: 'High fear. Active selloff or crisis mode. Historically a contrarian buy signal near extreme peaks.' },
+    ],
+  },
+  dxy: {
+    title: 'DXY — US Dollar Index',
+    description: 'Measures the USD against a basket of 6 major currencies (EUR, JPY, GBP, CAD, SEK, CHF). A strong dollar tightens global financial conditions and squeezes emerging markets.',
+    levels: [
+      { max: 90,       label: 'Weak',        color: '#ff9f0a', note: 'Weak dollar. Strong tailwind for gold, oil, emerging markets (EM), and commodity exporters like Thailand.' },
+      { max: 100,      label: 'Normal',      color: '#8e8e93', note: 'Dollar in normal range. Balanced global currency flows. THB relatively stable.' },
+      { max: 106,      label: 'Strong',      color: '#ff9f0a', note: 'Strong dollar. Pressure on EM stocks, gold, and commodities. THB may weaken vs USD.' },
+      { max: Infinity, label: 'Very Strong', color: '#ff453a', note: 'Very strong dollar. Significant EM debt stress risk. THB under pressure, import costs rise.' },
+    ],
+  },
+};
+
+function getMacroLevel(key, value) {
+  if (value == null) return null;
+  const info = MACRO_INFO[key];
+  if (!info) return null;
+  return info.levels.find(l => value < l.max) || info.levels[info.levels.length - 1];
+}
+
+function macroImpactColor(text) {
+  if (text.includes('↑↑') || text === 'Risk On')  return 'var(--green-600)';
+  if (text.includes('↑'))                          return 'var(--green-600)';
+  if (text.includes('↓↓') || text === 'Risk Off') return 'var(--red-600)';
+  if (text.includes('↓'))                          return 'var(--red-600)';
+  return 'var(--fg-2)';
+}
+
+function MacroCard({ indKey, label, value, unit, change, active, onClick }) {
+  const isUp = change > 0, isDown = change < 0;
+  const level = getMacroLevel(indKey, value);
+  return (
+    <div
+      onClick={value != null ? onClick : undefined}
+      style={{
+        padding: '12px 14px', borderRadius: 10,
+        background: active ? 'var(--bg-selected)' : 'var(--bg-surface)',
+        border: `1px solid ${active ? 'var(--accent)' : 'var(--border-1)'}`,
+        flex: '1 1 80px', minWidth: 80,
+        cursor: value != null ? 'pointer' : 'default',
+        transition: 'border-color 0.15s, background 0.15s',
+      }}
+    >
+      <div style={{ fontSize: 10, color: 'var(--fg-3)', fontWeight: 600, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 5 }}>
+        {label}
+      </div>
+      {value == null
+        ? <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--fg-3)' }}>—</div>
+        : <React.Fragment>
+            <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--fg-1)', fontVariantNumeric: 'tabular-nums' }}>
+              {typeof value === 'number' ? value.toFixed(2) : value}{unit}
+            </div>
+            {change != null && (
+              <div style={{ fontSize: 11, marginTop: 2, fontWeight: 500,
+                color: isUp ? 'var(--green-600)' : isDown ? 'var(--red-600)' : 'var(--fg-3)' }}>
+                {isUp ? '▲' : isDown ? '▼' : '→'} {Math.abs(change).toFixed(2)}%
+              </div>
+            )}
+            {level && (
+              <div style={{ marginTop: 6 }}>
+                <span style={{
+                  fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase',
+                  color: level.color, background: level.color + '25',
+                  padding: '2px 7px', borderRadius: 999,
+                }}>
+                  {level.label}
+                </span>
+              </div>
+            )}
+          </React.Fragment>
+      }
+    </div>
+  );
+}
+
+function MacroInfoPanel({ indKey, value, onClose }) {
+  const info = MACRO_INFO[indKey];
+  const level = getMacroLevel(indKey, value);
+  if (!info) return null;
+  return (
+    <div style={{
+      background: 'var(--bg-sunken)', borderRadius: 10, padding: '14px 16px',
+      border: '1px solid var(--border-1)', marginTop: 8, position: 'relative',
+    }}>
+      <button onClick={onClose} style={{
+        position: 'absolute', top: 10, right: 12, background: 'none', border: 'none',
+        cursor: 'pointer', color: 'var(--fg-3)', padding: 4, lineHeight: 1,
+      }}>
+        <Icon name="x" size={14} />
+      </button>
+
+      <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--fg-1)', marginBottom: 6, paddingRight: 28, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        {info.title}
+        {level && (
+          <span style={{
+            fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase',
+            color: level.color, background: level.color + '25', padding: '2px 8px', borderRadius: 999,
+          }}>
+            {level.label}
+          </span>
+        )}
+      </div>
+
+      <div style={{ fontSize: 12, color: 'var(--fg-2)', lineHeight: 1.65, marginBottom: 10 }}>
+        {info.description}
+      </div>
+
+      {level && (
+        <div style={{
+          background: level.color + '15', border: `1px solid ${level.color}50`,
+          borderRadius: 8, padding: '8px 12px', marginBottom: 10,
+        }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: level.color, marginBottom: 3 }}>
+            Current level — {level.label}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--fg-2)', lineHeight: 1.5 }}>
+            {level.note}
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {info.levels.map((l, i) => (
+          <span key={i} style={{
+            fontSize: 10, padding: '3px 8px', borderRadius: 999, fontWeight: 600, letterSpacing: 0.3,
+            background: l === level ? l.color + '22' : 'var(--bg-surface)',
+            color: l === level ? l.color : 'var(--fg-3)',
+            border: `1px solid ${l === level ? l.color + '60' : 'var(--border-1)'}`,
+          }}>
+            {l.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MacroDashboard() {
+  const [data,       setData]       = React.useState(null);
+  const [loading,    setLoading]    = React.useState(true);
+  const [showMatrix, setShowMatrix] = React.useState(false);
+  const [activeCard, setActiveCard] = React.useState(null);
+
+  React.useEffect(() => {
+    fetch('/api/macro')
+      .then(r => r.json())
+      .then(j => { setData(j); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const ind = data?.indicators || {};
+  const cards = [
+    { key: 'fedRate', label: 'Fed Rate', unit: '%', value: ind.fedRate?.value, change: ind.fedRate?.change },
+    { key: 'us10y',   label: 'US 10Y',  unit: '%', value: ind.us10y?.value,   change: ind.us10y?.change   },
+    { key: 'cpi',     label: 'CPI YoY', unit: '%', value: ind.cpi?.value,     change: ind.cpi?.change     },
+    { key: 'vix',     label: 'VIX',     unit: '',  value: ind.vix?.value,     change: ind.vix?.change     },
+    { key: 'dxy',     label: 'DXY',     unit: '',  value: ind.dxy?.value,     change: ind.dxy?.change     },
+  ];
+
+  const toggleCard = (key) => setActiveCard(v => v === key ? null : key);
+
+  return (
+    <div className="card" style={{ padding: '16px 18px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--fg-1)' }}>Macro Environment</div>
+          <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 1 }}>Live indicators · 15 min cache · tap any card for details</div>
+        </div>
+        <button onClick={() => setShowMatrix(v => !v)} style={{
+          fontSize: 12, color: 'var(--fg-3)', background: 'none',
+          border: '1px solid var(--border-2)', padding: '4px 10px',
+          borderRadius: 8, cursor: 'pointer', fontWeight: 500,
+        }}>
+          {showMatrix ? 'Hide Matrix' : 'Impact Matrix'}
+        </button>
+      </div>
+
+      {loading
+        ? <div style={{ display: 'flex', gap: 8 }}>
+            {[1,2,3,4,5].map(i => (
+              <div key={i} style={{ flex: '1 1 80px', height: 72, borderRadius: 10, background: 'var(--bg-sunken)', animation: 'pulse 1s infinite' }} />
+            ))}
+          </div>
+        : <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {cards.map(c => (
+              <MacroCard key={c.key} indKey={c.key} label={c.label} value={c.value} unit={c.unit} change={c.change}
+                active={activeCard === c.key} onClick={() => toggleCard(c.key)} />
+            ))}
+          </div>
+      }
+
+      {activeCard && !loading && (
+        <MacroInfoPanel indKey={activeCard} value={ind[activeCard]?.value} onClose={() => setActiveCard(null)} />
+      )}
+
+      {showMatrix && (
+        <div style={{ marginTop: 14, overflowX: 'auto' }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--fg-3)', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 8 }}>
+            Market Impact Matrix
+          </div>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead>
+              <tr style={{ background: 'var(--bg-sunken)' }}>
+                {['Trigger', 'Impact 1', 'Impact 2', 'Impact 3', 'Impact 4'].map(h => (
+                  <th key={h} style={{ padding: '6px 12px', textAlign: 'left', fontWeight: 600, fontSize: 10, letterSpacing: 0.4, textTransform: 'uppercase', color: 'var(--fg-3)', borderBottom: '1px solid var(--border-1)', whiteSpace: 'nowrap' }}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {MACRO_IMPACT_MATRIX.map((row, i) => (
+                <tr key={row.indicator} style={{ background: i % 2 === 0 ? 'transparent' : 'var(--bg-sunken)' }}>
+                  <td style={{ padding: '8px 12px', fontWeight: 600, color: 'var(--fg-1)', borderBottom: '1px solid var(--border-1)', whiteSpace: 'nowrap' }}>
+                    {row.indicator}
+                  </td>
+                  {row.impacts.map((imp, j) => (
+                    <td key={j} style={{ padding: '8px 12px', borderBottom: '1px solid var(--border-1)', color: macroImpactColor(imp), fontWeight: 500, whiteSpace: 'nowrap' }}>
+                      {imp}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const LAYER_CFG = [
   { key:'useCDC',  label:'CDC'      },
   { key:'useMacd', label:'MACD'     },
@@ -414,6 +696,9 @@ function TechnicalAnalysisCore({ initSymbol, compact }) {
 
   return (
     <div style={outerStyle}>
+
+      {/* ── Macro Environment (page only, not modal) ── */}
+      {!compact && <MacroDashboard />}
 
       {/* ── Search ── */}
       <div style={{ display:'flex', gap:8 }}>

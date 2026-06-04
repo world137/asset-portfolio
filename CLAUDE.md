@@ -26,7 +26,7 @@ This is a **single-page asset portfolio tracker** for Thai investors. It has no 
 
 ### Data storage
 
-All data is persisted in Supabase (PostgreSQL) and keyed by a `portfolioId`. There is no user authentication — knowing the portfolio ID grants full access. The ID is derived from a password hash (default: `"world"`).
+All data is persisted in Supabase (PostgreSQL) and keyed by a `portfolioId`. There is no user authentication — knowing the portfolio ID grants full access. The ID is derived from a password hash
 
 Tables: `users`, `settings`, `holdings`, `sectors`, `snapshots`, `sales`, `fx_rates`, `wallets`.
 

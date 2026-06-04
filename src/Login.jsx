@@ -1,20 +1,37 @@
 /* eslint-disable */
 /* Login.jsx — password gate; renders before App if not authenticated */
 
-// Change this to whatever password you prefer.
-const LOGIN_PASSWORD = 'world';
-const AUTH_KEY = 'ptf_auth';
+// SHA-256 hash of the access password. The plaintext password is never stored here.
+// To change your password:
+//   1. Run: node tools/hash-password.mjs your-new-password
+//   2. Paste the printed hash below as LOGIN_HASH
+//   3. Run: node tools/migrate-portfolio-id.mjs your-old-password your-new-password
+const LOGIN_HASH = '486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7';
+const AUTH_KEY  = 'ptf_auth';
+const PTF_ID_KEY = 'ptf_id';
 
-// Derive a stable, deterministic portfolio ID from the password so every device
-// that knows the password always points to the same Supabase row.
+async function sha256Hex(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// On page load, restore the portfolio ID from session so already-authenticated
+// users don't lose their store binding on refresh.
 (function () {
-  const stableId = btoa('ptf:' + LOGIN_PASSWORD).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32);
-  if (window.Store) Store.setPrimaryId(stableId);
+  const id = sessionStorage.getItem(PTF_ID_KEY);
+  if (id && window.Store) Store.setPrimaryId(id);
 })();
 
-function checkAuth() { return sessionStorage.getItem(AUTH_KEY) === '1'; }
-function setAuth()   { sessionStorage.setItem(AUTH_KEY, '1'); }
-function clearAuth() { sessionStorage.removeItem(AUTH_KEY); }
+function checkAuth()  { return sessionStorage.getItem(AUTH_KEY) === '1'; }
+function setAuth(id)  {
+  sessionStorage.setItem(AUTH_KEY, '1');
+  sessionStorage.setItem(PTF_ID_KEY, id);
+  if (window.Store) Store.setPrimaryId(id);
+}
+function clearAuth()  {
+  sessionStorage.removeItem(AUTH_KEY);
+  sessionStorage.removeItem(PTF_ID_KEY);
+}
 
 window._ptfLogout = function () {
   clearAuth();
@@ -26,19 +43,23 @@ function LoginPage({ onSuccess }) {
   const [error, setError] = React.useState('');
   const [busy,  setBusy]  = React.useState(false);
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
     setBusy(true);
-    setTimeout(() => {
-      if (pw === LOGIN_PASSWORD) {
-        setAuth();
+    try {
+      const hash = await sha256Hex(pw);
+      if (hash === LOGIN_HASH) {
+        setAuth(hash.slice(0, 32));
         onSuccess();
       } else {
         setError('Wrong password. Try again.');
         setPw('');
       }
+    } catch (_) {
+      setError('Authentication error. Try again.');
+    } finally {
       setBusy(false);
-    }, 320);
+    }
   };
 
   return (
