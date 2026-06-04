@@ -9,6 +9,15 @@
     },
     "api/chart.js": {
       "maxDuration": 15
+    },
+    "api/telegram.js": {
+      "maxDuration": 30
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/telegram",
+      "schedule": "0 0 * * *"
+    }
+  ]
 }

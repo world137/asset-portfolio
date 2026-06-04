@@ -280,7 +280,6 @@ function getDayChangeBg(pct, totalPct) {
 function BentoView({ classKey }) {
   const positions  = Store.positions(classKey);
   const cls        = Store.classByKey(classKey);
-  const grandTotal = Store.grandTotals().value;
   const settings   = Store.settings();
   const sym        = window.ccySymbol(settings.displayCcy);
 
@@ -288,22 +287,23 @@ function BentoView({ classKey }) {
     <div className="empty" style={{ padding: '40px 20px' }}>No holdings yet.</div>
   );
 
+  const classTotal = positions.reduce((sum, p) => sum + Store.toDisplay(p.value, cls.ccy), 0) || 1;
+
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: 4 }}>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: 4 }}>
       {positions.map(p => {
-        const value     = Store.toDisplay(p.value, cls.ccy);
-        const portPct   = grandTotal > 0 ? (value / grandTotal) * 100 : 0;
-        const dayPct    = Store.dayChangePct(classKey, p.name);
-        const colors    = getDayChangeBg(dayPct, p.pct);
-        const dispName  = p.name.replace(/THB$/, '');
-        const minFlex   = Math.max(portPct, 3);
+        const value    = Store.toDisplay(p.value, cls.ccy);
+        const classPct = classTotal > 0 ? (value / classTotal) * 100 : 0;
+        const dayPct   = Store.dayChangePct(classKey, p.name);
+        const colors   = getDayChangeBg(dayPct, p.pct);
+        const dispName = p.name.replace(/THB$/, '');
+        const flexSize = Math.max(classPct, 2);
 
         return (
           <div key={p.name} style={{
-            flex: `${minFlex} 0 auto`,
-            minWidth: 88,
-            maxWidth: 220,
-            minHeight: 90,
+            flex: `${flexSize} ${flexSize} ${Math.max(flexSize - 1, 1)}%`,
+            minWidth: 80,
+            minHeight: 96,
             background: colors.bg,
             border: `1px solid ${colors.border}`,
             borderRadius: 14,
@@ -314,13 +314,14 @@ function BentoView({ classKey }) {
             transition: 'opacity 0.15s',
             cursor: 'default',
             boxSizing: 'border-box',
+            overflow: 'hidden',
           }}>
             <div style={{ fontWeight: 700, fontSize: 13, color: colors.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {dispName}
             </div>
             <div>
               <div style={{ fontSize: 11, color: colors.text, opacity: 0.75, marginBottom: 2 }}>
-                {portPct.toFixed(1)}% of portfolio
+                {classPct.toFixed(1)}% of class
               </div>
               <div style={{ fontSize: 12, fontWeight: 600, color: colors.text, fontVariantNumeric: 'tabular-nums' }}>
                 {sym}{window.fmtBig(value)}
@@ -400,7 +401,7 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           {/* View toggle */}
-          <div className="pill-toggle" style={{ flexShrink: 0 }}>
+          <div className="layoutseg" style={{ flexShrink: 0 }}>
             <button className={viewMode === 'table' ? 'on' : ''} onClick={() => setViewMode('table')}>Table</button>
             <button className={viewMode === 'bento' ? 'on' : ''} onClick={() => setViewMode('bento')}>Bento</button>
           </div>

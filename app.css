@@ -882,7 +882,7 @@ body { background: var(--bg-app); display: block; padding: 0; }
    ============================================================================ */
 .wl-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 12px;
 }
 .wl-card {
@@ -1432,6 +1432,7 @@ body { background: var(--bg-app); display: block; padding: 0; }
 /* Sell log — ensure grid inputs don't overflow on mobile */
 .mgrid > div { min-width: 0; }
 .mgrid input, .mgrid select { max-width: 100%; box-sizing: border-box; }
+input[type="date"] { min-width: 0; max-width: 100%; box-sizing: border-box; }
 
 /* Bento box container responsive */
 @media (max-width: 600px) {
