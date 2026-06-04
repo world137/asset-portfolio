@@ -1432,6 +1432,7 @@ body { background: var(--bg-app); display: block; padding: 0; }
 /* Sell log — ensure grid inputs don't overflow on mobile */
 .mgrid > div { min-width: 0; }
 .mgrid input, .mgrid select { max-width: 100%; box-sizing: border-box; }
+input[type="date"] { min-width: 0; max-width: 100%; box-sizing: border-box; }
 
 /* Bento box container responsive */
 @media (max-width: 600px) {

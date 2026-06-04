@@ -12,7 +12,7 @@ function Nav({ route, setRoute, totals, open, onClose }) {
   const settings = Store.settings();
   const sym      = window.ccySymbol(settings.displayCcy);
 
-  const NO_VAL_ROUTES = new Set(['dashboard','summary','networth','wallet','transactions','debts','walletsummary','walletcalendar','pixelworld','watchlist','sectors','selllog','technical']);
+  const NO_VAL_ROUTES = new Set(['dashboard','summary','networth','wallet','transactions','debts','walletsummary','walletcalendar','pixelworld','watchlist','sectors','selllog','technical','dayreport']);
 
   const item = (key, label, icon, color) => (
     <div key={key} className={'item' + (route === key ? ' active' : '')} onClick={() => { setRoute(key); onClose(); }}>
@@ -41,6 +41,7 @@ function Nav({ route, setRoute, totals, open, onClose }) {
         {item('sectors', 'By Sector', 'pie-chart')}
         {item('summary', 'Cost vs Price', 'bar-chart-2')}
         {item('selllog', 'Sell Log', 'trending-down')}
+        {item('dayreport', 'Day Report', 'send')}
         {item('watchlist', 'Watchlist', 'eye')}
         {item('technical', 'Technical', 'activity')}
         <div className="grp-h">Wallet</div>
@@ -641,6 +642,7 @@ function App() {
     : route === 'pixelworld'    ? 'Pixel Office'
     : route === 'watchlist'     ? 'Watchlist'
     : route === 'technical'     ? 'Technical Analysis'
+    : route === 'dayreport'     ? 'Day Report'
     : (Store.classByKey(route) || {}).label;
 
   return (
@@ -697,6 +699,7 @@ function App() {
           {route === 'pixelworld'    && <PixelWorld />}
           {route === 'watchlist'     && <WatchlistView />}
           {route === 'technical'     && <TechnicalAnalysis />}
+          {route === 'dayreport'     && <DayReportView />}
           {Store.classByKey(route) && <HoldingsView classKey={route} onAdd={openAdd} onEditLot={openEdit} />}
         </div>
       </div>
