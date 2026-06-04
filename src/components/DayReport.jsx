@@ -159,7 +159,7 @@ function DayReportView() {
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {hasData && (
-            <button className="icon-toggle" style={{ fontSize: 12, padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border-2)', cursor: 'pointer', background: 'transparent', color: 'var(--fg-2)' }}
+            <button style={{ fontSize: 12, padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border-2)', cursor: 'pointer', background: 'transparent', color: 'var(--fg-2)' }}
                     onClick={() => setPreview(p => !p)}>
               {preview ? 'Hide preview' : 'Preview text'}
             </button>
@@ -207,22 +207,6 @@ function DayReportView() {
             </div>
           )}
 
-          <div className="card" style={{ marginTop: 0 }}>
-            <div className="card-h">
-              <div className="t">Automatic delivery</div>
-              <div className="s">Cron job runs daily at 07:00 AM Thailand time (00:00 UTC)</div>
-            </div>
-            <div className="card-b">
-              <div style={{ fontSize: 13, color: 'var(--fg-2)', lineHeight: 1.7 }}>
-                <div>Requires these environment variables on Vercel:</div>
-                <ul style={{ marginTop: 6, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                  <li><code style={{ background: 'var(--bg-sunken)', padding: '1px 6px', borderRadius: 4, fontSize: 12 }}>TELEGRAM_BOT_TOKEN</code> — your bot token</li>
-                  <li><code style={{ background: 'var(--bg-sunken)', padding: '1px 6px', borderRadius: 4, fontSize: 12 }}>TELEGRAM_CHAT_ID</code> — your chat/user ID</li>
-                  <li><code style={{ background: 'var(--bg-sunken)', padding: '1px 6px', borderRadius: 4, fontSize: 12 }}>PORTFOLIO_ID</code> — your sync ID (shown in the sidebar footer)</li>
-                </ul>
-              </div>
-            </div>
-          </div>
         </React.Fragment>
       )}
     </div>
