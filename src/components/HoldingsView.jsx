@@ -265,77 +265,175 @@ function ClassAnalysis({ classKey }) {
   );
 }
 
-// ── Bento Box View ────────────────────────────────────────────────────────────
+// ── Squarified Treemap Layout ──────────────────────────────────────────────────
+
+function _tmAspect(row, rowArea, layoutLen) {
+  let worst = 0;
+  for (const item of row) {
+    const iLong  = rowArea > 0 ? (item.norm / rowArea) * layoutLen : 0;
+    const iCross = layoutLen > 0 ? rowArea / layoutLen : 0;
+    if (iLong > 0 && iCross > 0) worst = Math.max(worst, Math.max(iLong / iCross, iCross / iLong));
+  }
+  return worst;
+}
+
+function _tmPlaceRow(row, rowArea, x, y, w, h, isWide, out) {
+  if (isWide) {
+    const stripH = w > 0 ? rowArea / w : 0;
+    let cx = x;
+    for (const item of row) {
+      const iw = rowArea > 0 ? (item.norm / rowArea) * w : 0;
+      out.push({ data: item.data, x: cx, y, w: iw, h: stripH });
+      cx += iw;
+    }
+  } else {
+    const stripW = h > 0 ? rowArea / h : 0;
+    let cy = y;
+    for (const item of row) {
+      const ih = rowArea > 0 ? (item.norm / rowArea) * h : 0;
+      out.push({ data: item.data, x, y: cy, w: stripW, h: ih });
+      cy += ih;
+    }
+  }
+}
+
+function _tmSquarify(items, x, y, w, h, out) {
+  if (!items.length || w <= 0 || h <= 0) return;
+  if (items.length === 1) { out.push({ data: items[0].data, x, y, w, h }); return; }
+
+  const isWide = w >= h;
+  const layoutLen = isWide ? w : h;
+  let row = [], rowArea = 0, prevWorst = Infinity;
+
+  for (let i = 0; i < items.length; i++) {
+    const testRow  = [...row, items[i]];
+    const testArea = rowArea + items[i].norm;
+    const testWorst = _tmAspect(testRow, testArea, layoutLen);
+
+    if (row.length > 0 && testWorst > prevWorst) {
+      _tmPlaceRow(row, rowArea, x, y, w, h, isWide, out);
+      if (isWide) {
+        const stripH = rowArea / w;
+        _tmSquarify(items.slice(i), x, y + stripH, w, Math.max(0, h - stripH), out);
+      } else {
+        const stripW = rowArea / h;
+        _tmSquarify(items.slice(i), x + stripW, y, Math.max(0, w - stripW), h, out);
+      }
+      return;
+    }
+    row.push(items[i]);
+    rowArea = testArea;
+    prevWorst = testWorst;
+  }
+  _tmPlaceRow(row, rowArea, x, y, w, h, isWide, out);
+}
+
+function squarifiedTreemap(dataItems, totalW, totalH) {
+  if (!dataItems.length || totalW <= 0 || totalH <= 0) return [];
+  const total = dataItems.reduce((s, i) => s + i.value, 0);
+  if (!total) return [];
+  const area   = totalW * totalH;
+  const normed = [...dataItems]
+    .sort((a, b) => b.value - a.value)
+    .map(d => ({ data: d, norm: (d.value / total) * area }));
+  const out = [];
+  _tmSquarify(normed, 0, 0, totalW, totalH, out);
+  return out;
+}
+
+// ── Bento Box View ─────────────────────────────────────────────────────────────
 
 function getDayChangeBg(pct, totalPct) {
-  // Use day change if available, fallback to total P/L %
   const v = pct != null ? pct : totalPct;
-  if (v == null) return { bg: 'var(--bg-sunken)', text: 'var(--fg-2)', border: 'var(--border-1)' };
-  if (v >= 3)   return { bg: 'rgba(48,209,88,0.72)',  text: '#fff', border: 'transparent' };
-  if (v >= 0)   return { bg: 'rgba(48,209,88,0.20)',  text: 'var(--fg-1)', border: 'rgba(48,209,88,0.3)' };
-  if (v >= -3)  return { bg: 'rgba(255,69,58,0.20)',  text: 'var(--fg-1)', border: 'rgba(255,69,58,0.3)' };
-  return              { bg: 'rgba(255,69,58,0.72)',  text: '#fff', border: 'transparent' };
+  if (v == null) return { bg: 'var(--bg-sunken)', text: 'var(--fg-2)', border: 'transparent' };
+  if (v >= 3)   return { bg: '#1a7a3a', text: '#fff', border: 'transparent' };
+  if (v >= 0)   return { bg: 'rgba(48,209,88,0.22)', text: 'var(--fg-1)', border: 'transparent' };
+  if (v >= -3)  return { bg: 'rgba(255,69,58,0.22)', text: 'var(--fg-1)', border: 'transparent' };
+  return              { bg: '#a01a1a', text: '#fff', border: 'transparent' };
 }
 
 function BentoView({ classKey }) {
-  const positions  = Store.positions(classKey);
-  const cls        = Store.classByKey(classKey);
-  const settings   = Store.settings();
-  const sym        = window.ccySymbol(settings.displayCcy);
+  const positions    = Store.positions(classKey);
+  const cls          = Store.classByKey(classKey);
+  const settings     = Store.settings();
+  const sym          = window.ccySymbol(settings.displayCcy);
+  const containerRef = React.useRef(null);
+  const [containerW, setContainerW] = React.useState(0);
+
+  React.useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const update = () => setContainerW(el.getBoundingClientRect().width);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   if (!positions.length) return (
     <div className="empty" style={{ padding: '40px 20px' }}>No holdings yet.</div>
   );
 
-  const classTotal = positions.reduce((sum, p) => sum + Store.toDisplay(p.value, cls.ccy), 0) || 1;
+  const items = positions
+    .map(p => ({
+      name:     p.name.replace(/THB$/, ''),
+      rawName:  p.name,
+      value:    Store.toDisplay(p.value, cls.ccy),
+      dayPct:   Store.dayChangePct(classKey, p.name),
+      totalPct: p.pct,
+    }))
+    .filter(i => i.value > 0);
+
+  const BENTO_H = Math.max(260, Math.min(500, window.innerHeight * 0.5));
+  const GAP     = 3;
+  const rects   = containerW > 10 ? squarifiedTreemap(items, containerW, BENTO_H) : [];
 
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: 4 }}>
-      {positions.map(p => {
-        const value    = Store.toDisplay(p.value, cls.ccy);
-        const classPct = classTotal > 0 ? (value / classTotal) * 100 : 0;
-        const dayPct   = Store.dayChangePct(classKey, p.name);
-        const colors   = getDayChangeBg(dayPct, p.pct);
-        const dispName = p.name.replace(/THB$/, '');
-        const flexSize = Math.max(classPct, 2);
+    <div ref={containerRef} style={{ position: 'relative', width: '100%', height: BENTO_H, overflow: 'hidden' }}>
+      {rects.map(({ data, x, y, w, h }) => {
+        const ax = x + GAP / 2, ay = y + GAP / 2;
+        const aw = Math.max(0, w - GAP), ah = Math.max(0, h - GAP);
+        const colors  = getDayChangeBg(data.dayPct, data.totalPct);
+        const pct     = data.dayPct != null ? data.dayPct : data.totalPct;
+        const pctStr  = pct != null ? (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%' : null;
+
+        // Font size scales with the smaller box dimension
+        const minDim   = Math.min(aw, ah);
+        const nameFz   = Math.min(24, Math.max(9,  minDim * 0.28));
+        const pctFz    = Math.min(15, Math.max(8,  nameFz * 0.65));
+        const showName = aw > 30  && ah > 24;
+        const showPct  = aw > 44  && ah > 44 && pctStr != null;
+        const pad      = Math.min(10, aw * 0.07);
 
         return (
-          <div key={p.name} style={{
-            flex: `${flexSize} ${flexSize} ${Math.max(flexSize - 1, 1)}%`,
-            minWidth: 80,
-            minHeight: 96,
-            background: colors.bg,
-            border: `1px solid ${colors.border}`,
-            borderRadius: 14,
-            padding: '12px 14px',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between',
-            transition: 'opacity 0.15s',
-            cursor: 'default',
-            boxSizing: 'border-box',
-            overflow: 'hidden',
-          }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: colors.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {dispName}
-            </div>
-            <div>
-              <div style={{ fontSize: 11, color: colors.text, opacity: 0.75, marginBottom: 2 }}>
-                {classPct.toFixed(1)}% of class
+          <div key={data.rawName}
+               title={`${data.name}${pctStr ? '  ' + pctStr : ''}  ${sym}${window.fmtBig(data.value)}`}
+               style={{
+                 position: 'absolute', left: ax, top: ay, width: aw, height: ah,
+                 background: colors.bg, borderRadius: 4,
+                 overflow: 'hidden', boxSizing: 'border-box',
+                 display: 'flex', flexDirection: 'column',
+                 justifyContent: 'center', alignItems: 'center',
+                 padding: pad, cursor: 'default',
+               }}>
+            {showName && (
+              <div style={{
+                fontWeight: 700, fontSize: nameFz, color: colors.text,
+                textAlign: 'center', lineHeight: 1.1,
+                width: '100%', overflow: 'hidden',
+                textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {data.name}
               </div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: colors.text, fontVariantNumeric: 'tabular-nums' }}>
-                {sym}{window.fmtBig(value)}
+            )}
+            {showPct && (
+              <div style={{
+                fontSize: pctFz, fontWeight: 600, color: colors.text,
+                marginTop: 3, fontVariantNumeric: 'tabular-nums', textAlign: 'center',
+              }}>
+                {pctStr}
               </div>
-              {dayPct != null ? (
-                <div style={{ fontSize: 13, fontWeight: 700, color: colors.text, marginTop: 2 }}>
-                  {dayPct >= 0 ? '+' : ''}{dayPct.toFixed(2)}% today
-                </div>
-              ) : (
-                <div style={{ fontSize: 11, color: colors.text, opacity: 0.6, marginTop: 2 }}>
-                  {p.pct >= 0 ? '+' : ''}{p.pct.toFixed(2)}% total
-                </div>
-              )}
-            </div>
+            )}
           </div>
         );
       })}
