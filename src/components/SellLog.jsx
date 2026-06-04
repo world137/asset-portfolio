@@ -125,7 +125,7 @@ function SellLogView() {
       </div>
 
       {/* Form + yearly summary side-by-side */}
-      <div className="dash dash-2col" style={{ alignItems: 'start' }}>
+      <div className="dash dash-2col" style={{ alignItems: 'start', display: 'block' }}>
         <div className="card">
           <div className="card-h">
             <div className="t">Record a Sale</div>
@@ -261,7 +261,7 @@ function SellLogView() {
         </div>
 
         {/* Yearly P/L summary */}
-        <div className="card">
+        <div className="card" style={{ marginTop: 20 }}>
           <div className="card-h">
             <div className="t">Yearly P/L Summary</div>
             <div className="s">Realized profit/loss aggregated by year</div>
