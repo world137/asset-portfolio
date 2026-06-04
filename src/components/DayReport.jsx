@@ -207,8 +207,123 @@ function DayReportView() {
             </div>
           )}
 
+          <DayChangeTable />
         </React.Fragment>
       )}
+    </div>
+  );
+}
+
+// ── All-holdings day-change table ─────────────────────────────────────────────
+
+function buildDayRows() {
+  const rows = [];
+  for (const cls of window.ASSET_CLASSES) {
+    if (!cls.live) continue;
+    const positions = Store.positions(cls.key);
+    const settings  = Store.settings();
+    for (const p of positions) {
+      const dayPct = Store.dayChangePct(cls.key, p.name);
+      if (dayPct == null) continue;
+      // derive prev close from current price + pct
+      const cur        = p.cur;
+      const prevClose  = cur / (1 + dayPct / 100);
+      const changeAbs  = cur - prevClose;
+      rows.push({
+        name:      p.name.replace(/THB$/, ''),
+        classKey:  cls.key,
+        classLabel: cls.short || cls.label,
+        ccy:       cls.ccy,
+        cur,
+        prevClose,
+        changeAbs,
+        dayPct,
+        value:     Store.toDisplay(p.value, cls.ccy),
+      });
+    }
+  }
+  return rows;
+}
+
+function DayChangeTable() {
+  const { sortBy, sortDir, handleSort } = useSortState('dayPct');
+  const settings = Store.settings();
+  const sym      = window.ccySymbol(settings.displayCcy);
+
+  const rows = buildDayRows();
+  if (!rows.length) return null;
+
+  const sorted = [...rows].sort((a, b) => {
+    let av = a[sortBy], bv = b[sortBy];
+    if (typeof av === 'string') return sortDir * av.localeCompare(bv);
+    return sortDir * ((bv ?? -Infinity) - (av ?? -Infinity));
+  });
+
+  const ccySym = ccy => ccy === 'USD' ? '$' : '฿';
+  const fmtPrice = (v, ccy) => {
+    if (v == null) return '—';
+    const abs = Math.abs(v);
+    const s   = abs >= 1000 ? abs.toLocaleString('en', { maximumFractionDigits: 2 })
+              : abs >= 10   ? abs.toFixed(2)
+              : abs >= 0.1  ? abs.toFixed(4)
+              : abs.toFixed(6);
+    return (v < 0 ? '-' : '') + ccySym(ccy) + s;
+  };
+
+  return (
+    <div className="card" style={{ marginTop: 20 }}>
+      <div className="card-h">
+        <div className="t">All Holdings — Day Change</div>
+        <div className="s">{sorted.length} assets with live price data</div>
+      </div>
+      <div className="card-b" style={{ padding: 0, overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid var(--border-1)' }}>
+              <SortTh col="name"      label="Asset"      sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+              <SortTh col="classLabel" label="Class"     sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+              <SortTh col="cur"       label="Price"      right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+              <SortTh col="changeAbs" label="Change"     right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+              <SortTh col="dayPct"    label="Day %"      right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+              <SortTh col="value"     label="Value"      right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map(r => {
+              const pctColor  = r.dayPct >= 0 ? 'var(--green-600,#1a9e5c)' : 'var(--red-600,#d63b3b)';
+              const absSign   = r.changeAbs >= 0 ? '+' : '';
+              const pctSign   = r.dayPct   >= 0 ? '+' : '';
+              return (
+                <tr key={r.classKey + ':' + r.name}
+                    style={{ borderBottom: '1px solid var(--border-1)' }}>
+                  <td style={{ padding: '8px 12px', fontWeight: 600 }}>{r.name}</td>
+                  <td style={{ padding: '8px 12px' }}>
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                      fontSize: 11, fontWeight: 600, color: 'var(--fg-2)',
+                    }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: window.CLASS_COLORS[r.classKey], display: 'inline-block', flexShrink: 0 }} />
+                      {r.classLabel}
+                    </span>
+                  </td>
+                  <td className="num" style={{ padding: '8px 12px', fontVariantNumeric: 'tabular-nums' }}>
+                    {fmtPrice(r.cur, r.ccy)}
+                  </td>
+                  <td className="num" style={{ padding: '8px 12px', color: pctColor, fontVariantNumeric: 'tabular-nums' }}>
+                    {absSign}{fmtPrice(r.changeAbs, r.ccy)}
+                  </td>
+                  <td className="num" style={{ padding: '8px 12px', color: pctColor, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                    {pctSign}{r.dayPct.toFixed(2)}%
+                  </td>
+                  <td className="num" style={{ padding: '8px 12px', fontVariantNumeric: 'tabular-nums' }}>
+                    {sym}{window.fmtBig(r.value)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

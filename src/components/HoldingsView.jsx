@@ -352,6 +352,59 @@ function getDayChangeBg(pct, totalPct) {
   return              { bg: '#a01a1a', text: '#fff', border: 'transparent' };
 }
 
+function BentoTooltip({ data, sym, x, y, containerW }) {
+  const W = 200;
+  const left = x + W + 16 > containerW ? x - W - 8 : x + 12;
+  const dayPct   = data.dayPct;
+  const totalPct = data.totalPct;
+  const pctLabel = dayPct != null ? 'Day' : 'Total P/L';
+  const pct      = dayPct != null ? dayPct : totalPct;
+  const pctStr   = pct != null ? (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%' : '—';
+  const pctColor = pct == null ? 'var(--fg-2)' : pct >= 0 ? '#30d158' : '#ff453a';
+
+  return (
+    <div style={{
+      position: 'absolute', left, top: Math.max(4, y - 8),
+      width: W, zIndex: 100, pointerEvents: 'none',
+      background: 'var(--bg-card, #1c1c1e)',
+      border: '1px solid var(--border, rgba(255,255,255,0.12))',
+      borderRadius: 8, padding: '10px 12px',
+      boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+      fontSize: 12, lineHeight: 1.6,
+    }}>
+      <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6, color: 'var(--fg-1)' }}>
+        {data.name}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <span style={{ color: 'var(--fg-2)' }}>Value</span>
+        <span style={{ color: 'var(--fg-1)', fontVariantNumeric: 'tabular-nums' }}>
+          {sym}{window.fmtBig(data.value)}
+        </span>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <span style={{ color: 'var(--fg-2)' }}>Allocation</span>
+        <span style={{ color: 'var(--fg-1)', fontVariantNumeric: 'tabular-nums' }}>
+          {data.allocPct != null ? data.allocPct.toFixed(1) + '%' : '—'}
+        </span>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <span style={{ color: 'var(--fg-2)' }}>{pctLabel}</span>
+        <span style={{ color: pctColor, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+          {pctStr}
+        </span>
+      </div>
+      {data.profit != null && (
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span style={{ color: 'var(--fg-2)' }}>P/L</span>
+          <span style={{ color: data.profit >= 0 ? '#30d158' : '#ff453a', fontVariantNumeric: 'tabular-nums' }}>
+            {data.profit >= 0 ? '+' : ''}{sym}{window.fmtBig(Math.abs(data.profit))}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BentoView({ classKey }) {
   const positions    = Store.positions(classKey);
   const cls          = Store.classByKey(classKey);
@@ -359,6 +412,7 @@ function BentoView({ classKey }) {
   const sym          = window.ccySymbol(settings.displayCcy);
   const containerRef = React.useRef(null);
   const [containerW, setContainerW] = React.useState(0);
+  const [hovered, setHovered]       = React.useState(null); // { data, x, y }
 
   React.useEffect(() => {
     const el = containerRef.current;
@@ -374,14 +428,22 @@ function BentoView({ classKey }) {
     <div className="empty" style={{ padding: '40px 20px' }}>No holdings yet.</div>
   );
 
+  const totalValue = positions.reduce((s, p) => s + Store.toDisplay(p.value, cls.ccy), 0);
+
   const items = positions
-    .map(p => ({
-      name:     p.name.replace(/THB$/, ''),
-      rawName:  p.name,
-      value:    Store.toDisplay(p.value, cls.ccy),
-      dayPct:   Store.dayChangePct(classKey, p.name),
-      totalPct: p.pct,
-    }))
+    .map(p => {
+      const val = Store.toDisplay(p.value, cls.ccy);
+      return {
+        name:      p.name.replace(/THB$/, ''),
+        rawName:   p.name,
+        value:     val,
+        cost:      Store.toDisplay(p.cost, cls.ccy),
+        profit:    Store.toDisplay(p.profit, cls.ccy),
+        dayPct:    Store.dayChangePct(classKey, p.name),
+        totalPct:  p.pct,
+        allocPct:  totalValue > 0 ? (val / totalValue) * 100 : 0,
+      };
+    })
     .filter(i => i.value > 0);
 
   const BENTO_H = Math.max(260, Math.min(500, window.innerHeight * 0.5));
@@ -389,7 +451,9 @@ function BentoView({ classKey }) {
   const rects   = containerW > 10 ? squarifiedTreemap(items, containerW, BENTO_H) : [];
 
   return (
-    <div ref={containerRef} style={{ position: 'relative', width: '100%', height: BENTO_H, overflow: 'hidden' }}>
+    <div ref={containerRef}
+         style={{ position: 'relative', width: '100%', height: BENTO_H, overflow: 'hidden' }}
+         onMouseLeave={() => setHovered(null)}>
       {rects.map(({ data, x, y, w, h }) => {
         const ax = x + GAP / 2, ay = y + GAP / 2;
         const aw = Math.max(0, w - GAP), ah = Math.max(0, h - GAP);
@@ -397,17 +461,18 @@ function BentoView({ classKey }) {
         const pct     = data.dayPct != null ? data.dayPct : data.totalPct;
         const pctStr  = pct != null ? (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%' : null;
 
-        // Font size scales with the smaller box dimension
+        // Only show text when box is large enough to be readable
         const minDim   = Math.min(aw, ah);
         const nameFz   = Math.min(24, Math.max(9,  minDim * 0.28));
         const pctFz    = Math.min(15, Math.max(8,  nameFz * 0.65));
-        const showName = aw > 30  && ah > 24;
-        const showPct  = aw > 44  && ah > 44 && pctStr != null;
+        const showName = aw > 64  && ah > 40;
+        const showPct  = aw > 80  && ah > 64 && pctStr != null;
         const pad      = Math.min(10, aw * 0.07);
+
+        const isHov = hovered?.data.rawName === data.rawName;
 
         return (
           <div key={data.rawName}
-               title={`${data.name}${pctStr ? '  ' + pctStr : ''}  ${sym}${window.fmtBig(data.value)}`}
                style={{
                  position: 'absolute', left: ax, top: ay, width: aw, height: ah,
                  background: colors.bg, borderRadius: 4,
@@ -415,6 +480,17 @@ function BentoView({ classKey }) {
                  display: 'flex', flexDirection: 'column',
                  justifyContent: 'center', alignItems: 'center',
                  padding: pad, cursor: 'default',
+                 outline: isHov ? '2px solid rgba(255,255,255,0.5)' : 'none',
+                 outlineOffset: -2,
+                 transition: 'outline 0.1s',
+               }}
+               onMouseEnter={e => {
+                 const rect = containerRef.current.getBoundingClientRect();
+                 setHovered({ data, x: ax + aw / 2, y: ay });
+               }}
+               onMouseMove={e => {
+                 const rect = containerRef.current.getBoundingClientRect();
+                 setHovered(h => h ? { ...h, x: e.clientX - rect.left, y: e.clientY - rect.top } : h);
                }}>
             {showName && (
               <div style={{
@@ -437,6 +513,15 @@ function BentoView({ classKey }) {
           </div>
         );
       })}
+      {hovered && (
+        <BentoTooltip
+          data={hovered.data}
+          sym={sym}
+          x={hovered.x}
+          y={hovered.y}
+          containerW={containerW}
+        />
+      )}
     </div>
   );
 }
