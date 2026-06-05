@@ -348,7 +348,7 @@ function PortfolioGrowthPanel() {
   const snapshots = Store.getSnapshots();
   if (!snapshots || snapshots.length < 2) {
     return (
-      <div className="card" style={{ padding: '20px 18px', marginTop: 16 }}>
+      <div className="card" style={{ padding: '20px 18px' }}>
         <div className="card-h"><div><div className="t">Portfolio Growth</div><div className="s">Needs 2+ daily snapshots to calculate returns</div></div></div>
         <div style={{ color: 'var(--fg-3)', fontSize: 13, padding: '12px 0' }}>
           Not enough snapshot history yet. Returns will appear after the portfolio has been open on multiple days.
@@ -397,7 +397,7 @@ function PortfolioGrowthPanel() {
   });
 
   return (
-    <div className="card">
+    <div className="card" style={{ marginTop: 16 }}>
       <div className="card-h" style={{ padding: '14px 18px' }}>
         <div>
           <div className="t">Portfolio Growth</div>
