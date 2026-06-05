@@ -126,6 +126,52 @@ async function fetchMOF() {
   }
 }
 
+// ── Fetcher: FRED / OECD harmonized long-term rates (CSV, no API key) ─────────
+// Monthly frequency. Series IDs: IRLTLT01{CC}M156N (OECD MEI dataset via FRED).
+// Covers all OECD members + major G20 partners (AU, FR, KR, IN).
+
+async function fetchFRED(seriesId) {
+  try {
+    const r = await fetch(
+      `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${seriesId}`,
+      { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(12000) }
+    );
+    if (!r.ok) return null;
+    const text = await r.text();
+    const vals = text.split('\n')
+      .filter(l => /^\d{4}-\d{2}-\d{2}/.test(l))
+      .map(l => parseFloat(l.split(',')[1]))
+      .filter(v => !isNaN(v));
+    if (!vals.length) return null;
+    return makeResult(vals[vals.length - 1], vals.length >= 2 ? vals[vals.length - 2] : null);
+  } catch (_) {
+    return null;
+  }
+}
+
+// ── Fetcher: stooq.com — daily government bond yields ─────────────────────────
+// Ticker format: {maturity}y{cc}.b  e.g. 10thy.b = Thailand 10Y
+
+async function fetchStooq(ticker) {
+  try {
+    const r = await fetch(
+      `https://stooq.com/q/d/l/?s=${ticker}&i=d`,
+      { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(12000) }
+    );
+    if (!r.ok) return null;
+    const text = await r.text();
+    // CSV: Date,Open,High,Low,Close,Volume — use Close (col 4)
+    const vals = text.split('\n')
+      .filter(l => /^\d{4}-\d{2}-\d{2}/.test(l))
+      .map(l => parseFloat(l.split(',')[4]))
+      .filter(v => !isNaN(v));
+    if (!vals.length) return null;
+    return makeResult(vals[vals.length - 1], vals.length >= 2 ? vals[vals.length - 2] : null);
+  } catch (_) {
+    return null;
+  }
+}
+
 // ── Fetcher: Bank of Canada Valet API ─────────────────────────────────────────
 // Series BD.CDN.10YR.DQ.YLD — daily Government of Canada 10Y bond yield
 
@@ -155,11 +201,7 @@ const BONDS = [
   { key: 'de', label: 'Germany',       flag: '🇩🇪', fetch: fetchECB        },  // Euro area sovereign benchmark
   { key: 'jp', label: 'Japan',         flag: '🇯🇵', fetch: fetchMOF        },
   { key: 'ca', label: 'Canada',        flag: '🇨🇦', fetch: fetchBOC        },
-  { key: 'au', label: 'Australia',     flag: '🇦🇺', fetch: null            },  // RBA blocks server-side access
-  { key: 'kr', label: 'South Korea',   flag: '🇰🇷', fetch: null            },  // BOK requires API key
-  { key: 'in', label: 'India',         flag: '🇮🇳', fetch: null            },  // no free daily API found
-  { key: 'fr', label: 'France',        flag: '🇫🇷', fetch: null            },  // no free daily API found
-  { key: 'th', label: 'Thailand',      flag: '🇹🇭', fetch: null            },  // no free daily API found
+  { key: 'kr', label: 'South Korea',   flag: '🇰🇷', fetch: () => fetchFRED('IRLTLT01KRM156N') },
 ];
 
 // ── Handler ───────────────────────────────────────────────────────────────────
