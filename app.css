@@ -1435,6 +1435,13 @@ body { background: var(--bg-app); display: block; padding: 0; }
 .mgrid > div { min-width: 0; }
 .mgrid input, .mgrid select { max-width: 100%; box-sizing: border-box; }
 input[type="date"] { min-width: 0; max-width: 100%; box-sizing: border-box; }
+/* Safari renders date inputs taller than text inputs — force consistent height */
+input[type="date"].input {
+  height: 40px;
+  line-height: 1.2;
+  -webkit-appearance: none;
+  appearance: none;
+}
 
 .analysis-grid {
   display: grid;

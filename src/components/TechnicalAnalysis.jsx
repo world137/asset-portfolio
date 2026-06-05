@@ -451,13 +451,42 @@ function BondYieldsTable() {
 
 // ── Macro Dashboard ─────────────────────────────────────────────────────────
 
-const MACRO_IMPACT_MATRIX = [
-  { indicator: 'Fed Rate ↑', impacts: ['Tech ↓↓↓', 'Gold ↓',      'BTC ↓↓↓', 'USD ↑'   ] },
-  { indicator: 'US10Y ↑',   impacts: ['Tech ↓↓↓', 'REIT ↓↓↓',   'Gold ↓',   'USD ↑'   ] },
-  { indicator: 'CPI ↑',     impacts: ['Growth ↓',  'Energy ↑↑',  'Gold ↑',   'Mixed'   ] },
-  { indicator: 'DXY ↑',     impacts: ['EM ↓↓↓',   'Gold ↓',     'BTC ↓↓',   'USD ↑'   ] },
-  { indicator: 'VIX ↑',     impacts: ['Stocks ↓↓↓','Bonds ↑',   'Cash ↑',   'Risk Off'] },
-  { indicator: 'M2 ↑',      impacts: ['Stocks ↑↑', 'BTC ↑↑↑',   'Gold ↑',   'Risk On' ] },
+// Asset columns shown in the impact matrix
+const MATRIX_COLS = ['Tech', 'REIT', 'Gold', 'BTC', 'EM', 'Energy', 'Bonds', 'Cash'];
+
+// Structured matrix rows: each row tracks which indicator key triggers it,
+// a live isActive() check, and a per-column impact score (-3 to +3).
+const MACRO_MATRIX_ROWS = [
+  {
+    key: 'fedRate', label: 'Fed Rate', direction: '↑ Elevated (≥ 4%)',
+    isActive: v => v != null && v >= 4.0,
+    impacts: { Tech: -3, REIT: -2, Gold: -1, BTC: -3, EM: -2, Energy: 0, Bonds: -2, Cash: 1 },
+  },
+  {
+    key: 'us10y', label: 'US 10Y', direction: '↑ Elevated (≥ 4%)',
+    isActive: v => v != null && v >= 4.0,
+    impacts: { Tech: -3, REIT: -3, Gold: -1, BTC: -1, EM: -2, Energy: 0, Bonds: -2, Cash: 1 },
+  },
+  {
+    key: 'cpi', label: 'CPI Inflation', direction: '↑ High (≥ 3%)',
+    isActive: v => v != null && v >= 3.0,
+    impacts: { Tech: -1, REIT: -1, Gold: 2, BTC: 1, EM: -1, Energy: 3, Bonds: -2, Cash: -1 },
+  },
+  {
+    key: 'dxy', label: 'DXY (Dollar)', direction: '↑ Strong (≥ 100)',
+    isActive: v => v != null && v >= 100,
+    impacts: { Tech: 0, REIT: 0, Gold: -2, BTC: -2, EM: -3, Energy: -1, Bonds: 0, Cash: 2 },
+  },
+  {
+    key: 'vix', label: 'VIX (Fear)', direction: '↑ Elevated (≥ 20)',
+    isActive: v => v != null && v >= 20,
+    impacts: { Tech: -3, REIT: -2, Gold: 1, BTC: -3, EM: -3, Energy: -2, Bonds: 2, Cash: 3 },
+  },
+  {
+    key: 'liquidity', label: 'M2 Liquidity', direction: '↑ Expanding',
+    isActive: () => false,
+    impacts: { Tech: 2, REIT: 1, Gold: 1, BTC: 3, EM: 2, Energy: 1, Bonds: 0, Cash: -1 },
+  },
 ];
 
 const MACRO_INFO = {
@@ -520,16 +549,6 @@ function getMacroLevel(key, value) {
   return info.levels.find(l => value < l.max) || info.levels[info.levels.length - 1];
 }
 
-function macroImpactLevel(text) {
-  if (text === 'Risk On'  || text.includes('↑↑↑')) return  3;
-  if (text.includes('↑↑'))                          return  2;
-  if (text.includes('↑'))                           return  1;
-  if (text === 'Mixed')                             return  0;
-  if (text === 'Risk Off' || text.includes('↓↓↓')) return -3;
-  if (text.includes('↓↓'))                          return -2;
-  if (text.includes('↓'))                           return -1;
-  return 0;
-}
 
 function macroImpactStyle(level) {
   switch (level) {
@@ -653,10 +672,20 @@ function MacroInfoPanel({ indKey, value, onClose }) {
   );
 }
 
+// Impact arrow text for a numeric score
+function impactArrow(n) {
+  if (n >= 3) return '↑↑↑';
+  if (n === 2) return '↑↑';
+  if (n === 1) return '↑';
+  if (n === 0) return '·';
+  if (n === -1) return '↓';
+  if (n === -2) return '↓↓';
+  return '↓↓↓';
+}
+
 function MacroDashboard() {
   const [data,       setData]       = React.useState(null);
   const [loading,    setLoading]    = React.useState(true);
-  const [showMatrix, setShowMatrix] = React.useState(false);
   const [activeCard, setActiveCard] = React.useState(null);
 
   React.useEffect(() => {
@@ -677,22 +706,35 @@ function MacroDashboard() {
 
   const toggleCard = (key) => setActiveCard(v => v === key ? null : key);
 
+  // Which indicator rows are currently in their active/elevated state
+  const activeRows = MACRO_MATRIX_ROWS.filter(row => row.isActive(ind[row.key]?.value));
+
+  // Net composite impact per asset column from all active rows
+  const compositeImpact = {};
+  for (const col of MATRIX_COLS) {
+    compositeImpact[col] = activeRows.reduce((s, row) => s + (row.impacts[col] || 0), 0);
+  }
+
   return (
     <div className="card" style={{ padding: '16px 18px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+      {/* ── Header ── */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, gap: 8 }}>
         <div>
           <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--fg-1)' }}>Macro Environment</div>
           <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 1 }}>Live indicators · 15 min cache · tap any card for details</div>
         </div>
-        <button onClick={() => setShowMatrix(v => !v)} style={{
-          fontSize: 12, color: 'var(--fg-3)', background: 'none',
-          border: '1px solid var(--border-2)', padding: '4px 10px',
-          borderRadius: 8, cursor: 'pointer', fontWeight: 500,
-        }}>
-          {showMatrix ? 'Hide Matrix' : 'Impact Matrix'}
-        </button>
+        {!loading && activeRows.length > 0 && (
+          <div style={{
+            fontSize: 11, color: '#ff453a', background: 'rgba(255,69,58,0.1)',
+            border: '1px solid rgba(255,69,58,0.3)', padding: '4px 10px',
+            borderRadius: 8, fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap',
+          }}>
+            {activeRows.length} active headwind{activeRows.length !== 1 ? 's' : ''}
+          </div>
+        )}
       </div>
 
+      {/* ── Indicator cards ── */}
       {loading
         ? <div style={{ display: 'flex', gap: 8 }}>
             {[1,2,3,4,5].map(i => (
@@ -707,71 +749,161 @@ function MacroDashboard() {
           </div>
       }
 
+      {/* ── Detail panel (card click) ── */}
       {activeCard && !loading && (
         <MacroInfoPanel indKey={activeCard} value={ind[activeCard]?.value} onClose={() => setActiveCard(null)} />
       )}
 
-      {showMatrix && (
-        <div style={{ marginTop: 14 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--fg-3)', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 10 }}>
-            Market Impact Matrix
-          </div>
-          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-            <div style={{ minWidth: 520 }}>
-              {MACRO_IMPACT_MATRIX.map((row) => (
-                <div key={row.indicator} style={{ display: 'flex', gap: 6, marginBottom: 6, alignItems: 'stretch' }}>
-                  <div style={{
-                    width: 100, flexShrink: 0, display: 'flex', alignItems: 'center',
-                    padding: '8px 10px', borderRadius: 8,
-                    background: 'var(--bg-sunken)', border: '1px solid var(--border-1)',
-                    fontWeight: 700, fontSize: 11, color: 'var(--fg-1)',
-                  }}>
-                    {row.indicator}
-                  </div>
-                  {row.impacts.map((imp, j) => {
-                    const level = macroImpactLevel(imp);
-                    const st    = macroImpactStyle(level);
-                    const assetName = imp.replace(/[↑↓]+/g, '').replace('Risk On', 'Risk On').replace('Risk Off', 'Risk Off').replace('Mixed', 'Mixed').trim();
-                    return (
-                      <div key={j} style={{
-                        flex: '1 1 80px', padding: '7px 10px', borderRadius: 8,
-                        background: st.bg, border: '1px solid ' + st.border,
-                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                        gap: 3, minWidth: 72,
-                      }}>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: st.text, textAlign: 'center' }}>
-                          {assetName}
-                        </div>
-                        <div style={{ fontSize: 14, lineHeight: 1 }}>
-                          {level >= 3 ? '⬆⬆⬆' : level === 2 ? '⬆⬆' : level === 1 ? '⬆' : level === 0 ? '↔' : level === -1 ? '⬇' : level === -2 ? '⬇⬇' : '⬇⬇⬇'}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
+      {/* ── Impact Matrix ── */}
+      {!loading && (
+        <div style={{ marginTop: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--fg-3)', letterSpacing: 0.5, textTransform: 'uppercase' }}>
+              Market Impact Matrix
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--fg-4)' }}>
+              · highlighted rows are currently elevated · bottom row = net signal from active conditions
             </div>
           </div>
+
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <table style={{ borderCollapse: 'collapse', fontSize: 12, width: '100%', minWidth: 580 }}>
+              <thead>
+                <tr>
+                  {/* Row label column */}
+                  <th style={{
+                    padding: '7px 12px', textAlign: 'left',
+                    fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase',
+                    color: 'var(--fg-3)', borderBottom: '2px solid var(--border-1)',
+                    minWidth: 140, whiteSpace: 'nowrap',
+                  }}>Indicator</th>
+                  {MATRIX_COLS.map(col => (
+                    <th key={col} style={{
+                      padding: '7px 6px', textAlign: 'center',
+                      fontSize: 10, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase',
+                      color: 'var(--fg-3)', borderBottom: '2px solid var(--border-1)',
+                      whiteSpace: 'nowrap', minWidth: 54,
+                    }}>
+                      {col}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {MACRO_MATRIX_ROWS.map((row, i) => {
+                  const val    = ind[row.key]?.value;
+                  const active = row.isActive(val);
+                  const level  = row.key !== 'liquidity' ? getMacroLevel(row.key, val) : null;
+                  const rowBg  = active
+                    ? 'rgba(255,69,58,0.07)'
+                    : (i % 2 === 0 ? 'transparent' : 'var(--bg-sunken)');
+                  const unit   = (row.key === 'fedRate' || row.key === 'us10y' || row.key === 'cpi') ? '%' : '';
+
+                  return (
+                    <tr key={row.key} style={{ background: rowBg }}>
+                      <td style={{ padding: '9px 12px', borderBottom: '1px solid var(--border-1)', whiteSpace: 'nowrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {active
+                            ? <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#ff453a', flexShrink: 0, display: 'inline-block' }} />
+                            : <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--border-2)', flexShrink: 0, display: 'inline-block' }} />
+                          }
+                          <div>
+                            <span style={{ fontWeight: 700, fontSize: 12, color: active ? 'var(--fg-1)' : 'var(--fg-2)' }}>
+                              {row.label}
+                            </span>
+                            {val != null && (
+                              <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--fg-3)', fontVariantNumeric: 'tabular-nums' }}>
+                                {val.toFixed(2)}{unit}
+                              </span>
+                            )}
+                            {level && (
+                              <span style={{
+                                marginLeft: 5, fontSize: 9, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase',
+                                color: level.color, background: level.color + '22', padding: '1px 5px', borderRadius: 4,
+                              }}>
+                                {level.label}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div style={{ fontSize: 10, color: 'var(--fg-4)', marginTop: 2, paddingLeft: 12 }}>
+                          {row.direction}
+                        </div>
+                      </td>
+                      {MATRIX_COLS.map(col => {
+                        const impact = row.impacts[col] || 0;
+                        const st     = macroImpactStyle(impact);
+                        return (
+                          <td key={col} style={{ padding: '5px 4px', borderBottom: '1px solid var(--border-1)', textAlign: 'center' }}>
+                            <div style={{
+                              background: st.bg, border: '1px solid ' + st.border, borderRadius: 6,
+                              padding: '5px 2px', opacity: active ? 1 : 0.5,
+                              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
+                            }}>
+                              <span style={{ fontSize: 12, fontWeight: 700, color: st.text, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
+                                {impactArrow(impact)}
+                              </span>
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+
+                {/* Net Signal row — only shown when there are active conditions */}
+                {activeRows.length > 0 && (
+                  <tr style={{ borderTop: '2px solid var(--border-1)' }}>
+                    <td style={{ padding: '9px 12px', whiteSpace: 'nowrap', background: 'var(--bg-sunken)' }}>
+                      <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--fg-1)' }}>Net Signal</div>
+                      <div style={{ fontSize: 10, color: 'var(--fg-4)', marginTop: 2 }}>
+                        {activeRows.length} active condition{activeRows.length !== 1 ? 's' : ''}
+                      </div>
+                    </td>
+                    {MATRIX_COLS.map(col => {
+                      const net     = compositeImpact[col];
+                      const clamped = Math.max(-3, Math.min(3, net));
+                      const st      = macroImpactStyle(clamped);
+                      return (
+                        <td key={col} style={{ padding: '5px 4px', textAlign: 'center', background: 'var(--bg-sunken)' }}>
+                          <div style={{
+                            background: st.bg, border: '2px solid ' + st.border, borderRadius: 6,
+                            padding: '5px 2px',
+                            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
+                          }}>
+                            <span style={{ fontSize: 12, fontWeight: 800, color: st.text, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
+                              {net > 0 ? '+' : ''}{net}
+                            </span>
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
           {/* Legend */}
-          <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            <span style={{ fontSize: 11, color: 'var(--fg-3)', fontWeight: 600 }}>Impact scale:</span>
-            {[
-              { level: 3,  label: '⬆⬆⬆ Strong Bull' },
-              { level: 2,  label: '⬆⬆ Bull'         },
-              { level: 1,  label: '⬆ Mild Bull'      },
-              { level: 0,  label: '↔ Neutral/Mixed'  },
-              { level: -1, label: '⬇ Mild Bear'      },
-              { level: -2, label: '⬇⬇ Bear'          },
-              { level: -3, label: '⬇⬇⬇ Strong Bear' },
-            ].map(({ level, label }) => {
+          <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ fontSize: 10, color: 'var(--fg-3)', fontWeight: 600 }}>Scale:</span>
+            {[3, 2, 1, 0, -1, -2, -3].map(level => {
               const st = macroImpactStyle(level);
+              const label = level >= 3 ? '↑↑↑ Strong Bull'
+                          : level === 2 ? '↑↑ Bull'
+                          : level === 1 ? '↑ Mild Bull'
+                          : level === 0 ? '· Neutral'
+                          : level === -1 ? '↓ Mild Bear'
+                          : level === -2 ? '↓↓ Bear'
+                          : '↓↓↓ Strong Bear';
               return (
-                <div key={level} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11 }}>
-                  <div style={{ width: 14, height: 14, borderRadius: 3, background: st.bg, border: '1px solid ' + st.border, flexShrink: 0 }} />
+                <div key={level} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10 }}>
+                  <div style={{ width: 12, height: 12, borderRadius: 3, background: st.bg, border: '1px solid ' + st.border, flexShrink: 0 }} />
                   <span style={{ color: 'var(--fg-3)' }}>{label}</span>
                 </div>
               );
             })}
+            <span style={{ fontSize: 10, color: 'var(--fg-4)' }}>· Active = currently elevated · Net = sum of active rows</span>
           </div>
         </div>
       )}
