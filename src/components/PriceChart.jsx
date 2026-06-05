@@ -215,6 +215,7 @@ function CandleChart({ bars, daysBack }) {
         <button
           onClick={() => setShowInds(v => !v)}
           style={{
+            marginTop: 4,
             fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 8, cursor: 'pointer', flexShrink: 0,
             background: showInds ? 'var(--bg-selected)' : 'var(--bg-surface)',
             border: '1px solid ' + (showInds ? 'var(--accent)' : 'var(--border-2)'),

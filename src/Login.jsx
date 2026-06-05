@@ -1,15 +1,12 @@
 /* eslint-disable */
 /* Login.jsx — password gate; renders before App if not authenticated */
 
-// SHA-256 hash of the access password. The plaintext password is never stored here.
-// To change your password:
-//   1. Run: node tools/hash-password.mjs your-new-password
-//   2. Paste the printed hash below as LOGIN_HASH
-//   3. Run: node tools/migrate-portfolio-id.mjs your-old-password your-new-password
-const LOGIN_HASH = '486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7';
-const AUTH_KEY      = 'ptf_auth';
-const PTF_ID_KEY    = 'ptf_id';
-const PTF_USER_KEY  = 'ptf_username';
+// Authentication is handled by POST /api/auth which checks username + password_hash
+// against the users table in Supabase. Run database/auth_migration.sql first,
+// then use tools/register-user.mjs to add users.
+const AUTH_KEY     = 'ptf_auth';
+const PTF_ID_KEY   = 'ptf_id';
+const PTF_USER_KEY = 'ptf_username';
 
 async function sha256Hex(str) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
@@ -58,12 +55,18 @@ function LoginPage({ onSuccess }) {
     e.preventDefault();
     setBusy(true);
     try {
-      const hash = await sha256Hex(pw);
-      if (hash === LOGIN_HASH) {
-        setAuth(hash.slice(0, 32), username);
+      const passwordHash = await sha256Hex(pw);
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: username.trim().toLowerCase(), passwordHash }),
+      });
+      const data = await res.json();
+      if (data.ok && data.portfolioId) {
+        setAuth(data.portfolioId, username);
         onSuccess();
       } else {
-        setError('Wrong password. Try again.');
+        setError('Wrong username or password.');
         setPw('');
       }
     } catch (_) {
