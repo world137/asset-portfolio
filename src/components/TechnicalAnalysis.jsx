@@ -483,6 +483,11 @@ const MACRO_MATRIX_ROWS = [
     impacts: { Tech: -3, REIT: -2, Gold: 1, BTC: -3, EM: -3, Energy: -2, Bonds: 2, Cash: 3 },
   },
   {
+    key: 'oil', label: 'WTI Oil', direction: '↑ Elevated (≥ $80)',
+    isActive: v => v != null && v >= 80,
+    impacts: { Tech: -1, REIT: -1, Gold: 2, BTC: 0, EM: -1, Energy: 3, Bonds: -2, Cash: -1 },
+  },
+  {
     key: 'liquidity', label: 'M2 Liquidity', direction: '↑ Expanding',
     isActive: () => false,
     impacts: { Tech: 2, REIT: 1, Gold: 1, BTC: 3, EM: 2, Energy: 1, Bonds: 0, Cash: -1 },
@@ -540,6 +545,16 @@ const MACRO_INFO = {
       { max: Infinity, label: 'Very Strong', color: '#ff453a', note: 'Very strong dollar. Significant EM debt stress risk. THB under pressure, import costs rise.' },
     ],
   },
+  oil: {
+    title: 'WTI Crude Oil Price (USD/barrel)',
+    description: 'West Texas Intermediate — the US crude oil benchmark. Oil is the world\'s most-traded commodity. Rising oil drives CPI inflation directly (fuel, transport, goods), forces the Fed to stay hawkish, and squeezes consumer spending globally. Thailand is a net oil importer, so high oil widens the trade deficit and weakens THB.',
+    levels: [
+      { max: 50,       label: 'Low',      color: '#34c759', note: 'Low oil = low inflation. Consumer spending power is boosted. Fed has room to cut. Good for growth stocks and bonds.' },
+      { max: 70,       label: 'Normal',   color: '#8e8e93', note: 'Normal range. Balanced inflation impact. Energy sector stable. No major macro stress from oil.' },
+      { max: 90,       label: 'Elevated', color: '#ff9f0a', note: 'Elevated oil adds to CPI. Energy stocks outperform. Bonds under pressure as yields rise. Growth stocks face cost headwinds.' },
+      { max: Infinity, label: 'High',     color: '#ff453a', note: 'High oil = stagflation risk. Fed cannot cut. Real income squeezed. Energy dominates. Gold benefits as inflation hedge. THB under pressure.' },
+    ],
+  },
 };
 
 function getMacroLevel(key, value) {
@@ -563,7 +578,7 @@ function macroImpactStyle(level) {
   }
 }
 
-function MacroCard({ indKey, label, value, unit, change, active, onClick }) {
+function MacroCard({ indKey, label, value, unit, prefix, change, active, onClick }) {
   const isUp = change > 0, isDown = change < 0;
   const level = getMacroLevel(indKey, value);
   return (
@@ -585,7 +600,7 @@ function MacroCard({ indKey, label, value, unit, change, active, onClick }) {
         ? <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--fg-3)' }}>—</div>
         : <React.Fragment>
             <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--fg-1)', fontVariantNumeric: 'tabular-nums' }}>
-              {typeof value === 'number' ? value.toFixed(2) : value}{unit}
+              {prefix || ''}{typeof value === 'number' ? value.toFixed(2) : value}{unit}
             </div>
             {change != null && (
               <div style={{ fontSize: 11, marginTop: 2, fontWeight: 500,
@@ -702,6 +717,7 @@ function MacroDashboard() {
     { key: 'cpi',     label: 'CPI YoY', unit: '%', value: ind.cpi?.value,     change: ind.cpi?.change     },
     { key: 'vix',     label: 'VIX',     unit: '',  value: ind.vix?.value,     change: ind.vix?.change     },
     { key: 'dxy',     label: 'DXY',     unit: '',  value: ind.dxy?.value,     change: ind.dxy?.change     },
+    { key: 'oil',     label: 'WTI Oil', unit: '',  prefix: '$', value: ind.oil?.value, change: ind.oil?.change },
   ];
 
   const toggleCard = (key) => setActiveCard(v => v === key ? null : key);
@@ -736,7 +752,7 @@ function MacroDashboard() {
 
       {/* ── Indicator cards ── */}
       {loading
-        ? <div style={{ display: 'flex', gap: 8 }}>
+        ? <div className="analysis-grid">
             {[1,2,3,4,5].map(i => (
               <div key={i} style={{ flex: '1 1 80px', height: 72, borderRadius: 10, background: 'var(--bg-sunken)', animation: 'pulse 1s infinite' }} />
             ))}
@@ -797,7 +813,8 @@ function MacroDashboard() {
                   const rowBg  = active
                     ? 'rgba(255,69,58,0.07)'
                     : (i % 2 === 0 ? 'transparent' : 'var(--bg-sunken)');
-                  const unit   = (row.key === 'fedRate' || row.key === 'us10y' || row.key === 'cpi') ? '%' : '';
+                  const valPrefix = row.key === 'oil' ? '$' : '';
+                  const unit      = (row.key === 'fedRate' || row.key === 'us10y' || row.key === 'cpi') ? '%' : '';
 
                   return (
                     <tr key={row.key} style={{ background: rowBg }}>
@@ -813,7 +830,7 @@ function MacroDashboard() {
                             </span>
                             {val != null && (
                               <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--fg-3)', fontVariantNumeric: 'tabular-nums' }}>
-                                {val.toFixed(2)}{unit}
+                                {valPrefix}{val.toFixed(2)}{unit}
                               </span>
                             )}
                             {level && (

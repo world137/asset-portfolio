@@ -68,12 +68,13 @@ export default async function handler(req, res) {
 
   const fredKey = process.env.FRED_API_KEY;
 
-  const [us10y, vix, dxy, fedRate, cpi] = await Promise.all([
+  const [us10y, vix, dxy, fedRate, cpi, oil] = await Promise.all([
     yahooQuote('^TNX'),
     yahooQuote('^VIX'),
     yahooQuote('DX-Y.NYB'),
     fredKey ? fredLatest('FEDFUNDS', fredKey).then(v => ({ value: v, change: null })) : Promise.resolve({ value: null, change: null }),
     fredKey ? fredCpiYoY(fredKey).then(v => ({ value: v, change: null }))            : Promise.resolve({ value: null, change: null }),
+    yahooQuote('CL=F'),  // WTI Crude Oil
   ]);
 
   res.setHeader('Cache-Control', 's-maxage=900, stale-while-revalidate=1800');
@@ -84,6 +85,7 @@ export default async function handler(req, res) {
       cpi:     { value: cpi.value,     unit: '% YoY',  label: 'CPI',       source: fredKey ? 'FRED' : null },
       vix:     { value: vix.value,     unit: '',       label: 'VIX',       change: vix.change,    source: 'Yahoo' },
       dxy:     { value: dxy.value,     unit: '',       label: 'DXY',       change: dxy.change,    source: 'Yahoo' },
+      oil:     { value: oil.value,     unit: 'USD/bbl', label: 'WTI Oil',  change: oil.change,    source: 'Yahoo' },
     },
     impactMatrix: IMPACT_MATRIX,
   });
