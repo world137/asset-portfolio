@@ -10,7 +10,7 @@
 import { readBody } from './_lib.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
 
 const USERNAME_RE   = /^.{1,64}$/;
 const HASH_RE       = /^[a-f0-9]{64}$/;
