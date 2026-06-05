@@ -451,9 +451,12 @@ function BentoView({ classKey }) {
   const rects   = containerW > 10 ? squarifiedTreemap(items, containerW, BENTO_H) : [];
 
   return (
-    <div ref={containerRef}
-         style={{ position: 'relative', width: '100%', height: BENTO_H, overflow: 'hidden' }}
+    // Outer wrapper: position:relative so tooltip is positioned correctly, but NOT overflow:hidden
+    // so the tooltip can extend below/above the bento area without being clipped.
+    <div ref={containerRef} style={{ position: 'relative', width: '100%' }}
          onMouseLeave={() => setHovered(null)}>
+      {/* Inner box area: fixed height, overflow:hidden to contain the boxes */}
+      <div style={{ position: 'relative', width: '100%', height: BENTO_H, overflow: 'hidden' }}>
       {rects.map(({ data, x, y, w, h }) => {
         const ax = x + GAP / 2, ay = y + GAP / 2;
         const aw = Math.max(0, w - GAP), ah = Math.max(0, h - GAP);
@@ -486,11 +489,13 @@ function BentoView({ classKey }) {
                }}
                onMouseEnter={e => {
                  const rect = containerRef.current.getBoundingClientRect();
-                 setHovered({ data, x: ax + aw / 2, y: ay });
+                 setHovered({ data, x: e.clientX - rect.left, y: e.clientY - rect.top });
                }}
                onMouseMove={e => {
+                 // Always set full data (not just x/y) — fixes Safari where onMouseEnter
+                 // may not fire reliably when moving between sibling elements.
                  const rect = containerRef.current.getBoundingClientRect();
-                 setHovered(h => h ? { ...h, x: e.clientX - rect.left, y: e.clientY - rect.top } : h);
+                 setHovered({ data, x: e.clientX - rect.left, y: e.clientY - rect.top });
                }}>
             {showName && (
               <div style={{
@@ -513,6 +518,7 @@ function BentoView({ classKey }) {
           </div>
         );
       })}
+      </div>{/* end inner box area */}
       {hovered && (
         <BentoTooltip
           data={hovered.data}

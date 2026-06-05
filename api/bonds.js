@@ -20,7 +20,33 @@ const BONDS = [
   { key: 'fr',  label: 'France',        flag: '🇫🇷', symbol: 'FR10YT=RR'  },
 ];
 
-async function yahooQuote(symbol) {
+// Fetch a batch of symbols via v7/finance/quote (best for bond =RR symbols)
+async function yahooQuoteBatch(symbols) {
+  const hosts = ['query1.finance.yahoo.com', 'query2.finance.yahoo.com'];
+  const joined = symbols.map(s => encodeURIComponent(s)).join(',');
+  for (const host of hosts) {
+    try {
+      const url = `https://${host}/v7/finance/quote?symbols=${joined}&fields=regularMarketPrice,regularMarketPreviousClose,regularMarketChange,regularMarketChangePercent`;
+      const r = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' } });
+      if (!r.ok) continue;
+      const j = await r.json();
+      const results = j?.quoteResponse?.result || [];
+      const map = {};
+      for (const q of results) {
+        const price   = q.regularMarketPrice ?? null;
+        const prev    = q.regularMarketPreviousClose ?? null;
+        const chg     = q.regularMarketChange != null ? +q.regularMarketChange.toFixed(4) : (price != null && prev != null ? +(price - prev).toFixed(4) : null);
+        const chgPct  = q.regularMarketChangePercent != null ? +q.regularMarketChangePercent.toFixed(3) : (price != null && prev != null && prev !== 0 ? +((price - prev) / prev * 100).toFixed(3) : null);
+        map[q.symbol] = { value: price != null ? +price.toFixed(4) : null, change: chg, changePct: chgPct };
+      }
+      return map;
+    } catch (_) { /* try next host */ }
+  }
+  return {};
+}
+
+// Fallback: single-symbol chart API (works well for ^TNX)
+async function yahooChartSingle(symbol) {
   const hosts = ['query1.finance.yahoo.com', 'query2.finance.yahoo.com'];
   for (const host of hosts) {
     try {
@@ -30,11 +56,12 @@ async function yahooQuote(symbol) {
       const j = await r.json();
       const meta = j?.chart?.result?.[0]?.meta;
       if (!meta) continue;
-      const price  = meta.regularMarketPrice ?? null;
-      const prev   = meta.chartPreviousClose ?? meta.previousClose ?? null;
-      const change = price != null && prev != null ? +((price - prev)).toFixed(4) : null;
-      const changePct = price != null && prev != null && prev !== 0 ? +((price - prev) / prev * 100).toFixed(3) : null;
-      return { value: price != null ? +price.toFixed(4) : null, change, changePct };
+      const price = meta.regularMarketPrice ?? null;
+      const prev  = meta.chartPreviousClose ?? meta.previousClose ?? null;
+      if (price == null) continue;
+      const chg    = prev != null ? +(price - prev).toFixed(4) : null;
+      const chgPct = prev != null && prev !== 0 ? +((price - prev) / prev * 100).toFixed(3) : null;
+      return { value: +price.toFixed(4), change: chg, changePct: chgPct };
     } catch (_) { /* try next host */ }
   }
   return { value: null, change: null, changePct: null };
@@ -47,11 +74,19 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
 
+  // Fetch all bond symbols in one batch request via v7/quote
+  const symbols = BONDS.map(b => b.symbol);
+  const batchMap = await yahooQuoteBatch(symbols);
+
+  // For any that returned null, fall back to chart API individually
   const results = await Promise.all(
-    BONDS.map(b => yahooQuote(b.symbol).then(q => ({
-      key: b.key, label: b.label, flag: b.flag,
-      value: q.value, change: q.change, changePct: q.changePct,
-    })))
+    BONDS.map(async b => {
+      let q = batchMap[b.symbol];
+      if (!q || q.value == null) {
+        q = await yahooChartSingle(b.symbol);
+      }
+      return { key: b.key, label: b.label, flag: b.flag, value: q.value, change: q.change, changePct: q.changePct };
+    })
   );
 
   res.setHeader('Cache-Control', 's-maxage=900, stale-while-revalidate=1800');
