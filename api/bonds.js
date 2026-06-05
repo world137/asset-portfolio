@@ -1,71 +1,210 @@
 /* ============================================================================
    api/bonds.js — Vercel Serverless Function
    GET /api/bonds
-   Returns 10-year government bond yields for major economies.
-   Data sourced from Yahoo Finance (15-minute cache).
+
+   Multi-source 10-year government bond yields.
+   Yahoo Finance now blocks all server-side requests (429 globally).
+
+   Sources used (all free, no API key):
+   - US:      US Department of the Treasury (XML)
+   - UK:      Bank of England Statistics API (series IUDMNPY)
+   - Germany: ECB Euro Area Yield Curve (sovereign benchmark)
+   - Japan:   Japan Ministry of Finance CSV
+   - Canada:  Bank of Canada Valet API
    ============================================================================ */
 
-const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
+// ── Shared helper ─────────────────────────────────────────────────────────────
+
+function makeResult(latest, prev) {
+  const value     = +latest.toFixed(4);
+  const change    = prev != null ? +(latest - prev).toFixed(4)                            : null;
+  const changePct = prev != null && prev !== 0 ? +((latest - prev) / prev * 100).toFixed(3) : null;
+  return { value, change, changePct };
+}
+
+// ── Fetcher: US Treasury XML ──────────────────────────────────────────────────
+// Endpoint: daily_treasury_yield_curve, field BC_10YEAR
+
+async function fetchUSTreasury() {
+  const now = new Date();
+  for (let offset = 0; offset <= 1; offset++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+    const ym = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}`;
+    try {
+      // NOTE: Treasury returns XML only when User-Agent is absent; browser UA triggers HTML redirect.
+      const r = await fetch(
+        `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_yield_curve&field_tdr_date_value_month=${ym}`,
+        { signal: AbortSignal.timeout(10000) }
+      );
+      if (!r.ok) continue;
+      const text = await r.text();
+      const vals = [...text.matchAll(/BC_10YEAR[^>]*>([0-9.]+)</g)]
+        .map(m => parseFloat(m[1])).filter(v => !isNaN(v));
+      if (vals.length > 0) {
+        return makeResult(vals[vals.length - 1], vals.length >= 2 ? vals[vals.length - 2] : null);
+      }
+    } catch (_) {}
+  }
+  return null;
+}
+
+// ── Fetcher: Bank of England ──────────────────────────────────────────────────
+// Series IUDMNPY: Daily nominal par yield, 10-year UK Gilt
+
+async function fetchBOE() {
+  const end   = new Date();
+  const start = new Date(end);
+  start.setDate(start.getDate() - 60); // 60 days back ensures data even across month boundaries
+
+  const fmtBOE = d => {
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mon = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()];
+    return `${dd}/${mon}/${d.getFullYear()}`;
+  };
+
+  try {
+    const url = `https://www.bankofengland.co.uk/boeapps/database/_iadb-FromShowColumns.asp?csv.x=yes&Datefrom=${fmtBOE(start)}&Dateto=${fmtBOE(end)}&SeriesCodes=IUDMNPY&CSVF=TT&UsingCodes=Y`;
+    const r = await fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(10000) });
+    if (!r.ok) return null;
+    const text = await r.text();
+    // Rows start with "dd Mon yyyy," — skip header/description lines
+    const vals = text.split('\n')
+      .filter(l => /^\d{2} \w+ \d{4}/.test(l))
+      .map(l => parseFloat(l.split(',')[1]))
+      .filter(v => !isNaN(v));
+    if (!vals.length) return null;
+    return makeResult(vals[vals.length - 1], vals.length >= 2 ? vals[vals.length - 2] : null);
+  } catch (_) {
+    return null;
+  }
+}
+
+// ── Fetcher: ECB Euro Area Yield Curve ────────────────────────────────────────
+// Spot 10Y yield of AAA-rated Euro area government bonds (sovereign benchmark)
+
+async function fetchECB() {
+  try {
+    const r = await fetch(
+      'https://data-api.ecb.europa.eu/service/data/YC/B.U2.EUR.4F.G_N_A.SV_C_YM.SR_10Y?lastNObservations=3&format=jsondata',
+      { headers: { 'Accept': 'application/json' }, signal: AbortSignal.timeout(10000) }
+    );
+    if (!r.ok) return null;
+    const j = await r.json();
+    const obs = j?.dataSets?.[0]?.series?.['0:0:0:0:0:0:0']?.observations;
+    if (!obs) return null;
+    const keys = Object.keys(obs).sort((a, b) => +a - +b);
+    const latest = obs[keys[keys.length - 1]]?.[0];
+    const prev   = keys.length >= 2 ? obs[keys[keys.length - 2]]?.[0] : null;
+    if (latest == null) return null;
+    return makeResult(latest, prev ?? null);
+  } catch (_) {
+    return null;
+  }
+}
+
+// ── Fetcher: Japan Ministry of Finance ───────────────────────────────────────
+// jgbcme.csv — columns: Date,1Y,2Y,...,10Y (index 10),15Y,...
+
+async function fetchMOF() {
+  try {
+    const r = await fetch(
+      'https://www.mof.go.jp/english/policy/jgbs/reference/interest_rate/jgbcme.csv',
+      { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(10000) }
+    );
+    if (!r.ok) return null;
+    const text = await r.text();
+    const vals = text.split('\n')
+      .filter(l => /^\d{4}\/\d{1,2}\/\d{1,2}/.test(l))
+      .map(l => parseFloat(l.split(',')[10]))   // col 10 = 10Y
+      .filter(v => !isNaN(v));
+    if (!vals.length) return null;
+    return makeResult(vals[vals.length - 1], vals.length >= 2 ? vals[vals.length - 2] : null);
+  } catch (_) {
+    return null;
+  }
+}
+
+// ── Fetcher: FRED / OECD harmonized long-term rates (CSV, no API key) ─────────
+// Monthly frequency. Series IDs: IRLTLT01{CC}M156N (OECD MEI dataset via FRED).
+// Covers all OECD members + major G20 partners (AU, FR, KR, IN).
+
+async function fetchFRED(seriesId) {
+  try {
+    const r = await fetch(
+      `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${seriesId}`,
+      { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(12000) }
+    );
+    if (!r.ok) return null;
+    const text = await r.text();
+    const vals = text.split('\n')
+      .filter(l => /^\d{4}-\d{2}-\d{2}/.test(l))
+      .map(l => parseFloat(l.split(',')[1]))
+      .filter(v => !isNaN(v));
+    if (!vals.length) return null;
+    return makeResult(vals[vals.length - 1], vals.length >= 2 ? vals[vals.length - 2] : null);
+  } catch (_) {
+    return null;
+  }
+}
+
+// ── Fetcher: stooq.com — daily government bond yields ─────────────────────────
+// Ticker format: {maturity}y{cc}.b  e.g. 10thy.b = Thailand 10Y
+
+async function fetchStooq(ticker) {
+  try {
+    const r = await fetch(
+      `https://stooq.com/q/d/l/?s=${ticker}&i=d`,
+      { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(12000) }
+    );
+    if (!r.ok) return null;
+    const text = await r.text();
+    // CSV: Date,Open,High,Low,Close,Volume — use Close (col 4)
+    const vals = text.split('\n')
+      .filter(l => /^\d{4}-\d{2}-\d{2}/.test(l))
+      .map(l => parseFloat(l.split(',')[4]))
+      .filter(v => !isNaN(v));
+    if (!vals.length) return null;
+    return makeResult(vals[vals.length - 1], vals.length >= 2 ? vals[vals.length - 2] : null);
+  } catch (_) {
+    return null;
+  }
+}
+
+// ── Fetcher: Bank of Canada Valet API ─────────────────────────────────────────
+// Series BD.CDN.10YR.DQ.YLD — daily Government of Canada 10Y bond yield
+
+async function fetchBOC() {
+  try {
+    const r = await fetch(
+      'https://www.bankofcanada.ca/valet/observations/BD.CDN.10YR.DQ.YLD/json?recent=10',
+      { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(10000) }
+    );
+    if (!r.ok) return null;
+    const j = await r.json();
+    const vals = (j.observations || [])
+      .map(o => parseFloat(o?.['BD.CDN.10YR.DQ.YLD']?.v))
+      .filter(v => !isNaN(v));
+    if (!vals.length) return null;
+    return makeResult(vals[vals.length - 1], vals.length >= 2 ? vals[vals.length - 2] : null);
+  } catch (_) {
+    return null;
+  }
+}
+
+// ── Bond definitions ──────────────────────────────────────────────────────────
 
 const BONDS = [
-  { key: 'us',  label: 'United States', flag: '🇺🇸', symbol: '^TNX'       },
-  { key: 'gb',  label: 'United Kingdom',flag: '🇬🇧', symbol: 'GB10YT=RR'  },
-  { key: 'jp',  label: 'Japan',         flag: '🇯🇵', symbol: 'JP10YT=RR'  },
-  { key: 'de',  label: 'Germany',       flag: '🇩🇪', symbol: 'DE10YT=RR'  },
-  { key: 'au',  label: 'Australia',     flag: '🇦🇺', symbol: 'AU10YT=RR'  },
-  { key: 'ca',  label: 'Canada',        flag: '🇨🇦', symbol: 'CA10YT=RR'  },
-  { key: 'ru',  label: 'Russia',        flag: '🇷🇺', symbol: 'RU10YT=RR'  },
-  { key: 'kr',  label: 'South Korea',   flag: '🇰🇷', symbol: 'KR10YT=RR'  },
-  { key: 'in',  label: 'India',         flag: '🇮🇳', symbol: 'IN10YT=RR'  },
-  { key: 'fr',  label: 'France',        flag: '🇫🇷', symbol: 'FR10YT=RR'  },
+  { key: 'us', label: 'United States', flag: '🇺🇸', fetch: fetchUSTreasury },
+  { key: 'gb', label: 'United Kingdom',flag: '🇬🇧', fetch: fetchBOE        },
+  { key: 'de', label: 'Germany',       flag: '🇩🇪', fetch: fetchECB        },  // Euro area sovereign benchmark
+  { key: 'jp', label: 'Japan',         flag: '🇯🇵', fetch: fetchMOF        },
+  { key: 'ca', label: 'Canada',        flag: '🇨🇦', fetch: fetchBOC        },
+  { key: 'kr', label: 'South Korea',   flag: '🇰🇷', fetch: () => fetchFRED('IRLTLT01KRM156N') },
 ];
 
-// Fetch a batch of symbols via v7/finance/quote (best for bond =RR symbols)
-async function yahooQuoteBatch(symbols) {
-  const hosts = ['query1.finance.yahoo.com', 'query2.finance.yahoo.com'];
-  const joined = symbols.map(s => encodeURIComponent(s)).join(',');
-  for (const host of hosts) {
-    try {
-      const url = `https://${host}/v7/finance/quote?symbols=${joined}&fields=regularMarketPrice,regularMarketPreviousClose,regularMarketChange,regularMarketChangePercent`;
-      const r = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' } });
-      if (!r.ok) continue;
-      const j = await r.json();
-      const results = j?.quoteResponse?.result || [];
-      const map = {};
-      for (const q of results) {
-        const price   = q.regularMarketPrice ?? null;
-        const prev    = q.regularMarketPreviousClose ?? null;
-        const chg     = q.regularMarketChange != null ? +q.regularMarketChange.toFixed(4) : (price != null && prev != null ? +(price - prev).toFixed(4) : null);
-        const chgPct  = q.regularMarketChangePercent != null ? +q.regularMarketChangePercent.toFixed(3) : (price != null && prev != null && prev !== 0 ? +((price - prev) / prev * 100).toFixed(3) : null);
-        map[q.symbol] = { value: price != null ? +price.toFixed(4) : null, change: chg, changePct: chgPct };
-      }
-      return map;
-    } catch (_) { /* try next host */ }
-  }
-  return {};
-}
-
-// Fallback: single-symbol chart API (works well for ^TNX)
-async function yahooChartSingle(symbol) {
-  const hosts = ['query1.finance.yahoo.com', 'query2.finance.yahoo.com'];
-  for (const host of hosts) {
-    try {
-      const url = `https://${host}/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
-      const r = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' } });
-      if (!r.ok) continue;
-      const j = await r.json();
-      const meta = j?.chart?.result?.[0]?.meta;
-      if (!meta) continue;
-      const price = meta.regularMarketPrice ?? null;
-      const prev  = meta.chartPreviousClose ?? meta.previousClose ?? null;
-      if (price == null) continue;
-      const chg    = prev != null ? +(price - prev).toFixed(4) : null;
-      const chgPct = prev != null && prev !== 0 ? +((price - prev) / prev * 100).toFixed(3) : null;
-      return { value: +price.toFixed(4), change: chg, changePct: chgPct };
-    } catch (_) { /* try next host */ }
-  }
-  return { value: null, change: null, changePct: null };
-}
+// ── Handler ───────────────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -74,18 +213,15 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
 
-  // Fetch all bond symbols in one batch request via v7/quote
-  const symbols = BONDS.map(b => b.symbol);
-  const batchMap = await yahooQuoteBatch(symbols);
-
-  // For any that returned null, fall back to chart API individually
   const results = await Promise.all(
     BONDS.map(async b => {
-      let q = batchMap[b.symbol];
-      if (!q || q.value == null) {
-        q = await yahooChartSingle(b.symbol);
-      }
-      return { key: b.key, label: b.label, flag: b.flag, value: q.value, change: q.change, changePct: q.changePct };
+      const q = b.fetch ? await b.fetch() : null;
+      return {
+        key: b.key, label: b.label, flag: b.flag,
+        value:     q?.value     ?? null,
+        change:    q?.change    ?? null,
+        changePct: q?.changePct ?? null,
+      };
     })
   );
 
