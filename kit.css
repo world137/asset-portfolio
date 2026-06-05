@@ -77,8 +77,20 @@ input.input, select.input, textarea.input {
   border: 1.5px solid var(--border-2); border-radius: var(--radius-sm); background: var(--bg-surface); outline: none;
   width: 100%; transition: border-color var(--dur-1), box-shadow var(--dur-1);
 }
+select.input {
+  -webkit-appearance: none;
+  appearance: none;
+  padding-right: 32px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' stroke='%23888' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px;
+}
 [data-theme="dark"] input.input, [data-theme="dark"] select.input, [data-theme="dark"] textarea.input {
   background: var(--paper-3); border-color: var(--border-1);
+}
+[data-theme="dark"] select.input {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' stroke='%23aaa' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 input.input::placeholder { color: var(--fg-4); }
 input.input:focus, select.input:focus, textarea.input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }

@@ -1007,10 +1007,10 @@ function TechnicalAnalysisCore({ initSymbol, compact }) {
 
   const outerStyle = compact
     ? { display: 'flex', flexDirection: 'column', gap: 14 }
-    : { maxWidth: 680, margin: '0 auto', padding: '24px 16px 48px', display: 'flex', flexDirection: 'column', gap: 16 };
+    : { margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 };
 
   return (
-    <div style={outerStyle}>
+    <div className="page" style={outerStyle}>
 
       {/* ── Macro Environment (page only, not modal) ── */}
       {!compact && <MacroDashboard />}
@@ -1298,9 +1298,7 @@ function TechnicalModal({ symbol, onClose }) {
     <Modal open onClose={onClose}
            title={`Technical Analysis${symbol ? ' — ' + symbol : ''}`}
            width={740}>
-      <div style={{ maxHeight: '80vh', overflowY: 'auto', overflowX: 'hidden' }}>
-        <TechnicalAnalysisCore initSymbol={symbol || ''} compact={true} />
-      </div>
+      <TechnicalAnalysisCore initSymbol={symbol || ''} compact={true} />
     </Modal>
   );
 }
