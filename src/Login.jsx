@@ -7,8 +7,9 @@
 //   2. Paste the printed hash below as LOGIN_HASH
 //   3. Run: node tools/migrate-portfolio-id.mjs your-old-password your-new-password
 const LOGIN_HASH = '486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7';
-const AUTH_KEY  = 'ptf_auth';
-const PTF_ID_KEY = 'ptf_id';
+const AUTH_KEY      = 'ptf_auth';
+const PTF_ID_KEY    = 'ptf_id';
+const PTF_USER_KEY  = 'ptf_username';
 
 async function sha256Hex(str) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
@@ -23,25 +24,35 @@ async function sha256Hex(str) {
 })();
 
 function checkAuth()  { return sessionStorage.getItem(AUTH_KEY) === '1'; }
-function setAuth(id)  {
+function getUsername(){ return sessionStorage.getItem(PTF_USER_KEY) || 'User'; }
+function setAuth(id, username) {
   sessionStorage.setItem(AUTH_KEY, '1');
   sessionStorage.setItem(PTF_ID_KEY, id);
+  sessionStorage.setItem(PTF_USER_KEY, username.trim() || 'User');
   if (window.Store) Store.setPrimaryId(id);
 }
 function clearAuth()  {
   sessionStorage.removeItem(AUTH_KEY);
   sessionStorage.removeItem(PTF_ID_KEY);
+  sessionStorage.removeItem(PTF_USER_KEY);
 }
 
-window._ptfLogout = function () {
-  clearAuth();
-  window.location.reload();
-};
+window._ptfLogout   = function () { clearAuth(); window.location.reload(); };
+window._ptfUsername = getUsername;
 
 function LoginPage({ onSuccess }) {
+  const [username, setUsername] = React.useState('');
   const [pw,    setPw]    = React.useState('');
   const [error, setError] = React.useState('');
   const [busy,  setBusy]  = React.useState(false);
+  const [step,  setStep]  = React.useState('username'); // 'username' | 'password'
+
+  const goToPassword = (e) => {
+    e.preventDefault();
+    if (!username.trim()) { setError('Please enter your name.'); return; }
+    setError('');
+    setStep('password');
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -49,7 +60,7 @@ function LoginPage({ onSuccess }) {
     try {
       const hash = await sha256Hex(pw);
       if (hash === LOGIN_HASH) {
-        setAuth(hash.slice(0, 32));
+        setAuth(hash.slice(0, 32), username);
         onSuccess();
       } else {
         setError('Wrong password. Try again.');
@@ -71,28 +82,78 @@ function LoginPage({ onSuccess }) {
               <path d="M4 19V9M10 19V5M16 19v-7M22 19H2" />
             </svg>
           </div>
-          <div className="login-title">Sign in</div>
-          <div className="login-sub">to continue to Portfolio Tracker</div>
-        </div>
-        <form className="login-form" onSubmit={submit} autoComplete="off">
-          <div className="login-field">
-            <label className="login-label" htmlFor="ptf-pw">Password</label>
-            <input
-              id="ptf-pw"
-              className={'login-input' + (error ? ' err' : '')}
-              type="password"
-              placeholder="Enter your password"
-              value={pw}
-              onChange={e => { setPw(e.target.value); setError(''); }}
-              autoFocus
-              required
-            />
-            {error && <div className="login-error">{error}</div>}
+          <div className="login-title">
+            {step === 'username' ? 'Sign in' : `Welcome, ${username}`}
           </div>
-          <button className="login-btn" type="submit" disabled={busy || !pw}>
-            {busy ? 'Checking…' : 'Next'}
-          </button>
-        </form>
+          <div className="login-sub">
+            {step === 'username' ? 'to continue to Portfolio Tracker' : 'Enter your password to continue'}
+          </div>
+        </div>
+
+        {step === 'username' ? (
+          <form className="login-form" onSubmit={goToPassword} autoComplete="off">
+            <div className="login-field">
+              <label className="login-label" htmlFor="ptf-user">Username</label>
+              <input
+                id="ptf-user"
+                className={'login-input' + (error ? ' err' : '')}
+                type="text"
+                placeholder="Your name"
+                value={username}
+                onChange={e => { setUsername(e.target.value); setError(''); }}
+                autoFocus
+                autoComplete="username"
+                required
+              />
+              {error && <div className="login-error">{error}</div>}
+            </div>
+            <button className="login-btn" type="submit" disabled={!username.trim()}>
+              Next
+            </button>
+          </form>
+        ) : (
+          <form className="login-form" onSubmit={submit} autoComplete="off">
+            <div className="login-field">
+              {/* Username display chip */}
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14,
+                padding: '8px 12px', borderRadius: 10, background: 'var(--bg-sunken)',
+                border: '1px solid var(--border-2)',
+              }}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: '50%', background: 'var(--accent)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: '#fff', fontWeight: 700, fontSize: 13, flexShrink: 0,
+                }}>
+                  {username.slice(0, 1).toUpperCase()}
+                </div>
+                <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--fg-1)' }}>{username}</span>
+                <button type="button"
+                  onClick={() => { setStep('username'); setError(''); setPw(''); }}
+                  style={{ fontSize: 11, color: 'var(--fg-3)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                  Change
+                </button>
+              </div>
+
+              <label className="login-label" htmlFor="ptf-pw">Password</label>
+              <input
+                id="ptf-pw"
+                className={'login-input' + (error ? ' err' : '')}
+                type="password"
+                placeholder="Enter your password"
+                value={pw}
+                onChange={e => { setPw(e.target.value); setError(''); }}
+                autoFocus
+                autoComplete="current-password"
+                required
+              />
+              {error && <div className="login-error">{error}</div>}
+            </div>
+            <button className="login-btn" type="submit" disabled={busy || !pw}>
+              {busy ? 'Checking…' : 'Sign in'}
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );

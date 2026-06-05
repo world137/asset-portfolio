@@ -15,7 +15,7 @@
 import { readBody } from './_lib.js';
 
 const SUPABASE_URL  = process.env.SUPABASE_URL;
-const SUPABASE_KEY  = process.env.SUPABASE_SERVICE_KEY;
+const SUPABASE_KEY  = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
 const BOT_TOKEN     = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID       = process.env.TELEGRAM_CHAT_ID;
 const PORTFOLIO_ID  = process.env.PORTFOLIO_ID;

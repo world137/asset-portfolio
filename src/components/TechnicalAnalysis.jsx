@@ -331,6 +331,124 @@ function StatChip({ label, value, bull, bear }) {
   );
 }
 
+// ── Bond Yields Table ─────────────────────────────────────────────────────────
+
+function yieldLevel(val) {
+  if (val == null) return null;
+  if (val < 1.5)  return { label: 'Very Low',  color: '#34c759' };
+  if (val < 3.0)  return { label: 'Low',       color: '#34c759' };
+  if (val < 4.5)  return { label: 'Normal',    color: '#8e8e93' };
+  if (val < 6.0)  return { label: 'Elevated',  color: '#ff9f0a' };
+  return                 { label: 'High',      color: '#ff453a' };
+}
+
+function BondYieldsTable() {
+  const [bonds,   setBonds]   = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [updatedAt, setUpdatedAt] = React.useState(null);
+
+  React.useEffect(() => {
+    fetch('/api/bonds')
+      .then(r => r.json())
+      .then(j => { setBonds(j.bonds || []); setUpdatedAt(j.updatedAt); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const sorted = bonds ? [...bonds].sort((a, b) => (b.value ?? -Infinity) - (a.value ?? -Infinity)) : [];
+  const valid  = sorted.filter(b => b.value != null);
+  const maxVal = valid.length ? valid[0].value : 10;
+
+  return (
+    <div className="card" style={{ padding: '16px 18px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--fg-1)' }}>10-Year Government Bond Yields</div>
+          <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 1 }}>Live yields · 15 min cache · Yahoo Finance</div>
+        </div>
+        {updatedAt && (
+          <span style={{ fontSize: 11, color: 'var(--fg-4)' }}>
+            Updated {new Date(updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        )}
+      </div>
+
+      {loading ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8 }}>
+          {[1,2,3,4,5,6,7,8,9,10].map(i => (
+            <div key={i} style={{ height: 64, borderRadius: 10, background: 'var(--bg-sunken)', animation: 'pulse 1s infinite' }} />
+          ))}
+        </div>
+      ) : (
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: 'var(--bg-sunken)' }}>
+                {['Country', 'Yield', 'Change', 'Level', 'Bar'].map(h => (
+                  <th key={h} style={{ padding: '7px 12px', textAlign: h === 'Yield' || h === 'Change' ? 'right' : 'left', fontWeight: 600, fontSize: 10, letterSpacing: 0.4, textTransform: 'uppercase', color: 'var(--fg-3)', borderBottom: '1px solid var(--border-1)', whiteSpace: 'nowrap' }}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((b, i) => {
+                const lv      = yieldLevel(b.value);
+                const isUp    = b.changePct != null && b.changePct > 0;
+                const isDown  = b.changePct != null && b.changePct < 0;
+                const barPct  = b.value != null && maxVal > 0 ? (b.value / maxVal) * 100 : 0;
+                return (
+                  <tr key={b.key} style={{ background: i % 2 === 0 ? 'transparent' : 'var(--bg-sunken)' }}>
+                    <td style={{ padding: '9px 12px', borderBottom: '1px solid var(--border-1)', whiteSpace: 'nowrap' }}>
+                      <span style={{ marginRight: 7, fontSize: 16 }}>{b.flag}</span>
+                      <span style={{ fontWeight: 600, color: 'var(--fg-1)' }}>{b.label}</span>
+                    </td>
+                    <td style={{ padding: '9px 12px', textAlign: 'right', borderBottom: '1px solid var(--border-1)', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--fg-1)', fontSize: 14 }}>
+                      {b.value != null ? b.value.toFixed(3) + '%' : '—'}
+                    </td>
+                    <td style={{ padding: '9px 12px', textAlign: 'right', borderBottom: '1px solid var(--border-1)', fontVariantNumeric: 'tabular-nums', fontSize: 12, fontWeight: 500,
+                      color: isUp ? 'var(--red-600)' : isDown ? 'var(--green-600)' : 'var(--fg-3)' }}>
+                      {b.changePct != null ? (isUp ? '▲ +' : isDown ? '▼ ' : '→ ') + Math.abs(b.changePct).toFixed(3) + '%' : '—'}
+                    </td>
+                    <td style={{ padding: '9px 12px', borderBottom: '1px solid var(--border-1)' }}>
+                      {lv ? (
+                        <span style={{
+                          fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase',
+                          color: lv.color, background: lv.color + '25', padding: '2px 7px', borderRadius: 999,
+                        }}>
+                          {lv.label}
+                        </span>
+                      ) : <span style={{ color: 'var(--fg-4)', fontSize: 12 }}>—</span>}
+                    </td>
+                    <td style={{ padding: '9px 12px', borderBottom: '1px solid var(--border-1)', minWidth: 100 }}>
+                      <div style={{ height: 6, borderRadius: 3, background: 'var(--bg-sunken)', overflow: 'hidden' }}>
+                        <div style={{ width: barPct + '%', height: '100%', borderRadius: 3, background: lv ? lv.color : 'var(--accent)', transition: 'width 0.4s ease' }} />
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div style={{ marginTop: 10, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {[
+              { label: 'Very Low / Low  < 3%', color: '#34c759' },
+              { label: 'Normal  3–4.5%',        color: '#8e8e93' },
+              { label: 'Elevated  4.5–6%',      color: '#ff9f0a' },
+              { label: 'High  > 6%',            color: '#ff453a' },
+            ].map(({ label, color }) => (
+              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11 }}>
+                <div style={{ width: 10, height: 10, borderRadius: 2, background: color }} />
+                <span style={{ color: 'var(--fg-3)' }}>{label}</span>
+              </div>
+            ))}
+            <span style={{ fontSize: 11, color: 'var(--fg-4)' }}>· Higher yields = tighter monetary conditions · Change = day %</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Macro Dashboard ─────────────────────────────────────────────────────────
 
 const MACRO_IMPACT_MATRIX = [
@@ -402,12 +520,28 @@ function getMacroLevel(key, value) {
   return info.levels.find(l => value < l.max) || info.levels[info.levels.length - 1];
 }
 
-function macroImpactColor(text) {
-  if (text.includes('↑↑') || text === 'Risk On')  return 'var(--green-600)';
-  if (text.includes('↑'))                          return 'var(--green-600)';
-  if (text.includes('↓↓') || text === 'Risk Off') return 'var(--red-600)';
-  if (text.includes('↓'))                          return 'var(--red-600)';
-  return 'var(--fg-2)';
+function macroImpactLevel(text) {
+  if (text === 'Risk On'  || text.includes('↑↑↑')) return  3;
+  if (text.includes('↑↑'))                          return  2;
+  if (text.includes('↑'))                           return  1;
+  if (text === 'Mixed')                             return  0;
+  if (text === 'Risk Off' || text.includes('↓↓↓')) return -3;
+  if (text.includes('↓↓'))                          return -2;
+  if (text.includes('↓'))                           return -1;
+  return 0;
+}
+
+function macroImpactStyle(level) {
+  switch (level) {
+    case  3: return { bg: '#0d5c1a', text: '#fff',           border: '#1a7a3a' };
+    case  2: return { bg: '#1a7a3a', text: '#fff',           border: '#30d158' };
+    case  1: return { bg: 'rgba(48,209,88,0.18)',  text: 'var(--green-600)', border: 'rgba(48,209,88,0.4)' };
+    case  0: return { bg: 'var(--bg-sunken)',       text: 'var(--fg-3)',      border: 'var(--border-1)'     };
+    case -1: return { bg: 'rgba(255,69,58,0.15)',  text: 'var(--red-600)',   border: 'rgba(255,69,58,0.4)' };
+    case -2: return { bg: '#7a1a1a',  text: '#fff',          border: '#ff453a' };
+    case -3: return { bg: '#4a0a0a',  text: '#ffb3b3',       border: '#ff453a' };
+    default: return { bg: 'var(--bg-sunken)', text: 'var(--fg-3)', border: 'var(--border-1)' };
+  }
 }
 
 function MacroCard({ indKey, label, value, unit, change, active, onClick }) {
@@ -578,35 +712,67 @@ function MacroDashboard() {
       )}
 
       {showMatrix && (
-        <div style={{ marginTop: 14, overflowX: 'auto' }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--fg-3)', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 8 }}>
+        <div style={{ marginTop: 14 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--fg-3)', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 10 }}>
             Market Impact Matrix
           </div>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-            <thead>
-              <tr style={{ background: 'var(--bg-sunken)' }}>
-                {['Trigger', 'Impact 1', 'Impact 2', 'Impact 3', 'Impact 4'].map(h => (
-                  <th key={h} style={{ padding: '6px 12px', textAlign: 'left', fontWeight: 600, fontSize: 10, letterSpacing: 0.4, textTransform: 'uppercase', color: 'var(--fg-3)', borderBottom: '1px solid var(--border-1)', whiteSpace: 'nowrap' }}>
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {MACRO_IMPACT_MATRIX.map((row, i) => (
-                <tr key={row.indicator} style={{ background: i % 2 === 0 ? 'transparent' : 'var(--bg-sunken)' }}>
-                  <td style={{ padding: '8px 12px', fontWeight: 600, color: 'var(--fg-1)', borderBottom: '1px solid var(--border-1)', whiteSpace: 'nowrap' }}>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <div style={{ minWidth: 520 }}>
+              {MACRO_IMPACT_MATRIX.map((row) => (
+                <div key={row.indicator} style={{ display: 'flex', gap: 6, marginBottom: 6, alignItems: 'stretch' }}>
+                  <div style={{
+                    width: 100, flexShrink: 0, display: 'flex', alignItems: 'center',
+                    padding: '8px 10px', borderRadius: 8,
+                    background: 'var(--bg-sunken)', border: '1px solid var(--border-1)',
+                    fontWeight: 700, fontSize: 11, color: 'var(--fg-1)',
+                  }}>
                     {row.indicator}
-                  </td>
-                  {row.impacts.map((imp, j) => (
-                    <td key={j} style={{ padding: '8px 12px', borderBottom: '1px solid var(--border-1)', color: macroImpactColor(imp), fontWeight: 500, whiteSpace: 'nowrap' }}>
-                      {imp}
-                    </td>
-                  ))}
-                </tr>
+                  </div>
+                  {row.impacts.map((imp, j) => {
+                    const level = macroImpactLevel(imp);
+                    const st    = macroImpactStyle(level);
+                    const assetName = imp.replace(/[↑↓]+/g, '').replace('Risk On', 'Risk On').replace('Risk Off', 'Risk Off').replace('Mixed', 'Mixed').trim();
+                    return (
+                      <div key={j} style={{
+                        flex: '1 1 80px', padding: '7px 10px', borderRadius: 8,
+                        background: st.bg, border: '1px solid ' + st.border,
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                        gap: 3, minWidth: 72,
+                      }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: st.text, textAlign: 'center' }}>
+                          {assetName}
+                        </div>
+                        <div style={{ fontSize: 14, lineHeight: 1 }}>
+                          {level >= 3 ? '⬆⬆⬆' : level === 2 ? '⬆⬆' : level === 1 ? '⬆' : level === 0 ? '↔' : level === -1 ? '⬇' : level === -2 ? '⬇⬇' : '⬇⬇⬇'}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+          </div>
+          {/* Legend */}
+          <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ fontSize: 11, color: 'var(--fg-3)', fontWeight: 600 }}>Impact scale:</span>
+            {[
+              { level: 3,  label: '⬆⬆⬆ Strong Bull' },
+              { level: 2,  label: '⬆⬆ Bull'         },
+              { level: 1,  label: '⬆ Mild Bull'      },
+              { level: 0,  label: '↔ Neutral/Mixed'  },
+              { level: -1, label: '⬇ Mild Bear'      },
+              { level: -2, label: '⬇⬇ Bear'          },
+              { level: -3, label: '⬇⬇⬇ Strong Bear' },
+            ].map(({ level, label }) => {
+              const st = macroImpactStyle(level);
+              return (
+                <div key={level} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11 }}>
+                  <div style={{ width: 14, height: 14, borderRadius: 3, background: st.bg, border: '1px solid ' + st.border, flexShrink: 0 }} />
+                  <span style={{ color: 'var(--fg-3)' }}>{label}</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
@@ -699,6 +865,9 @@ function TechnicalAnalysisCore({ initSymbol, compact }) {
 
       {/* ── Macro Environment (page only, not modal) ── */}
       {!compact && <MacroDashboard />}
+
+      {/* ── Bond Yields (page only, not modal) ── */}
+      {!compact && <BondYieldsTable />}
 
       {/* ── Search ── */}
       <div style={{ display:'flex', gap:8 }}>
@@ -920,7 +1089,7 @@ function TechnicalAnalysisCore({ initSymbol, compact }) {
           </div>
 
           {/* Stats row */}
-          <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+          <div className="analysis-grid">
             <StatChip label="RSI"
               value={result.stats.rsi?.toFixed(1)}
               bull={result.stats.rsi<=60} bear={result.stats.rsi>70} />
