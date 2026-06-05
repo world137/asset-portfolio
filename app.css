@@ -140,8 +140,8 @@ body { background: var(--bg-app); display: block; padding: 0; }
 .page { max-width: 1180px; margin: 0 auto; padding: 26px 28px 80px; }
 
 /* CCY / theme pills in topbar */
-.pill-toggle { display: inline-flex; border: 1px solid var(--border-2); border-radius: var(--radius-pill); overflow: hidden; background: var(--bg-surface); }
-.pill-toggle button { border: 0; background: transparent; padding: 6px 13px; font: 600 12px/1 var(--font-sans); color: var(--fg-3); cursor: pointer; }
+.pill-toggle { display: inline-flex; border: 1px solid var(--border-2); border-radius: var(--radius-pill); background: var(--bg-surface); padding: 3px; gap: 2px; }
+.pill-toggle button { border: 0; background: transparent; padding: 4px 12px; font: 600 12px/1 var(--font-sans); color: var(--fg-3); cursor: pointer; border-radius: var(--radius-pill); transition: background 0.15s, color 0.15s; }
 .pill-toggle button.on { background: var(--accent); color: #fff; }
 [data-theme="light"] .pill-toggle button.on { background: var(--ink-900); color: var(--fg-on-ink); }
 .icon-toggle { width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--border-2); background: var(--bg-surface); color: var(--fg-2); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
@@ -328,7 +328,7 @@ body { background: var(--bg-app); display: block; padding: 0; }
   .donut { align-self: center; }
   .ptable { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap; }
   .mgrid { grid-template-columns: 1fr; }
-  .pill-toggle button { padding: 5px 9px; font-size: 11px; }
+  .pill-toggle button { padding: 3px 8px; font-size: 11px; }
   .lotinner { padding: 4px 10px 10px 16px; }
   .classgrid { grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); }
   .search-inp { min-width: 0; flex: 1; }
@@ -1435,6 +1435,12 @@ body { background: var(--bg-app); display: block; padding: 0; }
 .mgrid > div { min-width: 0; }
 .mgrid input, .mgrid select { max-width: 100%; box-sizing: border-box; }
 input[type="date"] { min-width: 0; max-width: 100%; box-sizing: border-box; }
+
+.analysis-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 16px;
+}
 
 /* Bento box container responsive */
 @media (max-width: 600px) {

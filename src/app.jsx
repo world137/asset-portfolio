@@ -57,7 +57,7 @@ function Nav({ route, setRoute, totals, open, onClose }) {
         <span className="av">PT</span>
         <div>
           <div className="who" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            My Portfolio
+            {(window._ptfUsername && window._ptfUsername()) || 'My Portfolio'}
             <span className="logout-btn" title="Sign out" onClick={window._ptfLogout}>
               <Icon name="log-out" size={13} />
             </span>
@@ -134,6 +134,7 @@ function SummaryView() {
       });
     }
   }
+  const totalPortValue = rows.reduce((a, r) => a + r.value, 0) || 1;
 
   const filtered = filterClass === 'all' ? rows : rows.filter(r => r.classKey === filterClass);
   const sorted   = [...filtered].sort((a, b) => sortDir * (b[sortBy] - a[sortBy]));
@@ -272,11 +273,12 @@ function SummaryView() {
                 <SortTh col="value"        label="Value"      right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
                 <SortTh col="profit"       label="P/L"        right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
                 <SortTh col="pct"          label="%"          right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                <th className="num" style={{ whiteSpace: 'nowrap', width: 80 }}>Port %</th>
               </tr>
             </thead>
             <tbody>
               {sorted.length === 0 && (
-                <tr><td colSpan={11}><div className="empty">No holdings found.</div></td></tr>
+                <tr><td colSpan={12}><div className="empty">No holdings found.</div></td></tr>
               )}
               {sorted.map((r, i) => {
                 const barMax = Math.max(r.cost, r.value) || 1;
@@ -315,12 +317,145 @@ function SummaryView() {
                       {(r.profit >= 0 ? '+' : '−') + sym + window.fmtBig(Math.abs(r.profit))}
                     </td>
                     <td className={'num ' + (r.pct >= 0 ? 'up' : 'down')}>{window.fmtPct(r.pct)}</td>
+                    <td className="num">
+                      {(() => {
+                        const portPct = (r.value / totalPortValue) * 100;
+                        return (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--bg-sunken)', overflow: 'hidden', flexShrink: 0 }}>
+                              <div style={{ width: Math.min(100, portPct * 5) + '%', height: '100%', background: 'var(--accent)', borderRadius: 2 }} />
+                            </div>
+                            <span style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', color: 'var(--fg-3)', minWidth: 36 }}>{portPct.toFixed(1)}%</span>
+                          </div>
+                        );
+                      })()}
+                    </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </div>
+      </div>
+
+      <PortfolioGrowthPanel />
+    </div>
+  );
+}
+
+// ── Portfolio Growth Panel ────────────────────────────────────────────────────
+function PortfolioGrowthPanel() {
+  const snapshots = Store.getSnapshots();
+  if (!snapshots || snapshots.length < 2) {
+    return (
+      <div className="card" style={{ padding: '20px 18px', marginTop: 16 }}>
+        <div className="card-h"><div><div className="t">Portfolio Growth</div><div className="s">Needs 2+ daily snapshots to calculate returns</div></div></div>
+        <div style={{ color: 'var(--fg-3)', fontSize: 13, padding: '12px 0' }}>
+          Not enough snapshot history yet. Returns will appear after the portfolio has been open on multiple days.
+        </div>
+      </div>
+    );
+  }
+
+  const sorted = [...snapshots].sort((a, b) => a.date.localeCompare(b.date));
+  const current = sorted[sorted.length - 1];
+  const now     = new Date();
+  const nowStr  = now.toISOString().slice(0, 10);
+
+  function findPast(daysBack, ytd, maxPeriod) {
+    if (maxPeriod) return sorted[0];
+    if (ytd) {
+      const ytdDate = now.getFullYear() + '-01-01';
+      const snap = sorted.filter(s => s.date < ytdDate).sort((a, b) => b.date.localeCompare(a.date))[0];
+      return snap || null;
+    }
+    const target = new Date(now.getTime() - daysBack * 86400000).toISOString().slice(0, 10);
+    return sorted.filter(s => s.date <= target).sort((a, b) => b.date.localeCompare(a.date))[0] || null;
+  }
+
+  const PERIODS = [
+    { label: '1D',  days: 1   },
+    { label: '5D',  days: 5   },
+    { label: '1M',  days: 30  },
+    { label: '6M',  days: 180 },
+    { label: 'YTD', ytd: true },
+    { label: '1Y',  days: 365 },
+    { label: '5Y',  days: 1825},
+    { label: 'MAX', max: true },
+  ];
+
+  function pct(curr, past, key) {
+    const c = key ? (curr[key] ?? null) : curr.value;
+    const p = key ? (past[key] ?? null) : past.value;
+    if (c == null || p == null || p === 0) return null;
+    return (c - p) / p * 100;
+  }
+
+  const classes = window.ASSET_CLASSES.filter(cls => {
+    const total = snapshots.some(s => s[cls.key] != null && s[cls.key] > 0);
+    return total;
+  });
+
+  return (
+    <div className="card">
+      <div className="card-h" style={{ padding: '14px 18px' }}>
+        <div>
+          <div className="t">Portfolio Growth</div>
+          <div className="s">Price return by period · snapshot-based · in THB · excludes unrealized impact of sell log</div>
+        </div>
+      </div>
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <table className="ptable" style={{ minWidth: 580 }}>
+          <thead>
+            <tr>
+              <th style={{ width: 50 }}>Period</th>
+              <th className="num" style={{ color: 'var(--fg-1)', fontWeight: 700 }}>All</th>
+              {classes.map(cls => (
+                <th key={cls.key} className="num">
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: window.CLASS_COLORS[cls.key], display: 'inline-block', marginRight: 4 }} />
+                  {cls.short || cls.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {PERIODS.map(({ label, days, ytd, max }) => {
+              const past = findPast(days, ytd, max);
+              if (!past) {
+                return (
+                  <tr key={label}>
+                    <td style={{ fontWeight: 600, fontSize: 12, color: 'var(--fg-3)' }}>{label}</td>
+                    <td className="num" colSpan={classes.length + 1} style={{ color: 'var(--fg-4)', fontSize: 12 }}>No data</td>
+                  </tr>
+                );
+              }
+              const totalPct = pct(current, past, null);
+              return (
+                <tr key={label}>
+                  <td style={{ fontWeight: 700, fontSize: 12, color: 'var(--fg-2)', whiteSpace: 'nowrap' }}>{label}</td>
+                  <td className={'num ' + (totalPct == null ? '' : totalPct >= 0 ? 'up' : 'down')} style={{ fontWeight: 700 }}>
+                    {totalPct == null ? '—' : (totalPct >= 0 ? '+' : '') + totalPct.toFixed(2) + '%'}
+                  </td>
+                  {classes.map(cls => {
+                    const v = pct(current, past, cls.key);
+                    return (
+                      <td key={cls.key} className={'num ' + (v == null ? '' : v >= 0 ? 'up' : 'down')} style={{ fontSize: 12 }}>
+                        {v == null ? <span style={{ color: 'var(--fg-4)' }}>—</span> : (v >= 0 ? '+' : '') + v.toFixed(2) + '%'}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr style={{ background: 'var(--bg-sunken)' }}>
+              <td colSpan={classes.length + 2} style={{ padding: '8px 18px', fontSize: 11, color: 'var(--fg-4)' }}>
+                Based on {sorted.length} daily snapshots · from {sorted[0].date} · last updated {current.date}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
       </div>
     </div>
   );

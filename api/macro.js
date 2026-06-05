@@ -49,7 +49,7 @@ async function fredLatest(seriesId, apiKey) {
 
 async function fredCpiYoY(apiKey) {
   try {
-    const url = `https://api.stlouisfed.org/fred/series/observations?series_id=CPIAUCSL&api_key=${encodeURIComponent(apiKey)}&file_type=json&sort_order=desc&limit=13`;
+    const url = `https://api.stlouisfed.org/fred/series/observations?series_id=CPIAUCSL&api_key=${encodeURIComponent(apiKey)}&file_type=json&sort_order=desc&limit=18`;
     const r = await fetch(url);
     if (!r.ok) return null;
     const j = await r.json();

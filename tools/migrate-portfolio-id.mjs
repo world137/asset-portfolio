@@ -17,11 +17,12 @@ const env = Object.fromEntries(
   readFileSync(envPath, 'utf8')
     .split('\n')
     .filter(l => l.trim() && !l.startsWith('#') && l.includes('='))
-    .map(l => { const i = l.indexOf('='); return [l.slice(0, i).trim(), l.slice(i + 1).trim()]; })
+    .map(l => { const i = l.indexOf('='); const v = l.slice(i + 1).trim(); return [l.slice(0, i).trim(), v.replace(/^["']|["']$/g, '')]; })
 );
-const { SUPABASE_URL, SUPABASE_KEY } = env;
+const SUPABASE_URL = env.SUPABASE_URL;
+const SUPABASE_KEY = env.SUPABASE_SERVICE_KEY || env.SUPABASE_KEY;
 if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.error('Missing SUPABASE_URL or SUPABASE_KEY in .env.local');
+  console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_KEY in .env.local');
   process.exit(1);
 }
 
@@ -72,16 +73,26 @@ async function sbGet(path) {
 }
 
 // --- Run migration ---
-const existing = await sbGet(`/users?id=eq.${newId}&select=id`);
-if (existing.length > 0) {
-  console.log('\nNew ID already exists in database — migration already done.');
-  process.exit(0);
-}
+const [existing, oldUsers] = await Promise.all([
+  sbGet(`/users?id=eq.${newId}&select=id`),
+  sbGet(`/users?id=eq.${oldId}&select=id,created_at`),
+]);
 
-const oldUsers = await sbGet(`/users?id=eq.${oldId}&select=id,created_at`);
 if (oldUsers.length === 0) {
   console.error(`\nOld user ${oldId} not found in database. Nothing to migrate.`);
   process.exit(1);
+}
+
+if (existing.length > 0) {
+  // New user already exists — check if it was auto-created empty (no holdings)
+  const newHoldings = await sbGet(`/holdings?user_id=eq.${newId}&select=id&limit=1`);
+  if (newHoldings.length > 0) {
+    console.log('\nNew ID already has data — migration already done.');
+    process.exit(0);
+  }
+  console.log('\nNew ID exists but is empty — cleaning it up and re-migrating from old ID…');
+  await sb('DELETE', `/users?id=eq.${newId}`);
+  console.log('  ✓ Removed empty new user row');
 }
 
 console.log('\nStarting migration…');

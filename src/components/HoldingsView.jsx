@@ -620,11 +620,27 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
           <div className="card-h">
             <div>
               <div className="t">Portfolio Bento</div>
-              <div className="s">Box size = portfolio weight · color = today's return</div>
+              <div className="s">Box size = portfolio weight · color = today's return · hover for details</div>
             </div>
           </div>
           <div className="card-b">
             <BentoView classKey={classKey} />
+            <div style={{ display: 'flex', gap: 10, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontSize: 11, color: 'var(--fg-3)', fontWeight: 600 }}>Color scale:</span>
+              {[
+                { bg: '#1a7a3a',                  label: '≥ +3%',       text: '#fff' },
+                { bg: 'rgba(48,209,88,0.22)',      label: '0% to +3%',  text: 'var(--fg-1)' },
+                { bg: 'var(--bg-sunken)',          label: 'No change',  text: 'var(--fg-2)' },
+                { bg: 'rgba(255,69,58,0.22)',      label: '-3% to 0%',  text: 'var(--fg-1)' },
+                { bg: '#a01a1a',                  label: '≤ -3%',       text: '#fff' },
+              ].map(({ bg, label, text }) => (
+                <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11 }}>
+                  <div style={{ width: 14, height: 14, borderRadius: 3, background: bg, flexShrink: 0, border: '1px solid var(--border-1)' }} />
+                  <span style={{ color: 'var(--fg-3)' }}>{label}</span>
+                </div>
+              ))}
+              <span style={{ fontSize: 11, color: 'var(--fg-4)', marginLeft: 4 }}>· Uses day % if available, falls back to total P/L %</span>
+            </div>
           </div>
         </div>
       )}
@@ -655,11 +671,12 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
                   <SortTh col="value"    label="Value"    right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
                   <SortTh col="profit"   label="P/L"      right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
                   <SortTh col="pct"      label="%"        right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                  <th className="num" style={{ whiteSpace: 'nowrap', width: 80 }}>Weight</th>
                 </tr>
               </thead>
               <tbody>
                 {sortedFiltered.length === 0 && (
-                  <tr><td colSpan={hasDayChg && !isOther ? 10 : 9}><div className="empty">No holdings yet. <a className="t-link" onClick={() => onAdd(classKey)}>Add your first one →</a></div></td></tr>
+                  <tr><td colSpan={hasDayChg && !isOther ? 11 : 10}><div className="empty">No holdings yet. <a className="t-link" onClick={() => onAdd(classKey)}>Add your first one →</a></div></td></tr>
                 )}
                 {sortedFiltered.map(p => {
                   const color   = window.CLASS_COLORS[classKey];
@@ -718,6 +735,19 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
                         <td className="num">{window.fmtMoney(p.value, cls.ccy, 2)}</td>
                         <td className={'num ' + (p.profit >= 0 ? 'up' : 'down')}>{(p.profit >= 0 ? '+' : '−') + window.fmtMoney(Math.abs(p.profit), cls.ccy, 0)}</td>
                         <td className={'num ' + (p.profit >= 0 ? 'up' : 'down')}>{window.fmtPct(p.pct)}</td>
+                        <td className="num">
+                          {(() => {
+                            const allocPct = totals.valueNative > 0 ? (p.value / totals.valueNative) * 100 : 0;
+                            return (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                                <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--bg-sunken)', overflow: 'hidden', flexShrink: 0 }}>
+                                  <div style={{ width: Math.min(100, allocPct) + '%', height: '100%', background: 'var(--accent)', borderRadius: 2 }} />
+                                </div>
+                                <span style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', color: 'var(--fg-3)', minWidth: 32 }}>{allocPct.toFixed(1)}%</span>
+                              </div>
+                            );
+                          })()}
+                        </td>
                       </tr>
                       {open && <LotRows position={p} classKey={classKey} ccy={cls.ccy} onEdit={onEditLot} />}
                     </React.Fragment>

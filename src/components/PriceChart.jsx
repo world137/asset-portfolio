@@ -61,10 +61,59 @@ function fmtChartPrice(v, decimals) {
   return v.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 
+// ── Indicator helpers (EMA, RSI, MACD) ───────────────────────────────────────
+
+function _iEma(data, period) {
+  const k = 2 / (period + 1);
+  const out = new Array(data.length).fill(null);
+  let i = 0;
+  while (i < data.length && data[i] == null) i++;
+  if (i >= data.length) return out;
+  out[i] = data[i];
+  for (let j = i + 1; j < data.length; j++) {
+    out[j] = data[j] != null ? data[j] * k + out[j - 1] * (1 - k) : out[j - 1];
+  }
+  return out;
+}
+
+function _iRsi(close, period) {
+  const out = new Array(close.length).fill(null);
+  if (close.length <= period) return out;
+  let g = 0, l = 0;
+  for (let i = 1; i <= period; i++) { const d = close[i] - close[i - 1]; if (d >= 0) g += d; else l -= d; }
+  g /= period; l /= period;
+  out[period] = l === 0 ? 100 : 100 - 100 / (1 + g / l);
+  for (let i = period + 1; i < close.length; i++) {
+    const d = close[i] - close[i - 1];
+    g = (g * (period - 1) + Math.max(d, 0)) / period;
+    l = (l * (period - 1) + Math.max(-d, 0)) / period;
+    out[i] = l === 0 ? 100 : 100 - 100 / (1 + g / l);
+  }
+  return out;
+}
+
+function _iMacd(close, fast, slow, sig) {
+  const ef = _iEma(close, fast), es = _iEma(close, slow);
+  const line = ef.map((v, i) => v != null && es[i] != null ? v - es[i] : null);
+  const signal = _iEma(line, sig);
+  const hist = line.map((v, i) => v != null && signal[i] != null ? v - signal[i] : null);
+  return { line, signal, hist };
+}
+
+function _linePath(vals, xOf, yOf) {
+  let d = '';
+  for (let i = 0; i < vals.length; i++) {
+    if (vals[i] == null) continue;
+    d += (d === '' ? 'M' : 'L') + xOf(i).toFixed(1) + ' ' + yOf(vals[i]).toFixed(1) + ' ';
+  }
+  return d;
+}
+
 // ── Shared Candle Chart (used by TechnicalAnalysis too via window.CandleChart) ─
 
 function CandleChart({ bars, daysBack }) {
-  const [hoverIdx, setHoverIdx] = React.useState(null);
+  const [hoverIdx,   setHoverIdx]   = React.useState(null);
+  const [showInds,   setShowInds]   = React.useState(false);
   const svgRef = React.useRef(null);
 
   // bars: { t (ms), o, h, l, c, v? }  — t in milliseconds
@@ -88,15 +137,15 @@ function CandleChart({ bars, daysBack }) {
   const step = iW / n;
   const cw   = Math.max(2, step * 0.6);
 
-  const xOf = i => PAD.l + i * step + step / 2;
-  const yOf = v => PAD.t + (1 - (v - yLo) / yRange) * iH;
+  const xOf  = i => PAD.l + i * step + step / 2;
+  const yOf  = v => PAD.t + (1 - (v - yLo) / yRange) * iH;
 
   const yTicks = [0, 0.25, 0.5, 0.75, 1].map(f => ({
     y: PAD.t + (1 - f) * iH,
     v: yLo + f * yRange,
   }));
 
-  // Month change labels for x-axis
+  // Month labels for x-axis
   const xLabels = [];
   let lastMon = -1;
   for (let i = 0; i < n; i++) {
@@ -105,29 +154,93 @@ function CandleChart({ bars, daysBack }) {
     if (m !== lastMon) { xLabels.push({ i, label: d.toLocaleString([], { month: 'short' }) }); lastMon = m; }
   }
 
+  // ── Indicators computed over display slice ──────────────────────────────
+  const closes = display.map(b => b.c);
+  const ema20  = _iEma(closes, 20);
+  const ema50  = _iEma(closes, 50);
+  const ema100 = _iEma(closes, 100);
+  const ema200 = _iEma(closes, 200);
+  const rsi14  = _iRsi(closes, 14);
+  const macd   = _iMacd(closes, 12, 26, 9);
+
+  const EMA_LINES = [
+    { data: ema20,  color: '#2979ff', label: 'EMA20'  },
+    { data: ema50,  color: '#ff9800', label: 'EMA50'  },
+    { data: ema100, color: '#e91e63', label: 'EMA100' },
+    { data: ema200, color: '#9c27b0', label: 'EMA200' },
+  ];
+
+  // RSI sub-chart layout
+  const RSI_H = 80, RSI_PAD = { t: 6, b: 16, l: 64, r: 10 };
+  const RSI_iH = RSI_H - RSI_PAD.t - RSI_PAD.b;
+  const rsiY = v => RSI_PAD.t + (1 - (v - 0) / 100) * RSI_iH;
+
+  // MACD sub-chart layout
+  const MACD_H = 70, MACD_PAD = { t: 6, b: 16, l: 64, r: 10 };
+  const MACD_iH = MACD_H - MACD_PAD.t - MACD_PAD.b;
+  const macdVals = macd.hist.filter(v => v != null);
+  const macdMax  = macdVals.length ? Math.max(...macdVals.map(Math.abs)) * 1.2 || 1 : 1;
+  const macdY    = v => MACD_PAD.t + (1 - (v + macdMax) / (2 * macdMax)) * MACD_iH;
+
   const hovered = hoverIdx != null ? display[hoverIdx] : null;
 
   return (
     <div>
-      <div className="price-chart-tip">
-        {hovered ? (
-          <>
-            <span className="price-chart-tip-date">
-              {new Date(hovered.t).toLocaleDateString([], { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
-            </span>
-            <span style={{ fontSize: 11, color: 'var(--fg-3)', marginLeft: 4 }}>
-              O:{fmtChartPrice(hovered.o)} H:{fmtChartPrice(hovered.h)} L:{fmtChartPrice(hovered.l)}
-            </span>
-            <span className="price-chart-tip-val"
-                  style={{ color: hovered.c >= (hovered.o || hovered.c) ? 'var(--green-600)' : 'var(--red-600)' }}>
-              C:{fmtChartPrice(hovered.c)}
-            </span>
-          </>
-        ) : (
-          <span style={{ color: 'var(--fg-4)', fontSize: 12 }}>{n} candles · hover to inspect</span>
-        )}
+      {/* ── Tip row + Indicators toggle ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+        <div className="price-chart-tip" style={{ flex: 1, marginBottom: 0 }}>
+          {hovered ? (
+            <>
+              <span className="price-chart-tip-date">
+                {new Date(hovered.t).toLocaleDateString([], { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--fg-3)', marginLeft: 4 }}>
+                O:{fmtChartPrice(hovered.o)} H:{fmtChartPrice(hovered.h)} L:{fmtChartPrice(hovered.l)}
+              </span>
+              <span className="price-chart-tip-val"
+                    style={{ color: hovered.c >= (hovered.o || hovered.c) ? 'var(--green-600)' : 'var(--red-600)' }}>
+                C:{fmtChartPrice(hovered.c)}
+              </span>
+              {showInds && hoverIdx != null && (
+                <span style={{ fontSize: 11, color: 'var(--fg-3)', marginLeft: 8 }}>
+                  RSI:{rsi14[hoverIdx] != null ? rsi14[hoverIdx].toFixed(1) : '—'}
+                  {macd.hist[hoverIdx] != null && ` MACD:${macd.hist[hoverIdx].toFixed(3)}`}
+                </span>
+              )}
+            </>
+          ) : (
+            <span style={{ color: 'var(--fg-4)', fontSize: 12 }}>{n} candles · hover to inspect</span>
+          )}
+        </div>
+        <button
+          onClick={() => setShowInds(v => !v)}
+          style={{
+            marginTop: 4,
+            fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 8, cursor: 'pointer', flexShrink: 0,
+            background: showInds ? 'var(--bg-selected)' : 'var(--bg-surface)',
+            border: '1px solid ' + (showInds ? 'var(--accent)' : 'var(--border-2)'),
+            color: showInds ? 'var(--accent)' : 'var(--fg-3)',
+          }}>
+          Indicators
+        </button>
       </div>
 
+      {/* ── EMA Legend (when indicators on) ── */}
+      {showInds && (
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
+          {EMA_LINES.map(e => (
+            <div key={e.label} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
+              <div style={{ width: 18, height: 2, background: e.color, borderRadius: 1 }} />
+              <span style={{ color: 'var(--fg-3)', fontVariantNumeric: 'tabular-nums' }}>
+                {e.label}
+                {hoverIdx != null && e.data[hoverIdx] != null ? ` ${fmtChartPrice(e.data[hoverIdx])}` : ''}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Main candle SVG ── */}
       <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className="linechart-svg"
         onMouseMove={e => {
           const svg = svgRef.current;
@@ -138,7 +251,6 @@ function CandleChart({ bars, daysBack }) {
         }}
         onMouseLeave={() => setHoverIdx(null)}>
 
-        {/* Y gridlines */}
         {yTicks.map((tk, i) => (
           <g key={i}>
             <line x1={PAD.l} x2={W - PAD.r} y1={tk.y.toFixed(1)} y2={tk.y.toFixed(1)}
@@ -153,7 +265,6 @@ function CandleChart({ bars, daysBack }) {
         <line x1={PAD.l} x2={W - PAD.r} y1={PAD.t + iH} y2={PAD.t + iH}
               stroke="var(--border-2)" strokeWidth="0.8" />
 
-        {/* X labels */}
         {xLabels.map(({ i, label }) => (
           <text key={i} x={xOf(i).toFixed(1)} y={H - 4} textAnchor="middle"
                 fontSize="9.5" fill="var(--fg-4)" fontFamily="var(--font-mono)">
@@ -161,7 +272,6 @@ function CandleChart({ bars, daysBack }) {
           </text>
         ))}
 
-        {/* Candles */}
         {display.map((b, i) => {
           const up  = b.c >= (b.o ?? b.c);
           const col = up ? 'var(--green-600)' : 'var(--red-600)';
@@ -181,12 +291,145 @@ function CandleChart({ bars, daysBack }) {
           );
         })}
 
+        {/* EMA overlays */}
+        {showInds && EMA_LINES.map(e => {
+          const d = _linePath(e.data, xOf, yOf);
+          return d ? <path key={e.label} d={d} fill="none" stroke={e.color} strokeWidth="1.2" opacity="0.85" /> : null;
+        })}
+
         {hoverIdx != null && (
           <line x1={xOf(hoverIdx).toFixed(1)} x2={xOf(hoverIdx).toFixed(1)}
                 y1={PAD.t} y2={PAD.t + iH}
                 stroke="var(--fg-3)" strokeWidth="0.8" strokeDasharray="3 4" />
         )}
       </svg>
+
+      {/* ── RSI sub-chart ── */}
+      {showInds && (
+        <svg viewBox={`0 0 ${W} ${RSI_H}`} className="linechart-svg" style={{ marginTop: 2, cursor: 'default' }}
+          onMouseMove={e => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            const mx = (e.clientX - rect.left) * (W / rect.width) - RSI_PAD.l;
+            setHoverIdx(Math.max(0, Math.min(n - 1, Math.floor(mx / step))));
+          }}
+          onMouseLeave={() => setHoverIdx(null)}>
+          {/* Background */}
+          <rect x={RSI_PAD.l} y={RSI_PAD.t} width={iW} height={RSI_iH} fill="none" />
+
+          {/* Reference lines: 70, 50, 30 */}
+          {[70, 50, 30].map(v => (
+            <g key={v}>
+              <line x1={RSI_PAD.l} x2={W - RSI_PAD.r} y1={rsiY(v).toFixed(1)} y2={rsiY(v).toFixed(1)}
+                    stroke={v === 50 ? 'var(--border-2)' : v === 70 ? 'var(--red-600)' : 'var(--green-600)'}
+                    strokeWidth="0.6" strokeDasharray="3 4" opacity="0.6" />
+              <text x={RSI_PAD.l - 4} y={rsiY(v) + 3} textAnchor="end" fontSize="8"
+                    fill={v === 70 ? 'var(--red-600)' : v === 30 ? 'var(--green-600)' : 'var(--fg-4)'}
+                    fontFamily="var(--font-mono)">
+                {v}
+              </text>
+            </g>
+          ))}
+
+          {/* RSI label */}
+          <text x={RSI_PAD.l + 2} y={RSI_PAD.t + 10} fontSize="8" fill="var(--fg-4)" fontFamily="var(--font-mono)" fontWeight="600">RSI(14)</text>
+
+          {/* RSI line */}
+          {(() => {
+            const d = _linePath(rsi14, xOf, rsiY);
+            return d ? <path d={d} fill="none" stroke="#ff9f0a" strokeWidth="1.2" /> : null;
+          })()}
+
+          {/* Overbought/oversold fill */}
+          {rsi14.map((v, i) => {
+            if (v == null) return null;
+            const col = v >= 70 ? 'rgba(255,69,58,0.15)' : v <= 30 ? 'rgba(48,209,88,0.15)' : null;
+            if (!col) return null;
+            return <rect key={i} x={(xOf(i) - step / 2).toFixed(1)} y={RSI_PAD.t} width={step.toFixed(1)} height={RSI_iH} fill={col} />;
+          })}
+
+          {hoverIdx != null && (
+            <line x1={xOf(hoverIdx).toFixed(1)} x2={xOf(hoverIdx).toFixed(1)}
+                  y1={RSI_PAD.t} y2={RSI_PAD.t + RSI_iH}
+                  stroke="var(--fg-3)" strokeWidth="0.8" strokeDasharray="3 4" />
+          )}
+        </svg>
+      )}
+
+      {/* ── MACD sub-chart ── */}
+      {showInds && (
+        <svg viewBox={`0 0 ${W} ${MACD_H}`} className="linechart-svg" style={{ marginTop: 2, cursor: 'default' }}
+          onMouseMove={e => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            const mx = (e.clientX - rect.left) * (W / rect.width) - MACD_PAD.l;
+            setHoverIdx(Math.max(0, Math.min(n - 1, Math.floor(mx / step))));
+          }}
+          onMouseLeave={() => setHoverIdx(null)}>
+          {/* Zero line */}
+          <line x1={MACD_PAD.l} x2={W - MACD_PAD.r}
+                y1={macdY(0).toFixed(1)} y2={macdY(0).toFixed(1)}
+                stroke="var(--border-2)" strokeWidth="0.6" />
+
+          {/* MACD label */}
+          <text x={MACD_PAD.l + 2} y={MACD_PAD.t + 10} fontSize="8" fill="var(--fg-4)" fontFamily="var(--font-mono)" fontWeight="600">MACD(12,26,9)</text>
+
+          {/* Histogram bars */}
+          {macd.hist.map((v, i) => {
+            if (v == null) return null;
+            const yz = macdY(0);
+            const yv = macdY(v);
+            const barH = Math.abs(yz - yv);
+            return (
+              <rect key={i}
+                    x={(xOf(i) - cw / 2).toFixed(1)} y={Math.min(yz, yv).toFixed(1)}
+                    width={Math.max(1, cw).toFixed(1)} height={Math.max(0.5, barH).toFixed(1)}
+                    fill={v >= 0 ? 'rgba(48,209,88,0.6)' : 'rgba(255,69,58,0.6)'} />
+            );
+          })}
+
+          {/* MACD line */}
+          {(() => {
+            const d = _linePath(macd.line, xOf, macdY);
+            return d ? <path d={d} fill="none" stroke="#2979ff" strokeWidth="1.1" /> : null;
+          })()}
+
+          {/* Signal line */}
+          {(() => {
+            const d = _linePath(macd.signal, xOf, macdY);
+            return d ? <path d={d} fill="none" stroke="#ff9800" strokeWidth="1.1" /> : null;
+          })()}
+
+          {/* Y axis label */}
+          <text x={MACD_PAD.l - 4} y={MACD_PAD.t + 4} textAnchor="end" fontSize="7.5" fill="var(--fg-4)" fontFamily="var(--font-mono)">
+            {(macdMax).toFixed(3)}
+          </text>
+          <text x={MACD_PAD.l - 4} y={MACD_PAD.t + MACD_iH + 4} textAnchor="end" fontSize="7.5" fill="var(--fg-4)" fontFamily="var(--font-mono)">
+            {(-macdMax).toFixed(3)}
+          </text>
+
+          {hoverIdx != null && (
+            <line x1={xOf(hoverIdx).toFixed(1)} x2={xOf(hoverIdx).toFixed(1)}
+                  y1={MACD_PAD.t} y2={MACD_PAD.t + MACD_iH}
+                  stroke="var(--fg-3)" strokeWidth="0.8" strokeDasharray="3 4" />
+          )}
+        </svg>
+      )}
+
+      {/* MACD legend */}
+      {showInds && (
+        <div style={{ display: 'flex', gap: 12, marginTop: 4, flexWrap: 'wrap' }}>
+          {[
+            { color: '#2979ff', label: 'MACD line' },
+            { color: '#ff9800', label: 'Signal (9)' },
+            { color: 'rgba(48,209,88,0.7)', label: 'Hist ↑' },
+            { color: 'rgba(255,69,58,0.7)', label: 'Hist ↓' },
+          ].map(({ color, label }) => (
+            <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
+              <div style={{ width: 16, height: 2, background: color, borderRadius: 1 }} />
+              <span style={{ color: 'var(--fg-3)' }}>{label}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
