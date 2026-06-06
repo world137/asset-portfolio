@@ -454,7 +454,26 @@ function BentoView({ classKey }) {
     // Outer wrapper: position:relative so tooltip is positioned correctly, but NOT overflow:hidden
     // so the tooltip can extend below/above the bento area without being clipped.
     <div ref={containerRef} style={{ position: 'relative', width: '100%' }}
-         onMouseLeave={() => setHovered(null)}>
+         onMouseLeave={() => setHovered(null)}
+         onTouchEnd={() => setHovered(null)}
+         onTouchCancel={() => setHovered(null)}
+         onTouchMove={e => {
+           const touch = e.touches[0];
+           const el = document.elementFromPoint(touch.clientX, touch.clientY);
+           let cur = el;
+           while (cur && cur !== containerRef.current) {
+             const rn = cur.getAttribute('data-rawname');
+             if (rn) {
+               const found = items.find(i => i.rawName === rn);
+               if (found) {
+                 const rect = containerRef.current.getBoundingClientRect();
+                 setHovered({ data: found, x: touch.clientX - rect.left, y: touch.clientY - rect.top });
+               }
+               return;
+             }
+             cur = cur.parentElement;
+           }
+         }}>
       {/* Inner box area: fixed height, overflow:hidden to contain the boxes */}
       <div style={{ position: 'relative', width: '100%', height: BENTO_H, overflow: 'hidden' }}>
       {rects.map(({ data, x, y, w, h }) => {
@@ -476,6 +495,7 @@ function BentoView({ classKey }) {
 
         return (
           <div key={data.rawName}
+               data-rawname={data.rawName}
                style={{
                  position: 'absolute', left: ax, top: ay, width: aw, height: ah,
                  background: colors.bg, borderRadius: 4,
@@ -496,6 +516,11 @@ function BentoView({ classKey }) {
                  // may not fire reliably when moving between sibling elements.
                  const rect = containerRef.current.getBoundingClientRect();
                  setHovered({ data, x: e.clientX - rect.left, y: e.clientY - rect.top });
+               }}
+               onTouchStart={e => {
+                 const touch = e.touches[0];
+                 const rect = containerRef.current.getBoundingClientRect();
+                 setHovered({ data, x: touch.clientX - rect.left, y: touch.clientY - rect.top });
                }}>
             {showName && (
               <div style={{
