@@ -366,10 +366,10 @@ function BentoTooltip({ data, sym, x, y, containerW }) {
     <div style={{
       position: 'absolute', left, top: Math.max(4, y - 8),
       width: W, zIndex: 100, pointerEvents: 'none',
-      background: 'var(--bg-card, #1c1c1e)',
-      border: '1px solid var(--border, rgba(255,255,255,0.12))',
+      background: 'var(--bg-surface)',
+      border: '1px solid var(--border-2)',
       borderRadius: 8, padding: '10px 12px',
-      boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+      boxShadow: '0 4px 20px rgba(0,0,0,0.22)',
       fontSize: 12, lineHeight: 1.6,
     }}>
       <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6, color: 'var(--fg-1)' }}>
