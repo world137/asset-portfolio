@@ -279,8 +279,11 @@ export default async function handler(req, res) {
 
   if (!pid) return res.status(400).json({ error: 'PORTFOLIO_ID not configured — set it in Vercel env vars or check your sync ID' });
 
+  console.log(`[telegram] method=${req.method} pid=${pid?.slice(0, 8)}…`);
+
   try {
     const holdings = await loadHoldings(pid);
+    console.log(`[telegram] holdings found: ${holdings.length}`);
     if (!holdings.length) return res.status(200).json({ ok: true, note: 'no holdings found for this portfolio ID' });
 
     const groups = await buildReport(holdings);
@@ -290,9 +293,10 @@ export default async function handler(req, res) {
 
     const message = formatMessage(groups);
     await sendTelegram(message);
+    console.log('[telegram] sent ok');
     return res.status(200).json({ ok: true, message });
   } catch (e) {
-    console.error('telegram error:', e);
+    console.error('[telegram] error:', e);
     return res.status(500).json({ error: e.message });
   }
 }
