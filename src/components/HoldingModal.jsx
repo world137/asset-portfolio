@@ -8,7 +8,7 @@ function HoldingModal({ open, onClose, classKey, lot }) {
   const isOther = classKey === 'other';
   const isCrypto = classKey === 'crypto';
   const editing = !!lot;
-  const blank   = { name: '', type: 'Debenture', price: '', qty: '', cur: '', sector: '' };
+  const blank   = { name: '', type: 'Debenture', price: '', qty: '', cur: '', sector: '', note: '' };
   const [f, setF] = React.useState(blank);
 
   // Wallet deduction state
@@ -26,6 +26,7 @@ function HoldingModal({ open, onClose, classKey, lot }) {
         qty:    lot.qty ?? '',
         cur:    lot.cur ?? '',
         sector: Store.get().sectors[classKey + ':' + lot.name] || '',
+        note:   Store.getHoldingNote(classKey, lot.name) || '',
       });
     } else {
       setF(blank);
@@ -62,11 +63,13 @@ function HoldingModal({ open, onClose, classKey, lot }) {
     if (isOther) payload.type = f.type;
     if (editing) {
       Store.updateLot(classKey, lot.id, payload);
+      Store.setHoldingNote(classKey, f.name.trim(), f.note);
     } else {
       const walletData = deductOn && walletAccId
         ? { accountId: walletAccId, exchangeRate: crossCcy ? fxN : null }
         : null;
       Store.addLot(classKey, payload, walletData);
+      if (f.note.trim()) Store.setHoldingNote(classKey, f.name.trim(), f.note);
     }
     onClose();
   };
@@ -128,6 +131,12 @@ function HoldingModal({ open, onClose, classKey, lot }) {
             </datalist>
           </div>
         )}
+
+        <div className="full">
+          <label className="flabel">Investment note / thesis (optional)</label>
+          <input className="input" value={f.note} onChange={set('note')}
+                 placeholder="e.g. Long-term hold, DCA plan, target exit at…" />
+        </div>
 
         <div className="full computed">
           <div className="c"><small>Cost</small>{window.fmtMoney(cost, cls.ccy, 2)}</div>

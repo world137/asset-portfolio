@@ -118,7 +118,7 @@ function DragTransferModal({ open, fromAccount, toAccount, onClose }) {
 }
 
 /* ── Account card ────────────────────────────────────────────────────────── */
-function AccountCard({ account, balance, onEdit, isDragging, isDropTarget, dragHandlers }) {
+function AccountCard({ account, balance, fxGainLoss, onEdit, isDragging, isDropTarget, dragHandlers }) {
   const TYPE_LABELS = { bank: 'Bank', cash: 'Cash', credit_card: 'Credit Card', ewallet: 'E-Wallet' };
   const color   = account.color || '#5a6677';
   const isCC    = account.type === 'credit_card';
@@ -181,6 +181,14 @@ function AccountCard({ account, balance, onEdit, isDragging, isDropTarget, dragH
             </div>
           </div>
         ) : null}
+        {fxGainLoss != null && Math.abs(fxGainLoss) >= 1 && (
+          <div style={{ marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 4,
+                        background: fxGainLoss >= 0 ? 'var(--green-600)18' : 'var(--red-600)18',
+                        color: fxGainLoss >= 0 ? 'var(--green-600)' : 'var(--red-600)',
+                        borderRadius: 6, padding: '3px 7px', fontSize: 11, fontWeight: 600 }}>
+            {fxGainLoss >= 0 ? '▲' : '▼'} FX {fxGainLoss >= 0 ? '+' : ''}฿{window.fmtBig(Math.abs(fxGainLoss))}
+          </div>
+        )}
         {isDropTarget && (
           <div style={{ marginTop: 8, fontSize: 11, color: 'var(--accent)', fontWeight: 500, textAlign: 'center' }}>
             Drop to transfer here
@@ -206,11 +214,22 @@ function WalletOverview() {
 
   const accounts = wallet.accounts.filter(a => !a.archived);
 
-  const accountsWithBal = accounts.map(a => ({
-    ...a,
-    balance:        Store.accountBalance(a.id),
-    balanceDisplay: Store.walletToDisplay(Store.accountBalance(a.id), a.currency),
-  }));
+  const accountsWithBal = accounts.map(a => {
+    const balance = Store.accountBalance(a.id);
+    // FX gain/loss: compare current rate to the rate when account was opened
+    let fxGainLoss = null;
+    if (a.currency !== 'THB' && a.openingFxRateTHB && a.openingFxRateTHB > 0) {
+      const currentRateTHB = Store.walletToDisplay(1, a.currency); // 1 foreignCCY → THB at current rate
+      const gainPerUnit = currentRateTHB - a.openingFxRateTHB;     // THB gain per 1 unit of foreignCCY
+      fxGainLoss = gainPerUnit * balance;                           // total FX gain/loss in THB
+    }
+    return {
+      ...a,
+      balance,
+      balanceDisplay: Store.walletToDisplay(balance, a.currency),
+      fxGainLoss,
+    };
+  });
 
   const totalDisplay = accountsWithBal.reduce((s, a) => s + a.balanceDisplay, 0);
 
@@ -264,6 +283,7 @@ function WalletOverview() {
       key={a.id}
       account={a}
       balance={a.balance}
+      fxGainLoss={a.fxGainLoss}
       onEdit={() => setEditAcc(a)}
       isDragging={dragFrom === a.id}
       isDropTarget={dragOver === a.id && dragFrom !== a.id}

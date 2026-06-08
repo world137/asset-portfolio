@@ -351,6 +351,39 @@
       "note": "",
       "toAccountId": null,
       "fxRate": null
+    },
+    {
+      "id": "n4ucoae",
+      "accountId": "z93whdt",
+      "date": "2026-06-04",
+      "amount": 20,
+      "flow": "expense",
+      "categoryId": "cat_food",
+      "note": "",
+      "toAccountId": null,
+      "fxRate": null
+    },
+    {
+      "id": "23yjevm",
+      "accountId": "0nmzb8y",
+      "date": "2026-06-04",
+      "amount": 88,
+      "flow": "expense",
+      "categoryId": "cat_food",
+      "note": "",
+      "toAccountId": null,
+      "fxRate": null
+    },
+    {
+      "id": "dhntb90",
+      "accountId": "z7ovdpn",
+      "date": "2026-06-04",
+      "amount": 56,
+      "flow": "expense",
+      "categoryId": "cat_transport",
+      "note": "",
+      "toAccountId": null,
+      "fxRate": null
     }
   ],
   "debts": [

@@ -2,19 +2,20 @@
 /* AccountModal.jsx — Add / edit a wallet account */
 
 function AccountModal({ open, account, onClose }) {
-  const blank = { name: '', type: 'bank', currency: 'THB', color: '', initialBal: '', creditLimit: '' };
+  const blank = { name: '', type: 'bank', currency: 'THB', color: '', initialBal: '', creditLimit: '', openingFxRateTHB: '' };
   const [f, setF] = React.useState(blank);
 
   React.useEffect(() => {
     if (!open) return;
     if (account) {
       setF({
-        name:        account.name,
-        type:        account.type,
-        currency:    account.currency,
-        color:       account.color || '',
-        initialBal:  account.initialBal != null ? String(account.initialBal) : '',
-        creditLimit: account.creditLimit != null ? String(account.creditLimit) : '',
+        name:             account.name,
+        type:             account.type,
+        currency:         account.currency,
+        color:            account.color || '',
+        initialBal:       account.initialBal != null ? String(account.initialBal) : '',
+        creditLimit:      account.creditLimit != null ? String(account.creditLimit) : '',
+        openingFxRateTHB: account.openingFxRateTHB != null ? String(account.openingFxRateTHB) : '',
       });
     } else {
       setF(blank);
@@ -28,12 +29,13 @@ function AccountModal({ open, account, onClose }) {
   const save = () => {
     if (!valid) return;
     const patch = {
-      name:        f.name.trim(),
-      type:        f.type,
-      currency:    f.currency,
-      color:       f.color || null,
-      initialBal:  f.initialBal !== '' ? +f.initialBal : 0,
-      creditLimit: f.type === 'credit_card' && f.creditLimit !== '' ? +f.creditLimit : null,
+      name:             f.name.trim(),
+      type:             f.type,
+      currency:         f.currency,
+      color:            f.color || null,
+      initialBal:       f.initialBal !== '' ? +f.initialBal : 0,
+      creditLimit:      f.type === 'credit_card' && f.creditLimit !== '' ? +f.creditLimit : null,
+      openingFxRateTHB: f.currency !== 'THB' && f.openingFxRateTHB !== '' ? +f.openingFxRateTHB : null,
     };
     if (editing) Store.updateAccount(account.id, patch);
     else         Store.addAccount(patch);
@@ -91,6 +93,18 @@ function AccountModal({ open, account, onClose }) {
           <div>
             <label className="flabel">Credit Limit</label>
             <input className="input" type="number" placeholder="e.g. 50000" value={f.creditLimit} onChange={set('creditLimit')} />
+          </div>
+        )}
+
+        {f.currency !== 'THB' && (
+          <div className="full">
+            <label className="flabel">Opening FX Rate (1 {f.currency || '?'} = ? THB)</label>
+            <input className="input" type="number" min="0" step="any"
+                   placeholder={f.currency === 'USD' ? 'e.g. 35.5' : f.currency === 'JPY' ? 'e.g. 0.23' : 'e.g. 0.026'}
+                   value={f.openingFxRateTHB} onChange={set('openingFxRateTHB')} />
+            <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 4 }}>
+              Used to calculate unrealized FX gain/loss on the account balance. Optional.
+            </div>
           </div>
         )}
 

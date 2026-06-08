@@ -757,7 +757,7 @@ function MacroDashboard() {
               <div key={i} style={{ flex: '1 1 80px', height: 72, borderRadius: 10, background: 'var(--bg-sunken)', animation: 'pulse 1s infinite' }} />
             ))}
           </div>
-        : <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        : <div style={{ display: 'grid', gap: 8, flexWrap: 'wrap', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))'}}>
             {cards.map(c => (
               <MacroCard key={c.key} indKey={c.key} label={c.label} value={c.value} unit={c.unit} change={c.change}
                 active={activeCard === c.key} onClick={() => toggleCard(c.key)} />

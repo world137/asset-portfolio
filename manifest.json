@@ -1,0 +1,26 @@
+{
+  "name": "Portfolio Tracker",
+  "short_name": "Portfolio",
+  "description": "Personal asset portfolio tracker for Thai investors",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#9a6b1f",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='32' fill='%239a6b1f'/><path d='M32 152V76M64 152V40M96 152v-56M128 152H16' stroke='white' stroke-width='16' stroke-linecap='round'/></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='80' fill='%239a6b1f'/><path d='M80 400V200M173 400V107M267 400v-150M360 400H40' stroke='white' stroke-width='40' stroke-linecap='round'/></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["finance", "productivity"],
+  "screenshots": []
+}

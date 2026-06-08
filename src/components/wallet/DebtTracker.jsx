@@ -141,6 +141,32 @@ function DebtTracker() {
 
   const hasInstallments = outstanding.some(d => d.installment);
 
+  // Interest summary across active installment debts
+  const interestSummary = React.useMemo(() => {
+    let totalPaid = 0, totalRemaining = 0;
+    const loans = [];
+    for (const d of outstanding.filter(d => d.installment)) {
+      const calc = calcInstallment(d.amount, d.installment.months, d.installment.interestRate);
+      if (!calc) continue;
+      const paid = d.installment.paidMonths || 0;
+      const perMonth = calc.totalInterest / d.installment.months;
+      const interestPaid = perMonth * paid;
+      const interestLeft = calc.totalInterest - interestPaid;
+      totalPaid      += walletToDisplay(interestPaid, d.currency);
+      totalRemaining += walletToDisplay(interestLeft, d.currency);
+      loans.push({
+        id: d.id, name: d.counterparty, currency: d.currency,
+        rate: d.installment.interestRate || 0,
+        totalInterest: calc.totalInterest, interestPaid, interestLeft,
+        paid, total: d.installment.months,
+      });
+    }
+    return { totalPaid, totalRemaining, loans };
+  }, [outstanding]);
+
+  // Helper to convert to display (available via Store)
+  function walletToDisplay(amt, ccy) { return Store.walletToDisplay(amt, ccy); }
+
   return (
     <div className="page">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
@@ -180,9 +206,61 @@ function DebtTracker() {
         </div>
       </div>
 
+      {/* Interest Summary Panel */}
+      {interestSummary.loans.length > 0 && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="card-h">
+            <div><div className="t">Installment Interest Summary</div><div className="s">Interest paid vs remaining across active loans</div></div>
+          </div>
+          <div style={{ padding: '0 20px 16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 16 }}>
+              <div style={{ background: 'var(--bg-2)', borderRadius: 8, padding: '10px 14px' }}>
+                <div style={{ fontSize: 11, color: 'var(--fg-3)', marginBottom: 4 }}>Interest Paid (total)</div>
+                <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--fg-1)', fontFamily: 'var(--font-mono)' }}>
+                  {sym}{window.fmtBig(interestSummary.totalPaid)}
+                </div>
+              </div>
+              <div style={{ background: 'var(--bg-2)', borderRadius: 8, padding: '10px 14px' }}>
+                <div style={{ fontSize: 11, color: 'var(--fg-3)', marginBottom: 4 }}>Interest Remaining</div>
+                <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--red-600)', fontFamily: 'var(--font-mono)' }}>
+                  {sym}{window.fmtBig(interestSummary.totalRemaining)}
+                </div>
+              </div>
+            </div>
+            <table className="ptable" style={{ fontSize: 12 }}>
+              <thead><tr>
+                <th>Loan</th>
+                <th className="num">Annual Rate</th>
+                <th className="num">Interest Paid</th>
+                <th className="num">Interest Left</th>
+                <th className="num" style={{ width: 80 }}>Progress</th>
+              </tr></thead>
+              <tbody>
+                {interestSummary.loans.map(l => (
+                  <tr key={l.id}>
+                    <td style={{ fontWeight: 500 }}>{l.name}</td>
+                    <td className="num" style={{ color: 'var(--fg-3)' }}>{l.rate.toFixed(2)}%</td>
+                    <td className="num" style={{ color: 'var(--fg-2)' }}>{window.fmtCcy(l.interestPaid, l.currency)}</td>
+                    <td className="num down">{window.fmtCcy(l.interestLeft, l.currency)}</td>
+                    <td className="num">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}>
+                        <span style={{ fontSize: 10, color: 'var(--fg-3)' }}>{l.paid}/{l.total}</span>
+                        <div style={{ width: 40, height: 4, background: 'var(--bg-3)', borderRadius: 2, overflow: 'hidden' }}>
+                          <div style={{ width: `${(l.paid / l.total) * 100}%`, height: '100%', background: 'var(--accent)', borderRadius: 2 }} />
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       <div className="card">
         <div className="card-h" style={{ paddingBottom: 0 }}>
-          <div className="layoutseg" style={{ marginBottom: 0 }}>
+          <div className="layoutseg" style={{ marginBottom: 10 }}>
             <button className={tab === 'outstanding' ? 'on' : ''} onClick={() => setTab('outstanding')}>
               Active ({outstanding.length})
             </button>

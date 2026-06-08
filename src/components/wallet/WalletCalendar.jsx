@@ -26,6 +26,9 @@ function WalletCalendar() {
 
   const monthPrefix = `${year}-${String(month).padStart(2, '0')}`;
 
+  const bills = wallet.bills || [];
+  const activeBills = bills.filter(b => b.active);
+
   // Build a map: { 'YYYY-MM-DD': { income, expense, txns[] } }
   const dayMap = React.useMemo(() => {
     const map = {};
@@ -149,11 +152,13 @@ function WalletCalendar() {
 
             {/* Day cells */}
             {Array.from({ length: daysInMonth }, (_, i) => {
-              const day     = i + 1;
-              const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-              const data    = dayMap[dateStr];
-              const isToday = dateStr === todayStr;
-              const isSel   = selectedDay === day;
+              const day      = i + 1;
+              const dateStr  = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+              const data     = dayMap[dateStr];
+              const isToday  = dateStr === todayStr;
+              const isSel    = selectedDay === day;
+              const dayBills = activeBills.filter(b => b.dueDay === day);
+              const billDueToday = dayBills.length > 0;
 
               return (
                 <div key={day}
@@ -163,16 +168,25 @@ function WalletCalendar() {
                        borderRadius: 8,
                        padding: '5px 6px',
                        cursor: 'pointer',
-                       border: isSel ? '2px solid var(--accent)' : '2px solid transparent',
-                       background: isSel ? 'var(--accent)11' : isToday ? 'var(--bg-inset,var(--bg-app))' : 'transparent',
+                       border: isSel ? '2px solid var(--accent)' : billDueToday ? '2px solid #f59e0b66' : '2px solid transparent',
+                       background: isSel ? 'var(--accent)11' : isToday ? 'var(--bg-inset,var(--bg-app))' : billDueToday ? '#f59e0b09' : 'transparent',
                        transition: 'background .15s',
                      }}>
-                  <div style={{
-                    fontSize: 12, fontWeight: isToday ? 700 : 500,
-                    color: isToday ? 'var(--accent)' : 'var(--fg-1)',
-                    lineHeight: 1, marginBottom: 4,
-                  }}>
-                    {day}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{
+                      fontSize: 12, fontWeight: isToday ? 700 : 500,
+                      color: isToday ? 'var(--accent)' : 'var(--fg-1)',
+                      lineHeight: 1, marginBottom: 4,
+                    }}>
+                      {day}
+                    </div>
+                    {billDueToday && (
+                      <div title={dayBills.map(b => b.name).join(', ')}
+                           style={{ fontSize: 9, background: '#f59e0b', color: '#fff', borderRadius: 3,
+                                    padding: '1px 4px', fontWeight: 700, lineHeight: 1.4, flexShrink: 0 }}>
+                        Bill{dayBills.length > 1 ? 's' : ''}
+                      </div>
+                    )}
                   </div>
                   {data && data.income > 0 && (
                     <div style={{ fontSize: 9.5, color: 'var(--green-600)', fontWeight: 600, lineHeight: 1.3, fontFamily: 'var(--font-mono)' }}>

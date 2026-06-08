@@ -51,8 +51,13 @@
       priceErrors: [],
       snapshots: [],
       sales: [],
-      tags: [],        // [{ id, name, color }]
-      holdingTags: {}, // { "classKey:name": [tagId, ...] }
+      tags: [],          // [{ id, name, color }]
+      holdingTags: {},   // { "classKey:name": [tagId, ...] }
+      holdingNotes: {},  // { "classKey:name": "note text" }
+      goals: [],         // [{ id, name, targetAmount, targetDate, note, emoji }]
+      dividends: [],     // [{ id, classKey, name, exDate, payDate, amountPerShare, totalAmount, currency, note }]
+      targetAllocation: {}, // { thaiStock: 30, usaStock: 20, ... } — target % per class
+      priceAlerts: [],   // [{ id, classKey, name, condition: 'above'|'below', price, note, triggered }]
       prePostPrices: {}, // { "classKey:name": { price, pct, type: 'pre'|'post' } } — not persisted
       dayChangePrices: {}, // { "classKey:name": prevClose } — not persisted, used for %day column
     };
@@ -64,6 +69,10 @@
       categories: (window.DEFAULT_WALLET_CATEGORIES || []).map(c => ({ ...c })),
       transactions: [],
       debts: [],
+      bills: [],       // [{ id, name, amount, currency, dueDay, categoryId, note, active }]
+      recurring: [],   // [{ id, name, amount, flow, accountId, categoryId, dayOfMonth, note, active, lastGenerated }]
+      savingsGoals: [], // [{ id, name, targetAmount, currency, targetDate, linkedAccountId, note, emoji }]
+      walletSnapshots: [], // [{ date, netWorth, cash, liabilities }]
     };
   }
 
@@ -97,19 +106,25 @@
       settings: state.settings, lastPriceSync: state.lastPriceSync,
       priceMode: state.priceMode, snapshots: state.snapshots, sales: state.sales,
       tags: state.tags, holdingTags: state.holdingTags,
+      holdingNotes: state.holdingNotes, goals: state.goals,
+      dividends: state.dividends, targetAllocation: state.targetAllocation,
+      priceAlerts: state.priceAlerts,
     });
   }
 
   function restoreWalletFromSaved(saved) {
     const base = freshWallet();
     const savedCats = saved.categories || [];
-    // Merge: keep saved categories; if none, fall back to defaults
     const categories = savedCats.length ? savedCats : base.categories;
     return {
-      accounts:     saved.accounts     || [],
+      accounts:        saved.accounts        || [],
       categories,
-      transactions: saved.transactions || [],
-      debts:        saved.debts        || [],
+      transactions:    saved.transactions    || [],
+      debts:           saved.debts           || [],
+      bills:           saved.bills           || [],
+      recurring:       saved.recurring       || [],
+      savingsGoals:    saved.savingsGoals    || [],
+      walletSnapshots: saved.walletSnapshots || [],
     };
   }
 
@@ -133,6 +148,11 @@
       sales: saved.sales || [],
       tags: saved.tags || [],
       holdingTags: saved.holdingTags || {},
+      holdingNotes: saved.holdingNotes || {},
+      goals: saved.goals || [],
+      dividends: saved.dividends || [],
+      targetAllocation: saved.targetAllocation || {},
+      priceAlerts: saved.priceAlerts || [],
       prePostPrices: {},   // not persisted — reset on every load
       dayChangePrices: {}, // not persisted — populated by refreshPrices
     };
@@ -251,6 +271,21 @@
     }
     _walletInitialized = true;
     subs.forEach(fn => fn());
+    // Take a daily net worth snapshot after loading
+    setTimeout(() => {
+      if (!_initialized || !_initialLoadOk) return;
+      try {
+        const today = new Date().toISOString().slice(0, 10);
+        wallet.walletSnapshots = wallet.walletSnapshots || [];
+        const existing = wallet.walletSnapshots.find(s => s.date === today);
+        if (!existing) {
+          const nw = Store.netWorthSummary();
+          wallet.walletSnapshots.push({ date: today, netWorth: nw.netWorth, cash: nw.cashTotal, liabilities: nw.totalLiabilities });
+          if (wallet.walletSnapshots.length > 365) wallet.walletSnapshots = wallet.walletSnapshots.slice(-365);
+          scheduleWalletSave();
+        }
+      } catch (_) {}
+    }, 2000);
   }
 
   // Flush pending wallet save on tab close — only if a save is actually queued.
@@ -873,6 +908,7 @@
         currency: data.currency || 'THB', color: data.color || null,
         initialBal: +data.initialBal || 0,
         creditLimit: data.creditLimit != null ? +data.creditLimit : null,
+        openingFxRateTHB: data.openingFxRateTHB != null ? +data.openingFxRateTHB : null,
         sortOrder: wallet.accounts.length, archived: false,
       });
       subs.forEach(fn => fn()); scheduleWalletSave();
@@ -891,7 +927,13 @@
 
     // ── Wallet categories mutations ────────────────────────────────────────────
     addCategory(data) {
-      wallet.categories.push({ id: uid(), name: data.name, flow: data.flow, icon: data.icon || null, color: data.color || null });
+      wallet.categories.push({ id: uid(), name: data.name, flow: data.flow, icon: data.icon || null, color: data.color || null, budget: data.budget || null });
+      subs.forEach(fn => fn()); scheduleWalletSave();
+    },
+    updateCategory(id, patch) {
+      const i = wallet.categories.findIndex(c => c.id === id);
+      if (i < 0) return;
+      wallet.categories[i] = { ...wallet.categories[i], ...patch };
       subs.forEach(fn => fn()); scheduleWalletSave();
     },
     deleteCategory(id) {
@@ -908,6 +950,7 @@
         note: data.note || '',
         toAccountId: data.toAccountId || null,
         fxRate: data.fxRate != null ? +data.fxRate : null,
+        tags: data.tags || [],
       });
       subs.forEach(fn => fn()); scheduleWalletSave();
     },
@@ -998,6 +1041,102 @@
       subs.forEach(fn => fn()); scheduleWalletSave();
     },
 
+    // ── Bill mutations ────────────────────────────────────────────────────────
+    addBill(data) {
+      wallet.bills = wallet.bills || [];
+      wallet.bills.push({ id: uid(), name: data.name, amount: +data.amount || 0, currency: data.currency || 'THB',
+        dueDay: +data.dueDay || 1, categoryId: data.categoryId || null, note: data.note || '', active: true });
+      subs.forEach(fn => fn()); scheduleWalletSave();
+    },
+    updateBill(id, patch) {
+      wallet.bills = wallet.bills || [];
+      const i = wallet.bills.findIndex(b => b.id === id);
+      if (i < 0) return;
+      wallet.bills[i] = { ...wallet.bills[i], ...patch };
+      subs.forEach(fn => fn()); scheduleWalletSave();
+    },
+    deleteBill(id) {
+      wallet.bills = (wallet.bills || []).filter(b => b.id !== id);
+      subs.forEach(fn => fn()); scheduleWalletSave();
+    },
+
+    // ── Recurring transaction mutations ────────────────────────────────────────
+    addRecurring(data) {
+      wallet.recurring = wallet.recurring || [];
+      wallet.recurring.push({ id: uid(), name: data.name, amount: +data.amount || 0,
+        flow: data.flow || 'expense', accountId: data.accountId || null, categoryId: data.categoryId || null,
+        dayOfMonth: +data.dayOfMonth || 1, note: data.note || '', active: true, lastGenerated: null });
+      subs.forEach(fn => fn()); scheduleWalletSave();
+    },
+    updateRecurring(id, patch) {
+      wallet.recurring = wallet.recurring || [];
+      const i = wallet.recurring.findIndex(r => r.id === id);
+      if (i < 0) return;
+      wallet.recurring[i] = { ...wallet.recurring[i], ...patch };
+      subs.forEach(fn => fn()); scheduleWalletSave();
+    },
+    deleteRecurring(id) {
+      wallet.recurring = (wallet.recurring || []).filter(r => r.id !== id);
+      subs.forEach(fn => fn()); scheduleWalletSave();
+    },
+    generateRecurring(id, date) {
+      wallet.recurring = wallet.recurring || [];
+      const i = wallet.recurring.findIndex(r => r.id === id);
+      if (i < 0) return;
+      const r = wallet.recurring[i];
+      wallet.transactions.push({ id: uid(), accountId: r.accountId, date, amount: r.amount,
+        flow: r.flow, categoryId: r.categoryId, note: r.note || r.name, toAccountId: null, fxRate: null, tags: [] });
+      wallet.recurring[i] = { ...r, lastGenerated: date };
+      subs.forEach(fn => fn()); scheduleWalletSave();
+    },
+
+    // ── Savings goals mutations ────────────────────────────────────────────────
+    addSavingsGoal(data) {
+      wallet.savingsGoals = wallet.savingsGoals || [];
+      wallet.savingsGoals.push({ id: uid(), name: data.name, targetAmount: +data.targetAmount || 0,
+        currency: data.currency || 'THB', targetDate: data.targetDate || null,
+        linkedAccountId: data.linkedAccountId || null, note: data.note || '', emoji: data.emoji || '🎯' });
+      subs.forEach(fn => fn()); scheduleWalletSave();
+    },
+    updateSavingsGoal(id, patch) {
+      wallet.savingsGoals = wallet.savingsGoals || [];
+      const i = wallet.savingsGoals.findIndex(g => g.id === id);
+      if (i < 0) return;
+      wallet.savingsGoals[i] = { ...wallet.savingsGoals[i], ...patch };
+      subs.forEach(fn => fn()); scheduleWalletSave();
+    },
+    deleteSavingsGoal(id) {
+      wallet.savingsGoals = (wallet.savingsGoals || []).filter(g => g.id !== id);
+      subs.forEach(fn => fn()); scheduleWalletSave();
+    },
+
+    // ── Wallet snapshots ───────────────────────────────────────────────────────
+    takeWalletSnapshot() {
+      const today = new Date().toISOString().slice(0, 10);
+      wallet.walletSnapshots = wallet.walletSnapshots || [];
+      const nw = Store.netWorthSummary();
+      const snap = { date: today, netWorth: nw.netWorth, cash: nw.cashTotal, liabilities: nw.totalLiabilities };
+      const idx = wallet.walletSnapshots.findIndex(s => s.date === today);
+      if (idx >= 0) wallet.walletSnapshots[idx] = snap;
+      else wallet.walletSnapshots.push(snap);
+      if (wallet.walletSnapshots.length > 365) wallet.walletSnapshots = wallet.walletSnapshots.slice(-365);
+      scheduleWalletSave();
+    },
+    getWalletSnapshots: () => wallet.walletSnapshots || [],
+
+    // ── Bill helpers ───────────────────────────────────────────────────────────
+    getBillsDueSoon(withinDays) {
+      const bills = wallet.bills || [];
+      const today = new Date();
+      const dd    = withinDays || 3;
+      return bills.filter(b => {
+        if (!b.active) return false;
+        const thisMonth = new Date(today.getFullYear(), today.getMonth(), b.dueDay);
+        const diff = (thisMonth - today) / 86400000;
+        return diff >= 0 && diff <= dd;
+      });
+    },
+
     // ── Wallet cloud sync ──────────────────────────────────────────────────────
     loadWalletFromCloud,
 
@@ -1081,6 +1220,85 @@
         emit();
         return { mode: 'fallback', ...res };
       }
+    },
+
+    // ── Target Allocation mutations ────────────────────────────────────────────
+    setTargetAllocation(classKey, pct) {
+      state.targetAllocation = state.targetAllocation || {};
+      state.targetAllocation[classKey] = +pct;
+      emit();
+    },
+    getTargetAllocation() { return state.targetAllocation || {}; },
+
+    // ── Goals mutations ────────────────────────────────────────────────────────
+    addGoal(data) {
+      state.goals = state.goals || [];
+      state.goals.push({
+        id: uid(), name: data.name, targetAmount: +data.targetAmount,
+        targetDate: data.targetDate || null, note: data.note || '',
+        emoji: data.emoji || '🎯', createdAt: new Date().toISOString().slice(0, 10),
+      });
+      emit();
+    },
+    updateGoal(id, patch) {
+      const i = (state.goals || []).findIndex(g => g.id === id);
+      if (i < 0) return;
+      state.goals[i] = { ...state.goals[i], ...patch };
+      emit();
+    },
+    deleteGoal(id) { state.goals = (state.goals || []).filter(g => g.id !== id); emit(); },
+    getGoals() { return state.goals || []; },
+
+    // ── Dividend/Income mutations ──────────────────────────────────────────────
+    addDividend(data) {
+      state.dividends = state.dividends || [];
+      state.dividends.push({
+        id: uid(), classKey: data.classKey, name: data.name,
+        exDate: data.exDate || null, payDate: data.payDate,
+        amountPerShare: data.amountPerShare ? +data.amountPerShare : null,
+        totalAmount: data.totalAmount ? +data.totalAmount : null,
+        currency: data.currency || 'THB', note: data.note || '',
+      });
+      emit();
+    },
+    updateDividend(id, patch) {
+      const i = (state.dividends || []).findIndex(d => d.id === id);
+      if (i < 0) return;
+      state.dividends[i] = { ...state.dividends[i], ...patch };
+      emit();
+    },
+    deleteDividend(id) { state.dividends = (state.dividends || []).filter(d => d.id !== id); emit(); },
+    getDividends() { return state.dividends || []; },
+
+    // ── Holding notes ──────────────────────────────────────────────────────────
+    setHoldingNote(classKey, name, note) {
+      state.holdingNotes = state.holdingNotes || {};
+      const key = classKey + ':' + name;
+      if (!note || !note.trim()) {
+        delete state.holdingNotes[key];
+      } else {
+        state.holdingNotes[key] = note.trim();
+      }
+      emit();
+    },
+    getHoldingNote(classKey, name) { return (state.holdingNotes || {})[classKey + ':' + name] || ''; },
+    getHoldingNotes() { return state.holdingNotes || {}; },
+
+    // ── Price alerts ───────────────────────────────────────────────────────────
+    addPriceAlert(data) {
+      state.priceAlerts = state.priceAlerts || [];
+      state.priceAlerts.push({
+        id: uid(), classKey: data.classKey, name: data.name,
+        condition: data.condition, price: +data.price,
+        note: data.note || '', triggered: false,
+      });
+      emit();
+    },
+    deletePriceAlert(id) { state.priceAlerts = (state.priceAlerts || []).filter(a => a.id !== id); emit(); },
+    getPriceAlerts() { return state.priceAlerts || []; },
+    markAlertTriggered(id) {
+      const i = (state.priceAlerts || []).findIndex(a => a.id === id);
+      if (i >= 0) { state.priceAlerts[i] = { ...state.priceAlerts[i], triggered: true }; emit(); }
     },
   };
 

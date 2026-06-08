@@ -1,11 +1,54 @@
 /* eslint-disable */
 /* NetWorthView.jsx — Total wealth summary: portfolio + cash + liabilities */
 
+function NetWorthLineChart({ snapshots, sym }) {
+  if (!snapshots || snapshots.length < 2) return null;
+  const data = snapshots.slice(-90); // last 90 days
+  const W = 600, H = 120, PAD = 8;
+  const vals = data.map(s => s.netWorth);
+  const min  = Math.min(...vals);
+  const max  = Math.max(...vals);
+  const range = max - min || 1;
+
+  const x = (i) => PAD + (i / (data.length - 1)) * (W - PAD * 2);
+  const y = (v) => H - PAD - ((v - min) / range) * (H - PAD * 2);
+
+  const pts = data.map((s, i) => `${x(i)},${y(s.netWorth)}`).join(' ');
+  const isPositiveTrend = vals[vals.length - 1] >= vals[0];
+  const lineColor = isPositiveTrend ? 'var(--green-600)' : 'var(--red-600)';
+
+  const firstDate = data[0].date;
+  const lastDate  = data[data.length - 1].date;
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 130, display: 'block' }}>
+        {/* Zero line */}
+        {min < 0 && max > 0 && (
+          <line x1={PAD} x2={W - PAD} y1={y(0)} y2={y(0)} stroke="var(--border-1)" strokeWidth="1" strokeDasharray="4 4" />
+        )}
+        {/* Fill */}
+        <path d={`M ${x(0)},${H - PAD} ` + data.map((s, i) => `L ${x(i)},${y(s.netWorth)}`).join(' ') + ` L ${x(data.length - 1)},${H - PAD} Z`}
+              fill={lineColor} fillOpacity="0.10" />
+        {/* Line */}
+        <polyline points={pts} fill="none" stroke={lineColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        {/* Latest dot */}
+        <circle cx={x(data.length - 1)} cy={y(vals[vals.length - 1])} r="4" fill={lineColor} />
+      </svg>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--fg-4)', marginTop: 2 }}>
+        <span>{firstDate}</span>
+        <span>{lastDate}</span>
+      </div>
+    </div>
+  );
+}
+
 function NetWorthView() {
   useStore();
-  const settings = Store.settings();
-  const sym      = window.ccySymbol(settings.displayCcy);
-  const s        = Store.netWorthSummary();
+  const settings  = Store.settings();
+  const sym       = window.ccySymbol(settings.displayCcy);
+  const s         = Store.netWorthSummary();
+  const snapshots = Store.getWalletSnapshots ? Store.getWalletSnapshots() : [];
   const [hot, setHot] = React.useState(null);
 
   const liabRatio = s.totalAssets > 0 ? (s.totalLiabilities / s.totalAssets) * 100 : 0;
@@ -209,6 +252,43 @@ function NetWorthView() {
                 </tr>
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Net Worth Trend */}
+      {snapshots.length >= 2 && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="card-h">
+            <div><div className="t">Net Worth Trend</div>
+              <div className="s">Wallet net worth history (up to 90 days)</div>
+            </div>
+          </div>
+          <div style={{ padding: '0 20px 20px' }}>
+            <NetWorthLineChart snapshots={snapshots} sym={sym} />
+            {snapshots.length >= 2 && (() => {
+              const first = snapshots[0].netWorth;
+              const last  = snapshots[snapshots.length - 1].netWorth;
+              const diff  = last - first;
+              return (
+                <div style={{ display: 'flex', gap: 20, marginTop: 10, flexWrap: 'wrap' }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--fg-3)' }}>Period start</div>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{sym}{window.fmtBig(Math.abs(first))}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--fg-3)' }}>Change</div>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: diff >= 0 ? 'var(--green-600)' : 'var(--red-600)' }}>
+                      {diff >= 0 ? '+' : '−'}{sym}{window.fmtBig(Math.abs(diff))}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--fg-3)' }}>Data points</div>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{snapshots.length} days</div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
