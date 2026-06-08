@@ -43,9 +43,9 @@ function Nav({ route, setRoute, totals, open, onClose }) {
         {item('rebalancing','Rebalancing',  'sliders')}
         {item('benchmark',  'Benchmark',    'trending-up')}
         {item('risk',       'Risk Analysis','shield')}
-        {item('goals',      'Goals',        'target')}
-        {item('dividends',  'Dividends',    'dollar-sign')}
-        {item('tax',        'Tax Summary',  'file-text')}
+        {item('goals',      'Goals',        'star')}
+        {item('dividends',  'Dividends',    'trending-up')}
+        {item('tax',        'Tax Summary',  'file')}
         {item('planning',   'Planning',     'calendar')}
         {item('alerts',     'Alerts',       'bell')}
         {item('selllog',    'Sell Log',     'trending-down')}
