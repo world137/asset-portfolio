@@ -57,7 +57,7 @@ export default function DonutChart({ slices, size = 200, strokeWidth = 28, cente
         {paths}
       </Svg>
       {(centerLabel || centerSub) && (
-        <View style={[StyleSheet.absoluteFillObject, { justifyContent: 'center', alignItems: 'center' }]}>
+        <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center' }]}>
           {centerLabel && <Text style={{ fontSize: 15, fontWeight: '700', color: '#0e1726' }}>{centerLabel}</Text>}
           {centerSub   && <Text style={{ fontSize: 11, color: '#7a869a', marginTop: 2 }}>{centerSub}</Text>}
         </View>

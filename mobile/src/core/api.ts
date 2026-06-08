@@ -1,4 +1,5 @@
 // api.ts — Vercel endpoint wrappers used by screens directly (non-store calls)
+import * as Crypto from 'expo-crypto';
 import { API_BASE } from './constants';
 
 export async function apiAuth(username: string, passwordHash: string): Promise<{ ok: boolean; portfolioId?: string; error?: string }> {
@@ -90,10 +91,12 @@ export async function apiSaveWatchlist(id: string, items: WatchlistItem[]): Prom
   } catch { return false; }
 }
 
-// Simple SHA-256 hash for password (same as web: hex string)
+// SHA-256 hash for password (same as web: lowercase hex string).
+// Uses expo-crypto because React Native's Hermes runtime has no crypto.subtle.
 export async function hashPassword(password: string): Promise<string> {
-  const msgBuffer = new TextEncoder().encode(password);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    password,
+    { encoding: Crypto.CryptoEncoding.HEX },
+  );
 }
