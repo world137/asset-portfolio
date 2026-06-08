@@ -277,7 +277,7 @@ body { background: var(--bg-app); display: block; padding: 0; }
 /* modal field grid */
 .mgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .mgrid .full { grid-column: 1 / -1; }
-.flabel { font: 600 11px/1 var(--font-sans); letter-spacing: 0.04em; text-transform: uppercase; color: var(--fg-3); margin-bottom: 6px; display: block; }
+.flabel, .form-label { font: 600 11px/1 var(--font-sans); letter-spacing: 0.04em; text-transform: uppercase; color: var(--fg-3); margin-bottom: 6px; display: block; }
 .computed { background: var(--bg-sunken); border: 1px dashed var(--border-2); border-radius: var(--radius-md); padding: 12px 14px; display: flex; gap: 22px; }
 .computed .c { font: 600 16px/1 var(--font-sans); color: var(--fg-1); font-variant-numeric: tabular-nums; }
 .computed .c small { display: block; font: 600 10px/1 var(--font-sans); letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg-3); margin-bottom: 5px; }
@@ -1457,4 +1457,22 @@ input[type="date"].input {
 @media (max-width: 600px) {
   .range-btns { flex-wrap: wrap; }
   .range-btns button { padding: 5px 8px; font-size: 10px; }
+}
+
+/* Wealth-management pages: plain <input>/<select> elements get .input styling */
+.page input:not(.input):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([list]),
+.page input[list]:not(.input),
+.page select:not(.input),
+.modal .mb input:not(.input):not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.modal .mb select:not(.input) {
+  font: 400 14px/1.2 var(--font-sans); color: var(--fg-1); padding: 9px 12px;
+  border: 1.5px solid var(--border-2); border-radius: var(--radius-sm); background: var(--bg-surface); outline: none;
+  width: 100%; transition: border-color var(--dur-1), box-shadow var(--dur-1); box-sizing: border-box;
+}
+.page input:not(.input):not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
+.page input[list]:not(.input):focus,
+.page select:not(.input):focus,
+.modal .mb input:not(.input):not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
+.modal .mb select:not(.input):focus {
+  border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow);
 }

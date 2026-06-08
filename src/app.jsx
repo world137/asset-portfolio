@@ -12,7 +12,7 @@ function Nav({ route, setRoute, totals, open, onClose }) {
   const settings = Store.settings();
   const sym      = window.ccySymbol(settings.displayCcy);
 
-  const NO_VAL_ROUTES = new Set(['dashboard','summary','networth','wallet','transactions','debts','walletsummary','walletcalendar','pixelworld','watchlist','sectors','selllog','technical','dayreport']);
+  const NO_VAL_ROUTES = new Set(['dashboard','summary','networth','wallet','transactions','debts','walletsummary','walletcalendar','pixelworld','watchlist','sectors','selllog','technical','dayreport','rebalancing','dividends','goals','tax','benchmark','risk','alerts','planning']);
 
   const item = (key, label, icon, color) => (
     <div key={key} className={'item' + (route === key ? ' active' : '')} onClick={() => { setRoute(key); onClose(); }}>
@@ -38,12 +38,20 @@ function Nav({ route, setRoute, totals, open, onClose }) {
         <div className="grp-h">Holdings</div>
         {window.ASSET_CLASSES.map(c => item(c.key, c.label, null, window.CLASS_COLORS[c.key]))}
         <div className="grp-h">Analysis</div>
-        {item('sectors', 'By Sector', 'pie-chart')}
-        {item('summary', 'Cost vs Price', 'bar-chart-2')}
-        {item('selllog', 'Sell Log', 'trending-down')}
-        {item('dayreport', 'Day Report', 'send')}
-        {item('watchlist', 'Watchlist', 'eye')}
-        {item('technical', 'Technical', 'activity')}
+        {item('sectors',    'By Sector',    'pie-chart')}
+        {item('summary',    'Cost vs Price','bar-chart-2')}
+        {item('rebalancing','Rebalancing',  'sliders')}
+        {item('benchmark',  'Benchmark',    'trending-up')}
+        {item('risk',       'Risk Analysis','shield')}
+        {item('goals',      'Goals',        'target')}
+        {item('dividends',  'Dividends',    'dollar-sign')}
+        {item('tax',        'Tax Summary',  'file-text')}
+        {item('planning',   'Planning',     'calendar')}
+        {item('alerts',     'Alerts',       'bell')}
+        {item('selllog',    'Sell Log',     'trending-down')}
+        {item('dayreport',  'Day Report',   'send')}
+        {item('watchlist',  'Watchlist',    'eye')}
+        {item('technical',  'Technical',    'activity')}
         <div className="grp-h">Wallet</div>
         {item('wallet',         'Accounts',     'wallet')}
         {item('transactions',   'Transactions', 'repeat')}
@@ -765,19 +773,27 @@ function App() {
   }
 
   const title = route === 'dashboard'    ? 'Dashboard'
-    : route === 'networth'      ? 'Net Worth'
-    : route === 'sectors'       ? 'Analysis'
-    : route === 'summary'       ? 'Cost & Price Summary'
-    : route === 'selllog'       ? 'Sell Log'
-    : route === 'wallet'        ? 'Accounts'
-    : route === 'transactions'  ? 'Transactions'
-    : route === 'debts'         ? 'Debts'
-    : route === 'walletsummary' ? 'Wallet Summary'
+    : route === 'networth'       ? 'Net Worth'
+    : route === 'sectors'        ? 'Analysis'
+    : route === 'summary'        ? 'Cost & Price Summary'
+    : route === 'rebalancing'    ? 'Rebalancing'
+    : route === 'benchmark'      ? 'Benchmark Comparison'
+    : route === 'risk'           ? 'Risk Analysis'
+    : route === 'goals'          ? 'Financial Goals'
+    : route === 'dividends'      ? 'Dividend Calendar'
+    : route === 'tax'            ? 'Tax Summary'
+    : route === 'planning'       ? 'Planning & Projections'
+    : route === 'alerts'         ? 'Price Alerts'
+    : route === 'selllog'        ? 'Sell Log'
+    : route === 'wallet'         ? 'Accounts'
+    : route === 'transactions'   ? 'Transactions'
+    : route === 'debts'          ? 'Debts'
+    : route === 'walletsummary'  ? 'Wallet Summary'
     : route === 'walletcalendar' ? 'Calendar'
-    : route === 'pixelworld'    ? 'Pixel Office'
-    : route === 'watchlist'     ? 'Watchlist'
-    : route === 'technical'     ? 'Technical Analysis'
-    : route === 'dayreport'     ? 'Day Report'
+    : route === 'pixelworld'     ? 'Pixel Office'
+    : route === 'watchlist'      ? 'Watchlist'
+    : route === 'technical'      ? 'Technical Analysis'
+    : route === 'dayreport'      ? 'Day Report'
     : (Store.classByKey(route) || {}).label;
 
   return (
@@ -810,6 +826,20 @@ function App() {
               style={{ color: settings.hideAmounts ? 'var(--accent)' : undefined }}>
               <Icon name={settings.hideAmounts ? 'eye-off' : 'eye'} size={16} />
             </button>
+            <button className="icon-toggle" title="Export CSV" onClick={() => {
+              const menu = [
+                ['Holdings',      window.exportHoldingsCSV],
+                ['Sell Log',      window.exportSellLogCSV],
+                ['History',       window.exportSnapshotsCSV],
+                ['Dividends',     window.exportDividendsCSV],
+              ];
+              // Simple inline picker
+              const choice = window.prompt('Export CSV:\n1. Holdings\n2. Sell Log\n3. Portfolio History\n4. Dividends\n\nEnter 1-4:');
+              const idx = parseInt(choice) - 1;
+              if (idx >= 0 && idx < menu.length) menu[idx][1]();
+            }}>
+              <Icon name="download" size={16} />
+            </button>
             <button className="icon-toggle" title="Backup & Restore" onClick={() => setDtOpen(true)}>
               <Icon name="archive" size={16} />
             </button>
@@ -827,6 +857,14 @@ function App() {
           {route === 'networth'     && <NetWorthView />}
           {route === 'sectors'      && <SectorView />}
           {route === 'summary'      && <SummaryView />}
+          {route === 'rebalancing'  && <RebalancingView />}
+          {route === 'benchmark'    && <BenchmarkView />}
+          {route === 'risk'         && <RiskView />}
+          {route === 'goals'        && <GoalsView />}
+          {route === 'dividends'    && <DividendCalendar />}
+          {route === 'tax'          && <TaxView />}
+          {route === 'planning'     && <PlanningView />}
+          {route === 'alerts'       && <AlertsView />}
           {route === 'selllog'      && <SellLogView />}
           {route === 'wallet'       && <WalletOverview />}
           {route === 'transactions' && <TransactionLog />}

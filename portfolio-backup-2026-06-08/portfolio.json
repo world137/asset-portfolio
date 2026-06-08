@@ -1,0 +1,1050 @@
+{
+  "holdings": {
+    "etf": [
+      {
+        "id": "cqj1c8o",
+        "name": "QQQM",
+        "price": 252.33,
+        "qty": 0.2010795,
+        "cur": 290.35
+      },
+      {
+        "id": "czsykmq",
+        "name": "VOO",
+        "price": 609.72,
+        "qty": 0.022,
+        "cur": 678
+      },
+      {
+        "id": "iembfqq",
+        "name": "VOO",
+        "price": 627.61,
+        "qty": 0.07648,
+        "cur": 678
+      },
+      {
+        "id": "j8ktfqh",
+        "name": "QQQM",
+        "price": 234.18,
+        "qty": 0.651732,
+        "cur": 290.35
+      },
+      {
+        "id": "1unas7r",
+        "name": "ICLN",
+        "price": 22.91,
+        "qty": 3.3254857,
+        "cur": 21.32
+      },
+      {
+        "id": "zxfazyz",
+        "name": "VOO",
+        "price": 613.41,
+        "qty": 0.01829,
+        "cur": 678
+      },
+      {
+        "id": "0wlwa2k",
+        "name": "SMH",
+        "price": 385.54,
+        "qty": 0.12839,
+        "cur": 569.69
+      },
+      {
+        "id": "5n15viv",
+        "name": "VOO",
+        "price": 622.08,
+        "qty": 0.08841,
+        "cur": 678
+      },
+      {
+        "id": "6ed6188",
+        "name": "SMH",
+        "price": 402.22,
+        "qty": 0.1,
+        "cur": 569.69
+      },
+      {
+        "id": "7et0pcw",
+        "name": "VOO",
+        "price": 639.07,
+        "qty": 0.0751,
+        "cur": 678
+      },
+      {
+        "id": "8vzmcqb",
+        "name": "VOO",
+        "price": 633.32,
+        "qty": 0.15,
+        "cur": 678
+      }
+    ],
+    "gold": [
+      {
+        "id": "2d8btdj",
+        "name": "GOLD",
+        "price": 1992.78,
+        "qty": 0.0138,
+        "cur": 4317
+      },
+      {
+        "id": "b2sxv0k",
+        "name": "GOLD",
+        "price": 5068.57,
+        "qty": 0.014359,
+        "cur": 4317
+      },
+      {
+        "id": "cdznt8u",
+        "name": "GOLD",
+        "price": 2877.45,
+        "qty": 0.0509,
+        "cur": 4317
+      },
+      {
+        "id": "ka9spqp",
+        "name": "GOLD",
+        "price": 3312.04,
+        "qty": 0.0008,
+        "cur": 4317
+      },
+      {
+        "id": "pyq4uam",
+        "name": "GOLD",
+        "price": 4791.96,
+        "qty": 0.000212,
+        "cur": 4317
+      },
+      {
+        "id": "rlxwkgj",
+        "name": "GOLD",
+        "price": 3289.35,
+        "qty": 0.0184,
+        "cur": 4317
+      },
+      {
+        "id": "t20t2wp",
+        "name": "GOLD",
+        "price": 3230.55,
+        "qty": 0.0046,
+        "cur": 4317
+      },
+      {
+        "id": "w098hs1",
+        "name": "GOLD",
+        "price": 3857.46,
+        "qty": 0.0159,
+        "cur": 4317
+      },
+      {
+        "id": "rte9tfa",
+        "name": "GOLD",
+        "price": 4515,
+        "qty": 0.006809,
+        "cur": 4317
+      },
+      {
+        "id": "fwij088",
+        "name": "GOLD",
+        "price": 4746,
+        "qty": 0.006359,
+        "cur": 4317
+      }
+    ],
+    "crypto": [
+      {
+        "id": "8snktxy",
+        "name": "ETHTHB",
+        "price": 142510.71,
+        "qty": 0.00840624,
+        "cur": 54747
+      },
+      {
+        "id": "c9vbka6",
+        "name": "BTCTHB",
+        "price": 3701800.92,
+        "qty": 0.00021464,
+        "cur": 2084201
+      },
+      {
+        "id": "i0bqtqh",
+        "name": "BTCTHB",
+        "price": 3681286.04,
+        "qty": 0.00027164,
+        "cur": 2084201
+      },
+      {
+        "id": "i7nglcm",
+        "name": "SOL",
+        "price": 2836.48,
+        "qty": 0.703333,
+        "cur": 2174.43
+      },
+      {
+        "id": "t9qa1fs",
+        "name": "BTCTHB",
+        "price": 2787022.53,
+        "qty": 0.00071581,
+        "cur": 2084201
+      },
+      {
+        "id": "2f5s4er",
+        "name": "BTCTHB",
+        "price": 2289650,
+        "qty": 0.00043565,
+        "cur": 2084201
+      }
+    ],
+    "fund": [
+      {
+        "id": "nhyqxlm",
+        "name": "TEMxCH",
+        "price": 12.9019,
+        "qty": 155.0159,
+        "cur": 16.9108
+      },
+      {
+        "id": "rcnay8w",
+        "name": "K-GOLD-A(A)",
+        "price": 27.0606,
+        "qty": 15.1497,
+        "cur": 23.4588
+      },
+      {
+        "id": "rk8kyso",
+        "name": "DAOL-DEFENSE",
+        "price": 17.0716,
+        "qty": 146.442,
+        "cur": 14.4099
+      },
+      {
+        "id": "rsg7ltw",
+        "name": "SCBSEMI(A)",
+        "price": 23.5158,
+        "qty": 224.4798,
+        "cur": 38.836
+      },
+      {
+        "id": "wx4traz",
+        "name": "ES-GTECH",
+        "price": 20.3208,
+        "qty": 98.4213,
+        "cur": 40.6682
+      },
+      {
+        "id": "z53adw9",
+        "name": "DAOL-KOREAEQ",
+        "price": 14.5769,
+        "qty": 102.9025,
+        "cur": 22.4904
+      },
+      {
+        "id": "507hard",
+        "name": "ASP-S&P500-A",
+        "price": 56.3612,
+        "qty": 88.7135,
+        "cur": 70.4757
+      },
+      {
+        "id": "6szuvjr",
+        "name": "A-SLVP",
+        "price": 11.7926,
+        "qty": 158.9193484,
+        "cur": 10.9789
+      },
+      {
+        "id": "6v881cq",
+        "name": "ONE-RAREEARTH",
+        "price": 11.9095,
+        "qty": 251.8997,
+        "cur": 12.6149
+      },
+      {
+        "id": "79kq90u",
+        "name": "ES-GTECH",
+        "price": 31.7664,
+        "qty": 31.4798,
+        "cur": 40.6682
+      },
+      {
+        "id": "91zmt50",
+        "name": "TLNDQINCOME-UH-X",
+        "price": 10.0713,
+        "qty": 248.2301,
+        "cur": 10.9531
+      },
+      {
+        "id": "dcm9ie9",
+        "name": "ES-GTECH",
+        "price": 36.9491,
+        "qty": 27.06425867,
+        "cur": 40.6682
+      },
+      {
+        "id": "dnh7f40",
+        "name": "PRINCIPAL GCLOUD-A",
+        "price": 4.8327,
+        "qty": 310.38549879,
+        "cur": 5.5024
+      },
+      {
+        "id": "l44i0im",
+        "name": "ASP-S&P500-A",
+        "price": 57.7668,
+        "qty": 86.5549,
+        "cur": 70.4757
+      },
+      {
+        "id": "mrh9c7w",
+        "name": "A-GRID",
+        "price": 10.3026,
+        "qty": 252.3239031,
+        "cur": 11.177
+      }
+    ],
+    "thaiStock": [
+      {
+        "id": "ye9l93i",
+        "name": "SCB",
+        "price": 117.5,
+        "qty": 100,
+        "cur": 139
+      },
+      {
+        "id": "9zi4v06",
+        "name": "KKP",
+        "price": 72,
+        "qty": 100,
+        "cur": 87.75
+      },
+      {
+        "id": "h5nv7bv",
+        "name": "SCB",
+        "price": 98.5,
+        "qty": 100,
+        "cur": 139
+      }
+    ],
+    "usaStock": [
+      {
+        "id": "jy1ei8s",
+        "name": "STX",
+        "price": 445.09,
+        "qty": 0.0913731,
+        "cur": 847.47
+      },
+      {
+        "id": "miat3qo",
+        "name": "MRVL",
+        "price": 197.46,
+        "qty": 0.1994287,
+        "cur": 263.47
+      },
+      {
+        "id": "nwdibjo",
+        "name": "ASTS",
+        "price": 83.24,
+        "qty": 0.18559,
+        "cur": 93.6
+      },
+      {
+        "id": "cbwd8au",
+        "name": "GOOGL",
+        "price": 376.1,
+        "qty": 0.5197709,
+        "cur": 368.53
+      },
+      {
+        "id": "o9k48wb",
+        "name": "GOOGL",
+        "price": 240.08,
+        "qty": 0.4158544,
+        "cur": 368.53
+      },
+      {
+        "id": "ol5u2r0",
+        "name": "AMZN",
+        "price": 232.56,
+        "qty": 0.4293011,
+        "cur": 246.03
+      },
+      {
+        "id": "sk06ytc",
+        "name": "AAPL",
+        "price": 268.15,
+        "qty": 0.1116895,
+        "cur": 307.34
+      },
+      {
+        "id": "up0j6mf",
+        "name": "JNJ",
+        "price": 175.61,
+        "qty": 0.28472,
+        "cur": 232.77
+      },
+      {
+        "id": "uvgzwfn",
+        "name": "RKLB",
+        "price": 66.61,
+        "qty": 0.6475,
+        "cur": 110.08
+      },
+      {
+        "id": "xrbnc4n",
+        "name": "GOOGL",
+        "price": 331.52,
+        "qty": 0.2338306,
+        "cur": 368.53
+      },
+      {
+        "id": "yv53dsn",
+        "name": "WMT",
+        "price": 127.88,
+        "qty": 1.1710612,
+        "cur": 118.88
+      },
+      {
+        "id": "92ei7f1",
+        "name": "LLY",
+        "price": 933.47,
+        "qty": 0.1716705,
+        "cur": 1131.42
+      },
+      {
+        "id": "09wup3w",
+        "name": "MSFT",
+        "price": 426.69,
+        "qty": 0.0818857,
+        "cur": 416.67
+      },
+      {
+        "id": "0toutjh",
+        "name": "STX",
+        "price": 417.74,
+        "qty": 0.1194978,
+        "cur": 847.47
+      },
+      {
+        "id": "114wgjj",
+        "name": "AMZN",
+        "price": 261.65,
+        "qty": 0.1509986,
+        "cur": 246.03
+      },
+      {
+        "id": "20aj2bw",
+        "name": "MSFT",
+        "price": 505.36,
+        "qty": 0.3089666,
+        "cur": 416.67
+      },
+      {
+        "id": "4cbuwjc",
+        "name": "SNDK",
+        "price": 597.82,
+        "qty": 0.1670067,
+        "cur": 1559.32
+      },
+      {
+        "id": "5r2hnda",
+        "name": "JPM",
+        "price": 311.68,
+        "qty": 0.045,
+        "cur": 312.37
+      },
+      {
+        "id": "6chaq5z",
+        "name": "JPM",
+        "price": 296.61,
+        "qty": 0.13323,
+        "cur": 312.37
+      },
+      {
+        "id": "6wb1a8j",
+        "name": "AAPL",
+        "price": 182.13,
+        "qty": 0.3145555,
+        "cur": 307.34
+      },
+      {
+        "id": "8ds7ikt",
+        "name": "ONDS",
+        "price": 10.3,
+        "qty": 3,
+        "cur": 10.43
+      },
+      {
+        "id": "8ha573t",
+        "name": "NOK",
+        "price": 13.25,
+        "qty": 3.9559773,
+        "cur": 14.38
+      },
+      {
+        "id": "blqel0q",
+        "name": "GOOGL",
+        "price": 246.85,
+        "qty": 0.18675,
+        "cur": 368.53
+      },
+      {
+        "id": "fhrzx6p",
+        "name": "TSM",
+        "price": 237.19,
+        "qty": 0.2108,
+        "cur": 415.17
+      },
+      {
+        "id": "g3dac1e",
+        "name": "RBRK",
+        "price": 56.12,
+        "qty": 0.8005487,
+        "cur": 73.41
+      },
+      {
+        "id": "gmk2bcl",
+        "name": "PRME",
+        "price": 2.94,
+        "qty": 10.2346938,
+        "cur": 3.06
+      },
+      {
+        "id": "z7muev9",
+        "name": "TATT",
+        "price": 41.67,
+        "qty": 1.3520518,
+        "cur": 44.01
+      },
+      {
+        "id": "gpvcjqz",
+        "name": "GOOGL",
+        "price": 176.49,
+        "qty": 0.0483318,
+        "cur": 368.53
+      },
+      {
+        "id": "he740vo",
+        "name": "UNH",
+        "price": 286.08,
+        "qty": 0.348983,
+        "cur": 399.47
+      },
+      {
+        "id": "hw51un8",
+        "name": "AAPL",
+        "price": 183.93,
+        "qty": 0.3381214,
+        "cur": 307.34
+      },
+      {
+        "id": "irr4ezu",
+        "name": "AMZN",
+        "price": 231.75,
+        "qty": 0.2154063,
+        "cur": 246.03
+      }
+    ],
+    "other": [
+      {
+        "id": "mlgpv9v",
+        "name": "SB348B",
+        "type": "Bond",
+        "price": 50000,
+        "qty": 1,
+        "cur": 50000
+      },
+      {
+        "id": "qfskan8",
+        "name": "BCP26NB",
+        "type": "Debenture",
+        "price": 10000,
+        "qty": 1,
+        "cur": 10000
+      },
+      {
+        "id": "xyya778",
+        "name": "GULF298A",
+        "type": "Debenture",
+        "price": 5000,
+        "qty": 1,
+        "cur": 5000
+      },
+      {
+        "id": "z75dk9k",
+        "name": "BCP292A",
+        "type": "Debenture",
+        "price": 40000,
+        "qty": 1,
+        "cur": 40000
+      },
+      {
+        "id": "qegiyju",
+        "name": "Provident Fund",
+        "type": "Provident Fund",
+        "price": 71036.64,
+        "qty": 1,
+        "cur": 72182.29
+      },
+      {
+        "id": "4pp1exi",
+        "name": "ประกันสะสมทรัพย์",
+        "type": "Insurance",
+        "price": 300000.03,
+        "qty": 1,
+        "cur": 300000.03
+      },
+      {
+        "id": "jl67ih1",
+        "name": "CPALL245B",
+        "type": "Debenture",
+        "price": 5000,
+        "qty": 1,
+        "cur": 5000
+      },
+      {
+        "id": "len5xk9",
+        "name": "MTC286A",
+        "type": "Debenture",
+        "price": 100000,
+        "qty": 1,
+        "cur": 100000
+      }
+    ]
+  },
+  "sectors": {
+    "thaiStock:SCB": "Financials",
+    "thaiStock:KKP": "Financials",
+    "fund:ES-GTECH": "Technology",
+    "fund:ASP-S&P500-A": "S&P 500",
+    "fund:DAOL-KOREAEQ": "Korea",
+    "fund:TEMxCH": "Technology",
+    "fund:DAOL-DEFENSE": "Defense",
+    "fund:K-GOLD-A(A)": "Commodity",
+    "fund:ONE-RAREEARTH": "Materials",
+    "fund:A-GRID": "Infrastructure",
+    "fund:PRINCIPAL GCLOUD-A": "Technology",
+    "fund:TLNDQINCOME-UH-X": "Technology",
+    "fund:SCBSEMI(A)": "Semiconductor",
+    "fund:A-SLVP": "Commodity",
+    "etf:QQQM": "Technology",
+    "etf:SMH": "Semiconductor",
+    "etf:VOO": "S&P 500",
+    "usaStock:AAPL": "Technology",
+    "usaStock:MSFT": "Technology",
+    "usaStock:GOOGL": "Technology",
+    "usaStock:AMZN": "Consumer",
+    "usaStock:JNJ": "Healthcare",
+    "usaStock:UNH": "Healthcare",
+    "usaStock:JPM": "Financials",
+    "usaStock:ONDS": "Aerospace",
+    "usaStock:RKLB": "Aerospace",
+    "usaStock:ASTS": "Aerospace",
+    "usaStock:GEV": "Industrials",
+    "usaStock:SNDK": "Technology",
+    "usaStock:STX": "Technology",
+    "usaStock:TSM": "Semiconductor",
+    "usaStock:MRVL": "Semiconductor",
+    "usaStock:AAOI": "Semiconductor",
+    "usaStock:LITE": "Semiconductor",
+    "usaStock:WMT": "Consumer",
+    "usaStock:XOM": "Energy",
+    "usaStock:XBI": "Healthcare",
+    "usaStock:NOK": "Technology",
+    "usaStock:RBRK": "Technology",
+    "usaStock:PRME": "Healthcare",
+    "gold:GOLD": "Commodity",
+    "usaStock:TTAT": "Industrials",
+    "usaStock:TATT": "Industrials",
+    "usaStock:LLY": "Healthcare",
+    "usaStock:ICLN": "—",
+    "etf:ICIN": "Energy",
+    "etf:ICLN": "Energy"
+  },
+  "tags": [
+    {
+      "id": "9f4yrqb",
+      "name": "Divided",
+      "color": "#3b82f6"
+    },
+    {
+      "id": "xbe3mor",
+      "name": "Core",
+      "color": "#01c7fc"
+    },
+    {
+      "id": "b3qkdx4",
+      "name": "Growth",
+      "color": "#669d34"
+    },
+    {
+      "id": "j3vufwe",
+      "name": "High risk",
+      "color": "#e22400"
+    },
+    {
+      "id": "2x57vnk",
+      "name": "Defensive",
+      "color": "#ffab01"
+    },
+    {
+      "id": "4ho346i",
+      "name": "AI",
+      "color": "#be38f3"
+    }
+  ],
+  "holdingTags": {
+    "usaStock:SNDK": [
+      "b3qkdx4",
+      "j3vufwe",
+      "4ho346i"
+    ],
+    "usaStock:STX": [
+      "4ho346i",
+      "b3qkdx4",
+      "j3vufwe"
+    ],
+    "usaStock:TATT": [
+      "b3qkdx4",
+      "j3vufwe"
+    ],
+    "usaStock:TSM": [
+      "4ho346i",
+      "b3qkdx4"
+    ],
+    "usaStock:UNH": [
+      "2x57vnk",
+      "b3qkdx4"
+    ],
+    "usaStock:WMT": [
+      "2x57vnk"
+    ],
+    "crypto:BTCTHB": [
+      "j3vufwe"
+    ],
+    "crypto:ETHTHB": [
+      "j3vufwe"
+    ],
+    "crypto:SOL": [
+      "j3vufwe"
+    ],
+    "etf:ICIN": [
+      "2x57vnk",
+      "b3qkdx4"
+    ],
+    "etf:ICLN": [
+      "2x57vnk"
+    ],
+    "etf:QQQM": [
+      "2x57vnk",
+      "b3qkdx4"
+    ],
+    "etf:SMH": [
+      "4ho346i",
+      "b3qkdx4"
+    ],
+    "etf:VOO": [
+      "2x57vnk",
+      "b3qkdx4"
+    ],
+    "fund:A-GRID": [
+      "b3qkdx4"
+    ],
+    "fund:A-SLVP": [
+      "j3vufwe"
+    ],
+    "fund:ASP-S&P500-A": [
+      "2x57vnk",
+      "9f4yrqb"
+    ],
+    "fund:DAOL-DEFENSE": [
+      "b3qkdx4"
+    ],
+    "fund:DAOL-KOREAEQ": [
+      "b3qkdx4"
+    ],
+    "fund:ES-GTECH": [
+      "b3qkdx4"
+    ],
+    "fund:K-GOLD-A(A)": [
+      "j3vufwe"
+    ],
+    "fund:ONE-RAREEARTH": [
+      "2x57vnk"
+    ],
+    "fund:PRINCIPAL GCLOUD-A": [
+      "b3qkdx4"
+    ],
+    "fund:SCBSEMI(A)": [
+      "4ho346i",
+      "b3qkdx4"
+    ],
+    "fund:TEMxCH": [
+      "b3qkdx4"
+    ],
+    "fund:TLNDQINCOME-UH-X": [
+      "9f4yrqb",
+      "b3qkdx4"
+    ],
+    "gold:GOLD": [
+      "2x57vnk"
+    ],
+    "other:BCP26NB": [
+      "9f4yrqb"
+    ],
+    "other:BCP292A": [
+      "9f4yrqb"
+    ],
+    "other:CPALL245B": [
+      "9f4yrqb"
+    ],
+    "other:GULF298A": [
+      "9f4yrqb"
+    ],
+    "other:MTC286A": [
+      "9f4yrqb"
+    ],
+    "other:Provident Fund": [
+      "2x57vnk"
+    ],
+    "other:SB348B": [
+      "9f4yrqb"
+    ],
+    "other:ประกันสะสมทรัพย์": [
+      "2x57vnk"
+    ],
+    "thaiStock:KKP": [
+      "9f4yrqb",
+      "xbe3mor"
+    ],
+    "thaiStock:SCB": [
+      "9f4yrqb",
+      "xbe3mor"
+    ],
+    "usaStock:AAOI": [
+      "4ho346i",
+      "j3vufwe"
+    ],
+    "usaStock:AAPL": [
+      "b3qkdx4",
+      "xbe3mor"
+    ],
+    "usaStock:AMZN": [
+      "b3qkdx4",
+      "xbe3mor"
+    ],
+    "usaStock:ASTS": [
+      "b3qkdx4",
+      "j3vufwe"
+    ],
+    "usaStock:GEV": [
+      "4ho346i",
+      "j3vufwe"
+    ],
+    "usaStock:GOOGL": [
+      "b3qkdx4",
+      "xbe3mor"
+    ],
+    "usaStock:JNJ": [
+      "2x57vnk"
+    ],
+    "usaStock:TTAT": [
+      "b3qkdx4"
+    ],
+    "usaStock:JPM": [
+      "2x57vnk"
+    ],
+    "usaStock:LITE": [
+      "4ho346i",
+      "j3vufwe"
+    ],
+    "usaStock:LLY": [
+      "2x57vnk",
+      "xbe3mor"
+    ],
+    "usaStock:MRVL": [
+      "4ho346i",
+      "j3vufwe"
+    ],
+    "usaStock:MSFT": [
+      "b3qkdx4",
+      "xbe3mor"
+    ],
+    "usaStock:NOK": [
+      "j3vufwe",
+      "4ho346i"
+    ],
+    "usaStock:ONDS": [
+      "b3qkdx4",
+      "j3vufwe"
+    ],
+    "usaStock:PRME": [
+      "b3qkdx4",
+      "j3vufwe"
+    ],
+    "usaStock:RBRK": [
+      "j3vufwe"
+    ],
+    "usaStock:RKLB": [
+      "b3qkdx4",
+      "j3vufwe"
+    ]
+  },
+  "fx": {
+    "USDTHB": 32.635,
+    "JPYTHB": 0.204147,
+    "KRWTHB": 0.021179,
+    "at": null
+  },
+  "settings": {
+    "displayCcy": "THB",
+    "theme": "light",
+    "chartStyle": "donut",
+    "palette": "class",
+    "layout": "overview",
+    "decimals": 2
+  },
+  "snapshots": [
+    {
+      "date": "2026-05-29",
+      "value": 796690.41
+    },
+    {
+      "date": "2026-05-30",
+      "value": 798354.77
+    },
+    {
+      "date": "2026-05-31",
+      "value": 799331.89,
+      "thaiStock": 35700,
+      "usaStock": 86225.14,
+      "etf": 22610.04,
+      "fund": 46505.76,
+      "crypto": 6371.78,
+      "gold": 19736.86,
+      "other": 582182.32
+    },
+    {
+      "date": "2026-06-01",
+      "value": 802053.36,
+      "thaiStock": 35700,
+      "usaStock": 86684.58,
+      "etf": 25341.85,
+      "fund": 46505.76,
+      "crypto": 6222.31,
+      "gold": 19416.54,
+      "other": 582182.32
+    },
+    {
+      "date": "2026-06-02",
+      "value": 802391.77,
+      "thaiStock": 36550,
+      "usaStock": 86226.17,
+      "etf": 25484.99,
+      "fund": 46505.76,
+      "crypto": 5952.98,
+      "gold": 19489.54,
+      "other": 582182.32
+    },
+    {
+      "date": "2026-06-04",
+      "value": 805400.21,
+      "thaiStock": 37200,
+      "usaStock": 89060.52,
+      "etf": 25406.21,
+      "fund": 46635.63,
+      "crypto": 5489.49,
+      "gold": 19426.04,
+      "other": 582182.32
+    },
+    {
+      "date": "2026-06-05",
+      "value": 803359.31,
+      "thaiStock": 37200,
+      "usaStock": 87549.21,
+      "etf": 24881.54,
+      "fund": 47421.11,
+      "crypto": 5224.51,
+      "gold": 18900.63,
+      "other": 582182.32
+    },
+    {
+      "date": "2026-06-06",
+      "value": 799803.03,
+      "thaiStock": 37200,
+      "usaStock": 85228.33,
+      "etf": 24161.47,
+      "fund": 47024.36,
+      "crypto": 5181.82,
+      "gold": 18824.73,
+      "other": 582182.32
+    },
+    {
+      "date": "2026-06-07",
+      "value": 799883.62,
+      "thaiStock": 37200,
+      "usaStock": 85228.33,
+      "etf": 24161.47,
+      "fund": 47024.36,
+      "crypto": 5262.41,
+      "gold": 18824.73,
+      "other": 582182.32
+    },
+    {
+      "date": "2026-06-08",
+      "value": 799190.87,
+      "thaiStock": 36575,
+      "usaStock": 85228.33,
+      "etf": 24161.47,
+      "fund": 47024.36,
+      "crypto": 5402.94,
+      "gold": 18616.44,
+      "other": 582182.32
+    }
+  ],
+  "sales": [
+    {
+      "id": "3qyr200",
+      "date": "2026-06-01",
+      "classKey": "usaStock",
+      "name": "AAOI",
+      "ccy": "USD",
+      "buyPrice": 184.79,
+      "sellPrice": 155.536,
+      "qty": 0.459219,
+      "cost": 84.8591,
+      "proceeds": 71.4251,
+      "realizedPnl": -13.434,
+      "pnlPct": -15.8309
+    },
+    {
+      "id": "ri8lscm",
+      "date": "2026-06-01",
+      "classKey": "usaStock",
+      "name": "LITE",
+      "ccy": "USD",
+      "buyPrice": 973.31,
+      "sellPrice": 820.11,
+      "qty": 0.076933,
+      "cost": 74.8797,
+      "proceeds": 63.0935,
+      "realizedPnl": -11.7861,
+      "pnlPct": -15.7401
+    },
+    {
+      "id": "lmnu6or",
+      "date": "2026-06-01",
+      "classKey": "usaStock",
+      "name": "GEV",
+      "ccy": "USD",
+      "buyPrice": 1094.99,
+      "sellPrice": 963.53,
+      "qty": 0.063827,
+      "cost": 69.8899,
+      "proceeds": 61.4992,
+      "realizedPnl": -8.3907,
+      "pnlPct": -12.0056
+    }
+  ],
+  "lastPriceSync": null,
+  "priceMode": null
+}

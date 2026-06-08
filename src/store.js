@@ -51,8 +51,13 @@
       priceErrors: [],
       snapshots: [],
       sales: [],
-      tags: [],        // [{ id, name, color }]
-      holdingTags: {}, // { "classKey:name": [tagId, ...] }
+      tags: [],          // [{ id, name, color }]
+      holdingTags: {},   // { "classKey:name": [tagId, ...] }
+      holdingNotes: {},  // { "classKey:name": "note text" }
+      goals: [],         // [{ id, name, targetAmount, targetDate, note, emoji }]
+      dividends: [],     // [{ id, classKey, name, exDate, payDate, amountPerShare, totalAmount, currency, note }]
+      targetAllocation: {}, // { thaiStock: 30, usaStock: 20, ... } — target % per class
+      priceAlerts: [],   // [{ id, classKey, name, condition: 'above'|'below', price, note, triggered }]
       prePostPrices: {}, // { "classKey:name": { price, pct, type: 'pre'|'post' } } — not persisted
       dayChangePrices: {}, // { "classKey:name": prevClose } — not persisted, used for %day column
     };
@@ -97,6 +102,9 @@
       settings: state.settings, lastPriceSync: state.lastPriceSync,
       priceMode: state.priceMode, snapshots: state.snapshots, sales: state.sales,
       tags: state.tags, holdingTags: state.holdingTags,
+      holdingNotes: state.holdingNotes, goals: state.goals,
+      dividends: state.dividends, targetAllocation: state.targetAllocation,
+      priceAlerts: state.priceAlerts,
     });
   }
 
@@ -133,6 +141,11 @@
       sales: saved.sales || [],
       tags: saved.tags || [],
       holdingTags: saved.holdingTags || {},
+      holdingNotes: saved.holdingNotes || {},
+      goals: saved.goals || [],
+      dividends: saved.dividends || [],
+      targetAllocation: saved.targetAllocation || {},
+      priceAlerts: saved.priceAlerts || [],
       prePostPrices: {},   // not persisted — reset on every load
       dayChangePrices: {}, // not persisted — populated by refreshPrices
     };
@@ -1081,6 +1094,85 @@
         emit();
         return { mode: 'fallback', ...res };
       }
+    },
+
+    // ── Target Allocation mutations ────────────────────────────────────────────
+    setTargetAllocation(classKey, pct) {
+      state.targetAllocation = state.targetAllocation || {};
+      state.targetAllocation[classKey] = +pct;
+      emit();
+    },
+    getTargetAllocation() { return state.targetAllocation || {}; },
+
+    // ── Goals mutations ────────────────────────────────────────────────────────
+    addGoal(data) {
+      state.goals = state.goals || [];
+      state.goals.push({
+        id: uid(), name: data.name, targetAmount: +data.targetAmount,
+        targetDate: data.targetDate || null, note: data.note || '',
+        emoji: data.emoji || '🎯', createdAt: new Date().toISOString().slice(0, 10),
+      });
+      emit();
+    },
+    updateGoal(id, patch) {
+      const i = (state.goals || []).findIndex(g => g.id === id);
+      if (i < 0) return;
+      state.goals[i] = { ...state.goals[i], ...patch };
+      emit();
+    },
+    deleteGoal(id) { state.goals = (state.goals || []).filter(g => g.id !== id); emit(); },
+    getGoals() { return state.goals || []; },
+
+    // ── Dividend/Income mutations ──────────────────────────────────────────────
+    addDividend(data) {
+      state.dividends = state.dividends || [];
+      state.dividends.push({
+        id: uid(), classKey: data.classKey, name: data.name,
+        exDate: data.exDate || null, payDate: data.payDate,
+        amountPerShare: data.amountPerShare ? +data.amountPerShare : null,
+        totalAmount: data.totalAmount ? +data.totalAmount : null,
+        currency: data.currency || 'THB', note: data.note || '',
+      });
+      emit();
+    },
+    updateDividend(id, patch) {
+      const i = (state.dividends || []).findIndex(d => d.id === id);
+      if (i < 0) return;
+      state.dividends[i] = { ...state.dividends[i], ...patch };
+      emit();
+    },
+    deleteDividend(id) { state.dividends = (state.dividends || []).filter(d => d.id !== id); emit(); },
+    getDividends() { return state.dividends || []; },
+
+    // ── Holding notes ──────────────────────────────────────────────────────────
+    setHoldingNote(classKey, name, note) {
+      state.holdingNotes = state.holdingNotes || {};
+      const key = classKey + ':' + name;
+      if (!note || !note.trim()) {
+        delete state.holdingNotes[key];
+      } else {
+        state.holdingNotes[key] = note.trim();
+      }
+      emit();
+    },
+    getHoldingNote(classKey, name) { return (state.holdingNotes || {})[classKey + ':' + name] || ''; },
+    getHoldingNotes() { return state.holdingNotes || {}; },
+
+    // ── Price alerts ───────────────────────────────────────────────────────────
+    addPriceAlert(data) {
+      state.priceAlerts = state.priceAlerts || [];
+      state.priceAlerts.push({
+        id: uid(), classKey: data.classKey, name: data.name,
+        condition: data.condition, price: +data.price,
+        note: data.note || '', triggered: false,
+      });
+      emit();
+    },
+    deletePriceAlert(id) { state.priceAlerts = (state.priceAlerts || []).filter(a => a.id !== id); emit(); },
+    getPriceAlerts() { return state.priceAlerts || []; },
+    markAlertTriggered(id) {
+      const i = (state.priceAlerts || []).findIndex(a => a.id === id);
+      if (i >= 0) { state.priceAlerts[i] = { ...state.priceAlerts[i], triggered: true }; emit(); }
     },
   };
 

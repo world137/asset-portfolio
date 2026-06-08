@@ -90,6 +90,81 @@ async function loadHoldings(portfolioId) {
   return r.json();
 }
 
+async function loadPortfolioData(portfolioId) {
+  const uid = encodeURIComponent(portfolioId);
+  const r   = await fetch(
+    `${SUPABASE_URL}/rest/v1/portfolio_data?user_id=eq.${uid}&select=data&limit=1`,
+    { headers: sbHeaders() },
+  );
+  if (!r.ok) return null;
+  const rows = await r.json();
+  if (!rows || !rows[0] || !rows[0].data) return null;
+  try { return JSON.parse(rows[0].data); } catch (_) { return null; }
+}
+
+// ── Price alert checker ────────────────────────────────────────────────────────
+
+function checkPriceAlerts(priceAlerts, assetData) {
+  if (!priceAlerts || !priceAlerts.length) return [];
+  const triggered = [];
+  for (const alert of priceAlerts) {
+    if (alert.triggered) continue;
+    const key  = `${alert.classKey}:${alert.name}`;
+    const data = assetData[key];
+    if (!data || data.price == null) continue;
+    const hit = alert.condition === 'above'
+      ? data.price >= alert.price
+      : data.price <= alert.price;
+    if (hit) {
+      triggered.push({ alert, price: data.price });
+    }
+  }
+  return triggered;
+}
+
+// ── Rebalancing drift checker ──────────────────────────────────────────────────
+
+function checkRebalancingDrift(portfolioData, assetData) {
+  if (!portfolioData) return [];
+  const targetAlloc = portfolioData.targetAllocation || {};
+  const holdings    = portfolioData.holdings || {};
+  if (!Object.keys(targetAlloc).some(k => (targetAlloc[k] || 0) > 0)) return [];
+
+  const ASSET_CLASSES = [
+    { key: 'thaiStock', ccy: 'THB' }, { key: 'usaStock', ccy: 'USD' },
+    { key: 'etf', ccy: 'USD' },       { key: 'fund', ccy: 'THB' },
+    { key: 'crypto', ccy: 'THB' },    { key: 'gold', ccy: 'USD' },
+    { key: 'other', ccy: 'THB' },
+  ];
+  const USDTHB = portfolioData.fx?.USDTHB || 34.5;
+
+  let totalValue = 0;
+  const classValues = {};
+  for (const cls of ASSET_CLASSES) {
+    let v = 0;
+    for (const lot of (holdings[cls.key] || [])) {
+      const cur   = lot.cur != null ? lot.cur : lot.price;
+      const val   = cur * lot.qty;
+      const inTHB = cls.ccy === 'USD' ? val * USDTHB : val;
+      v += inTHB;
+    }
+    classValues[cls.key] = v;
+    totalValue += v;
+  }
+
+  if (totalValue === 0) return [];
+  const alerts = [];
+  for (const [key, tgt] of Object.entries(targetAlloc)) {
+    if (!tgt) continue;
+    const curPct  = (classValues[key] || 0) / totalValue * 100;
+    const drift   = curPct - tgt;
+    if (Math.abs(drift) >= 5) {
+      alerts.push({ key, tgt, curPct, drift });
+    }
+  }
+  return alerts;
+}
+
 // ── Report builder ─────────────────────────────────────────────────────────────
 
 async function buildReport(holdings) {
@@ -282,19 +357,59 @@ export default async function handler(req, res) {
   console.log(`[telegram] method=${req.method} pid=${pid?.slice(0, 8)}…`);
 
   try {
-    const holdings = await loadHoldings(pid);
+    const [holdings, portfolioData] = await Promise.all([
+      loadHoldings(pid),
+      loadPortfolioData(pid),
+    ]);
     console.log(`[telegram] holdings found: ${holdings.length}`);
     if (!holdings.length) return res.status(200).json({ ok: true, note: 'no holdings found for this portfolio ID' });
 
     const groups = await buildReport(holdings);
-    if (!groups.length) {
-      return res.status(200).json({ ok: true, note: 'no live price data available yet — prices refresh every 12h' });
+
+    // Rebuild assetData map for alert checking
+    const assetDataMap = {};
+    for (const g of groups) {
+      for (const a of g.assets) {
+        assetDataMap[`${g._key || ''}:${a.rawName || a.name}`] = { price: a.price, changeAbs: a.changeAbs, ccy: a.ccy };
+      }
     }
 
-    const message = formatMessage(groups);
+    // Check price alerts
+    const priceAlerts = portfolioData?.priceAlerts || [];
+    const triggeredAlerts = checkPriceAlerts(priceAlerts, assetDataMap);
+
+    // Check rebalancing drift
+    const rebalAlerts = checkRebalancingDrift(portfolioData, assetDataMap);
+
+    if (!groups.length && !triggeredAlerts.length && !rebalAlerts.length) {
+      return res.status(200).json({ ok: true, note: 'no live price data available yet' });
+    }
+
+    let message = groups.length ? formatMessage(groups) : `Report [${todayTH()}]\nNo market data available.\n`;
+
+    // Append price alert section
+    if (triggeredAlerts.length > 0) {
+      message += '\n🚨 <b>Price Alerts Triggered</b>\n';
+      for (const { alert, price } of triggeredAlerts) {
+        const dir = alert.condition === 'above' ? '▲ above' : '▼ below';
+        message += `• ${escHtml(alert.name.replace(/THB$/, ''))} — ${dir} ${price.toLocaleString()} (target: ${alert.price.toLocaleString()})\n`;
+        if (alert.note) message += `  ${escHtml(alert.note)}\n`;
+      }
+    }
+
+    // Append rebalancing drift section
+    if (rebalAlerts.length > 0) {
+      message += '\n⚖️ <b>Rebalancing Needed (&gt;5% drift)</b>\n';
+      const CLASS_LABELS = { thaiStock: 'Thai Stock', usaStock: 'USA Stock', etf: 'ETF', fund: 'Fund', crypto: 'Crypto', gold: 'Gold', other: 'Other' };
+      for (const a of rebalAlerts) {
+        const direction = a.drift > 0 ? `overweight +${a.drift.toFixed(1)}%` : `underweight ${a.drift.toFixed(1)}%`;
+        message += `• ${escHtml(CLASS_LABELS[a.key] || a.key)}: ${a.curPct.toFixed(1)}% vs target ${a.tgt}% (${direction})\n`;
+      }
+    }
+
     await sendTelegram(message);
     console.log('[telegram] sent ok');
-    return res.status(200).json({ ok: true, message });
+    return res.status(200).json({ ok: true, message, triggeredAlerts: triggeredAlerts.length, rebalAlerts: rebalAlerts.length });
   } catch (e) {
     console.error('[telegram] error:', e);
     return res.status(500).json({ error: e.message });

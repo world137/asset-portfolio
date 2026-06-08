@@ -5,6 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Portfolio Tracker</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239a6b1f' stroke-width='2.4' stroke-linecap='round'><path d='M4 19V9M10 19V5M16 19v-7M22 19H2'/></svg>" />
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#9a6b1f" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Portfolio" />
   <link rel="stylesheet" href="kit.css" />
   <link rel="stylesheet" href="app.css" />
 </head>
@@ -21,6 +26,7 @@
   <script src="src/seed.js"></script>
   <script src="src/fmt.js"></script>
   <script src="src/store.js"></script>
+  <script src="src/export.js"></script>
 
   <!-- UI components (JSX) -->
   <script type="text/babel" src="src/components/Primitives.jsx?v=2"></script>
@@ -35,6 +41,15 @@
   <script type="text/babel" src="src/components/WatchlistView.jsx"></script>
   <script type="text/babel" src="src/components/TechnicalAnalysis.jsx"></script>
   <script type="text/babel" src="src/components/DayReport.jsx"></script>
+  <!-- Wealth management features -->
+  <script type="text/babel" src="src/components/RebalancingView.jsx"></script>
+  <script type="text/babel" src="src/components/DividendCalendar.jsx"></script>
+  <script type="text/babel" src="src/components/GoalsView.jsx"></script>
+  <script type="text/babel" src="src/components/TaxView.jsx"></script>
+  <script type="text/babel" src="src/components/BenchmarkView.jsx"></script>
+  <script type="text/babel" src="src/components/RiskView.jsx"></script>
+  <script type="text/babel" src="src/components/AlertsView.jsx"></script>
+  <script type="text/babel" src="src/components/PlanningView.jsx"></script>
   <!-- Wallet components -->
   <script type="text/babel" src="src/components/wallet/CategoryModal.jsx"></script>
   <script type="text/babel" src="src/components/wallet/AccountModal.jsx"></script>
@@ -48,5 +63,12 @@
   <script type="text/babel" src="src/components/wallet/WalletCalendar.jsx"></script>
   <script type="text/babel" src="src/Login.jsx"></script>
   <script type="text/babel" src="src/app.jsx"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+      });
+    }
+  </script>
 </body>
 </html>
