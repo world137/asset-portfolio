@@ -9,15 +9,24 @@ function useStore() {
 
 // ── Navigation sidebar ────────────────────────────────────────────────────────
 function Nav({ route, setRoute, totals, open, onClose }) {
+  useStore();
   const settings = Store.settings();
   const sym      = window.ccySymbol(settings.displayCcy);
 
-  const NO_VAL_ROUTES = new Set(['dashboard','summary','networth','wallet','transactions','debts','walletsummary','walletcalendar','pixelworld','watchlist','sectors','selllog','technical','dayreport','rebalancing','dividends','goals','tax','benchmark','risk','alerts','planning']);
+  const NO_VAL_ROUTES = new Set(['dashboard','summary','networth','wallet','transactions','debts','walletsummary','walletcalendar','bills','recurring','savingsgoals','csvimport','reconcile','pixelworld','watchlist','sectors','selllog','technical','dayreport','rebalancing','dividends','goals','tax','benchmark','risk','alerts','planning']);
+
+  const billsDue = Store.getBillsDueSoon ? Store.getBillsDueSoon(3) : [];
 
   const item = (key, label, icon, color) => (
     <div key={key} className={'item' + (route === key ? ' active' : '')} onClick={() => { setRoute(key); onClose(); }}>
       {color ? <span className="dot" style={{ background: color }} /> : <span className="ic"><Icon name={icon} size={16} /></span>}
       <span>{label}</span>
+      {key === 'wallet' && billsDue.length > 0 && (
+        <span style={{ marginLeft: 4, background: '#f59e0b', color: '#fff', borderRadius: 10,
+                       padding: '1px 6px', fontSize: 10, fontWeight: 700, lineHeight: 1.6 }}>
+          {billsDue.length}
+        </span>
+      )}
       {!NO_VAL_ROUTES.has(key) && (
         <span className="val">{sym}{window.fmtBig((totals.classes.find(c => c.key === key) || {}).value || 0)}</span>
       )}
@@ -57,6 +66,11 @@ function Nav({ route, setRoute, totals, open, onClose }) {
         {item('debts',          'Debts',        'credit-card')}
         {item('walletsummary',  'Summary',      'sliders')}
         {item('walletcalendar', 'Calendar',     'calendar')}
+        {item('bills',          'Bills',        'bell')}
+        {item('recurring',      'Recurring',    'refresh-cw')}
+        {item('savingsgoals',   'Savings Goals','target')}
+        {item('csvimport',      'Import CSV',   'upload')}
+        {item('reconcile',      'Reconcile',    'check-square')}
         <div className="grp-h">Fun</div>
         {item('pixelworld', 'Pixel Office', 'cpu')}
       </div>
@@ -706,6 +720,47 @@ function BottomNav({ route, setRoute, onOpenDrawer }) {
   );
 }
 
+// ── Wallet layout: wraps all wallet views with a floating Quick Add button ─────
+function WalletLayout({ children }) {
+  const wallet   = Store.getWallet();
+  const [open, setOpen] = React.useState(false);
+
+  const accounts    = wallet.accounts.filter(a => !a.archived);
+  const lastUsedAcc = React.useMemo(() => {
+    const txns = [...wallet.transactions].sort((a, b) => b.date.localeCompare(a.date));
+    for (const t of txns) {
+      const a = accounts.find(a => a.id === t.accountId);
+      if (a) return a;
+    }
+    return accounts[0] || null;
+  }, [wallet.transactions, wallet.accounts]);
+
+  return (
+    <div style={{ position: 'relative' }}>
+      {children}
+      <button
+        onClick={() => setOpen(true)}
+        title="Quick add transaction"
+        style={{
+          position: 'fixed', bottom: 28, right: 28, zIndex: 90,
+          width: 52, height: 52, borderRadius: '50%',
+          background: 'var(--accent)', color: '#fff',
+          border: 'none', cursor: 'pointer', fontSize: 26, fontWeight: 400,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.22)', transition: 'transform .12s, box-shadow .12s',
+        }}
+        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.09)'}
+        onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+      >
+        +
+      </button>
+      <TransactionModal open={open} transaction={null}
+                        defaultAccountId={lastUsedAcc ? lastUsedAcc.id : undefined}
+                        onClose={() => setOpen(false)} />
+    </div>
+  );
+}
+
 // ── App root ──────────────────────────────────────────────────────────────────
 function App() {
   useStore();
@@ -788,6 +843,11 @@ function App() {
     : route === 'debts'          ? 'Debts'
     : route === 'walletsummary'  ? 'Wallet Summary'
     : route === 'walletcalendar' ? 'Calendar'
+    : route === 'bills'          ? 'Bills & Reminders'
+    : route === 'recurring'      ? 'Recurring Transactions'
+    : route === 'savingsgoals'   ? 'Savings Goals'
+    : route === 'csvimport'      ? 'Import CSV'
+    : route === 'reconcile'      ? 'Reconcile'
     : route === 'pixelworld'     ? 'Pixel Office'
     : route === 'watchlist'      ? 'Watchlist'
     : route === 'technical'      ? 'Technical Analysis'
@@ -864,11 +924,20 @@ function App() {
           {route === 'planning'     && <PlanningView />}
           {route === 'alerts'       && <AlertsView />}
           {route === 'selllog'      && <SellLogView />}
-          {route === 'wallet'       && <WalletOverview />}
-          {route === 'transactions' && <TransactionLog />}
-          {route === 'debts'        && <DebtTracker />}
-          {route === 'walletsummary'  && <WalletSummary />}
-          {route === 'walletcalendar' && <WalletCalendar />}
+          {['wallet','transactions','debts','walletsummary','walletcalendar','bills','recurring','savingsgoals','csvimport','reconcile'].includes(route) && (
+            <WalletLayout>
+              {route === 'wallet'         && <WalletOverview />}
+              {route === 'transactions'   && <TransactionLog />}
+              {route === 'debts'          && <DebtTracker />}
+              {route === 'walletsummary'  && <WalletSummary />}
+              {route === 'walletcalendar' && <WalletCalendar />}
+              {route === 'bills'          && <BillsView />}
+              {route === 'recurring'      && <RecurringView />}
+              {route === 'savingsgoals'   && <SavingsGoalsView />}
+              {route === 'csvimport'      && <CSVImportView />}
+              {route === 'reconcile'      && <ReconcileView />}
+            </WalletLayout>
+          )}
           {route === 'pixelworld'    && <PixelWorld />}
           {route === 'watchlist'     && <WatchlistView />}
           {route === 'technical'     && <TechnicalAnalysis />}
