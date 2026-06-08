@@ -106,7 +106,33 @@ function DividendCalendar() {
   const store    = useStore();
   const settings = Store.settings();
   const sym      = window.ccySymbol(settings.displayCcy);
-  const dividends = Store.getDividends();
+
+  const [fetching, setFetching] = React.useState(false);
+
+  // Auto-fetch dividends for held assets on first open (cached 6h in the store).
+  React.useEffect(() => {
+    let alive = true;
+    setFetching(true);
+    Promise.resolve(Store.fetchDividends()).finally(() => { if (alive) setFetching(false); });
+    return () => { alive = false; };
+  }, []);
+
+  function syncDividends() {
+    setFetching(true);
+    Promise.resolve(Store.fetchDividends(true)).finally(() => setFetching(false));
+  }
+
+  // Merge manual entries with auto-fetched ones. An auto entry is hidden when a
+  // manual entry already covers the same holding + date (manual takes priority).
+  const manual = Store.getDividends();
+  const auto   = Store.getAutoDividends();
+  const dividends = [
+    ...manual,
+    ...auto.filter(a => !manual.some(m =>
+      m.classKey === a.classKey && m.name === a.name &&
+      (m.exDate === a.exDate || m.payDate === a.payDate))),
+  ];
+  const fetchedAt = Store.getDividendFetchedAt();
 
   const [modalOpen,   setModalOpen]   = React.useState(false);
   const [editItem,    setEditItem]    = React.useState(null);
@@ -180,9 +206,17 @@ function DividendCalendar() {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         <div>
           <h1 className="t-h1" style={{ margin: '0 0 2px' }}>Dividend Calendar</h1>
-          <div className="t-small">Track dividends, fund distributions, and other income from holdings</div>
+          <div className="t-small">
+            Auto-synced from your holdings via Yahoo Finance
+            {fetchedAt ? ` · updated ${window.timeAgo(fetchedAt)}` : ''}
+          </div>
         </div>
-        <Button size="sm" icon="plus" onClick={() => { setEditItem(null); setModalOpen(true); }}>Add entry</Button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Button variant="secondary" size="sm" icon="history" onClick={syncDividends} disabled={fetching}>
+            {fetching ? 'Syncing…' : 'Sync'}
+          </Button>
+          <Button size="sm" icon="plus" onClick={() => { setEditItem(null); setModalOpen(true); }}>Add entry</Button>
+        </div>
       </div>
 
       {/* Tab bar */}
@@ -231,8 +265,9 @@ function DividendCalendar() {
                       <div key={d.id} title={payLabel(d)}
                            style={{ fontSize: 10, padding: '1px 4px', borderRadius: 3, marginBottom: 2,
                              background: d.payDate === dayStr ? 'var(--green-600)' : 'var(--fg-4)',
-                             color: '#fff', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                           onClick={() => { setEditItem(d); setModalOpen(true); }}>
+                             color: '#fff', cursor: d.auto ? 'default' : 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                           opacity: d.auto ? 0.85 : 1 }}
+                           onClick={() => { if (!d.auto) { setEditItem(d); setModalOpen(true); } }}>
                         {d.payDate === dayStr ? '💰 ' : '📋 '}{d.name.replace(/THB$/, '')}
                       </div>
                     ))}
@@ -282,6 +317,7 @@ function DividendCalendar() {
                             {(cls ? cls.short : '?').slice(0, 3)}
                           </span>
                           <span style={{ fontWeight: 600 }}>{d.name.replace(/THB$/, '')}</span>
+                          {d.auto && <span className="t-small" style={{ marginLeft: 6, padding: '1px 6px', borderRadius: 6, background: 'var(--border-1)', color: 'var(--fg-3)', fontSize: 10 }}>auto</span>}
                         </span>
                       </td>
                       <td className="num" style={{ color: 'var(--fg-3)', fontSize: 12 }}>{d.exDate || '—'}</td>
@@ -291,10 +327,14 @@ function DividendCalendar() {
                       <td className="num" style={{ color: 'var(--fg-3)' }}>{d.currency}</td>
                       <td style={{ fontSize: 12, color: 'var(--fg-3)' }}>{d.note || '—'}</td>
                       <td>
-                        <div style={{ display: 'flex', gap: 4 }}>
-                          <button className="icon-toggle" onClick={() => { setEditItem(d); setModalOpen(true); }}><Icon name="edit-2" size={13} /></button>
-                          <button className="icon-toggle" onClick={() => Store.deleteDividend(d.id)} style={{ color: 'var(--red-600)' }}><Icon name="trash-2" size={13} /></button>
-                        </div>
+                        {d.auto ? (
+                          <span className="t-small" style={{ color: 'var(--fg-3)' }}>—</span>
+                        ) : (
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <button className="icon-toggle" onClick={() => { setEditItem(d); setModalOpen(true); }}><Icon name="edit-2" size={13} /></button>
+                            <button className="icon-toggle" onClick={() => Store.deleteDividend(d.id)} style={{ color: 'var(--red-600)' }}><Icon name="trash-2" size={13} /></button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );

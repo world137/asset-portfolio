@@ -64,7 +64,7 @@ async function sbUpsert(table, rows) {
 
 // ── Shape helpers ─────────────────────────────────────────────────────────────
 
-function buildWalletState(accountRows, categoryRows, txnRows, debtRows) {
+function buildWalletState(accountRows, categoryRows, txnRows, debtRows, billRows, savingsGoalRows, snapshotRows) {
   return {
     accounts: accountRows.map(r => ({
       id:          r.id,
@@ -112,6 +112,32 @@ function buildWalletState(accountRows, categoryRows, txnRows, debtRows) {
         ? { months: r.inst_months, interestRate: parseFloat(r.inst_interest_rate ?? 0), paidMonths: r.inst_paid_months ?? 0 }
         : (r.installment || null),
     })),
+    bills: (billRows || []).map(r => ({
+      id:         r.id,
+      name:       r.name,
+      amount:     parseFloat(r.amount),
+      currency:   r.currency,
+      dueDay:     r.due_day,
+      categoryId: r.category_id || null,
+      note:       r.note || '',
+      active:     r.active,
+    })),
+    savingsGoals: (savingsGoalRows || []).map(r => ({
+      id:              r.id,
+      name:            r.name,
+      targetAmount:    parseFloat(r.target_amount),
+      currency:        r.currency,
+      targetDate:      r.target_date || null,
+      linkedAccountId: r.linked_account_id || null,
+      note:            r.note || '',
+      emoji:           r.emoji || '🎯',
+    })),
+    walletSnapshots: (snapshotRows || []).map(r => ({
+      date:        r.date,
+      netWorth:    parseFloat(r.net_worth),
+      cash:        r.cash        != null ? parseFloat(r.cash)        : null,
+      liabilities: r.liabilities != null ? parseFloat(r.liabilities) : null,
+    })),
   };
 }
 
@@ -133,18 +159,21 @@ export default async function handler(req, res) {
 
     const uid = encodeURIComponent(id);
     try {
-      const [accountRows, categoryRows, txnRows, debtRows] = await Promise.all([
-        sbGet('wallet_accounts',     `user_id=eq.${uid}&select=*&order=sort_order.asc,created_at.asc`),
-        sbGet('wallet_categories',   `user_id=eq.${uid}&select=*`),
-        sbGet('wallet_transactions', `user_id=eq.${uid}&select=*&order=date.asc,created_at.asc`),
-        sbGet('wallet_debts',        `user_id=eq.${uid}&select=*&order=date_start.asc`),
+      const [accountRows, categoryRows, txnRows, debtRows, billRows, savingsGoalRows, snapshotRows] = await Promise.all([
+        sbGet('wallet_accounts',      `user_id=eq.${uid}&select=*&order=sort_order.asc,created_at.asc`),
+        sbGet('wallet_categories',    `user_id=eq.${uid}&select=*`),
+        sbGet('wallet_transactions',  `user_id=eq.${uid}&select=*&order=date.asc,created_at.asc`),
+        sbGet('wallet_debts',         `user_id=eq.${uid}&select=*&order=date_start.asc`),
+        sbGet('wallet_bills',         `user_id=eq.${uid}&select=*`),
+        sbGet('wallet_savings_goals', `user_id=eq.${uid}&select=*`),
+        sbGet('wallet_snapshots',     `user_id=eq.${uid}&select=*&order=date.asc`),
       ]);
 
       const empty = !accountRows.length && !categoryRows.length &&
                     !txnRows.length && !debtRows.length;
       if (empty) return res.status(200).json({ data: null });
 
-      const wallet = buildWalletState(accountRows, categoryRows, txnRows, debtRows);
+      const wallet = buildWalletState(accountRows, categoryRows, txnRows, debtRows, billRows, savingsGoalRows, snapshotRows);
       return res.status(200).json({ data: JSON.stringify(wallet) });
     } catch (e) {
       console.error('[wallet] get error:', e.message);
@@ -237,6 +266,46 @@ export default async function handler(req, res) {
         installment:        d.installment || null,
       }));
       await sbUpsert('wallet_debts', debtRows);
+
+      // Bills — full replace
+      await sbDelete('wallet_bills', `user_id=eq.${uid}`);
+      const billRows = (p.bills || []).map(b => ({
+        id:          b.id,
+        user_id:     id,
+        name:        b.name,
+        amount:      b.amount ?? 0,
+        currency:    b.currency || 'THB',
+        due_day:     b.dueDay ?? null,
+        category_id: b.categoryId || null,
+        note:        b.note || null,
+        active:      b.active ?? true,
+      }));
+      await sbUpsert('wallet_bills', billRows);
+
+      // Savings goals — full replace
+      await sbDelete('wallet_savings_goals', `user_id=eq.${uid}`);
+      const savingsGoalRows = (p.savingsGoals || []).map(g => ({
+        id:                g.id,
+        user_id:           id,
+        name:              g.name,
+        target_amount:     g.targetAmount ?? 0,
+        currency:          g.currency || 'THB',
+        target_date:       g.targetDate || null,
+        linked_account_id: g.linkedAccountId || null,
+        note:              g.note || null,
+        emoji:             g.emoji || null,
+      }));
+      await sbUpsert('wallet_savings_goals', savingsGoalRows);
+
+      // Net-worth snapshots — upsert by (user_id, date) to preserve history
+      const snapshotRows = (p.walletSnapshots || []).map(s => ({
+        user_id:     id,
+        date:        s.date,
+        net_worth:   s.netWorth ?? 0,
+        cash:        s.cash ?? null,
+        liabilities: s.liabilities ?? null,
+      }));
+      await sbUpsert('wallet_snapshots', snapshotRows);
 
       return res.status(200).json({ ok: true });
     } catch (e) {

@@ -91,7 +91,8 @@ async function sbInsert(table, rows) {
 // ── Shape helpers ─────────────────────────────────────────────────────────────
 
 // Reconstruct the JS state object (same shape store.js expects) from DB rows.
-function buildState(settingsRows, holdingRows, sectorRows, snapshotRows, saleRows, fxRows, marketPriceRows, tagRows, holdingTagRows) {
+function buildState(settingsRows, holdingRows, sectorRows, snapshotRows, saleRows, fxRows, marketPriceRows, tagRows, holdingTagRows,
+                    goalRows, dividendRows, allocationRows, alertRows, noteRows) {
   // Build lookup: "classKey:name" → current market price
   const mpMap = {};
   for (const mp of (marketPriceRows || [])) {
@@ -140,6 +141,12 @@ function buildState(settingsRows, holdingRows, sectorRows, snapshotRows, saleRow
     (holdingTagsMap[key] ||= []).push(ht.tag_id);
   }
 
+  const targetAllocation = {};
+  for (const a of (allocationRows || [])) targetAllocation[a.class_key] = parseFloat(a.target_pct);
+
+  const holdingNotes = {};
+  for (const n of (noteRows || [])) holdingNotes[`${n.class_key}:${n.name}`] = n.note;
+
   return {
     holdings:    holdingsMap,
     sectors:     sectorsMap,
@@ -172,6 +179,37 @@ function buildState(settingsRows, holdingRows, sectorRows, snapshotRows, saleRow
       realizedPnl: parseFloat(r.realized_pnl),
       pnlPct:      parseFloat(r.pnl_pct),
     })),
+    goals: (goalRows || []).map(r => ({
+      id:           r.id,
+      name:         r.name,
+      targetAmount: parseFloat(r.target_amount),
+      targetDate:   r.target_date || null,
+      note:         r.note || '',
+      emoji:        r.emoji || '🎯',
+      createdAt:    r.created_at || null,
+    })),
+    dividends: (dividendRows || []).map(r => ({
+      id:             r.id,
+      classKey:       r.class_key,
+      name:           r.name,
+      exDate:         r.ex_date || null,
+      payDate:        r.pay_date || null,
+      amountPerShare: r.amount_per_share != null ? parseFloat(r.amount_per_share) : null,
+      totalAmount:    r.total_amount    != null ? parseFloat(r.total_amount)    : null,
+      currency:       r.currency || 'THB',
+      note:           r.note || '',
+    })),
+    targetAllocation,
+    priceAlerts: (alertRows || []).map(r => ({
+      id:        r.id,
+      classKey:  r.class_key,
+      name:      r.name,
+      condition: r.condition,
+      price:     parseFloat(r.price),
+      note:      r.note || '',
+      triggered: r.triggered,
+    })),
+    holdingNotes,
     lastPriceSync: null,
     priceMode:     null,
   };
@@ -196,17 +234,23 @@ export default async function handler(req, res) {
     const uid = encodeURIComponent(id);
     try {
       const SNAPSHOT_COLS = 'date,value,thai_stock,usa_stock,etf,fund,crypto,gold,other';
-      const [settingsRows, holdingRows, sectorRows, snapshotRows, saleRows, fxRows, marketPriceRows, tagRows, holdingTagRows] =
+      const [settingsRows, holdingRows, sectorRows, snapshotRows, saleRows, fxRows, marketPriceRows, tagRows, holdingTagRows,
+             goalRows, dividendRows, allocationRows, alertRows, noteRows] =
         await Promise.all([
-          sbGet('settings',      `user_id=eq.${uid}&select=*`),
-          sbGet('holdings',      `user_id=eq.${uid}&select=*&order=created_at.asc`),
-          sbGet('sectors',       `user_id=eq.${uid}&select=*`),
-          sbGet('snapshots',     `user_id=eq.${uid}&select=${SNAPSHOT_COLS}&order=date.asc&limit=${MAX_SNAPSHOTS}`),
-          sbGet('sales',         `user_id=eq.${uid}&select=*&order=date.asc`),
-          sbGet('fx_rates',      `user_id=eq.${uid}&select=*`),
-          sbGet('market_prices', `user_id=eq.${uid}&select=class_key,name,price`),
-          sbGet('asset_tags',    `user_id=eq.${uid}&select=*&order=sort_order.asc`),
-          sbGet('holding_tags',  `user_id=eq.${uid}&select=*`),
+          sbGet('settings',          `user_id=eq.${uid}&select=*`),
+          sbGet('holdings',          `user_id=eq.${uid}&select=*&order=created_at.asc`),
+          sbGet('sectors',           `user_id=eq.${uid}&select=*`),
+          sbGet('snapshots',         `user_id=eq.${uid}&select=${SNAPSHOT_COLS}&order=date.asc&limit=${MAX_SNAPSHOTS}`),
+          sbGet('sales',             `user_id=eq.${uid}&select=*&order=date.asc`),
+          sbGet('fx_rates',          `user_id=eq.${uid}&select=*`),
+          sbGet('market_prices',     `user_id=eq.${uid}&select=class_key,name,price`),
+          sbGet('asset_tags',        `user_id=eq.${uid}&select=*&order=sort_order.asc`),
+          sbGet('holding_tags',      `user_id=eq.${uid}&select=*`),
+          sbGet('goals',             `user_id=eq.${uid}&select=*&order=sort_order.asc`),
+          sbGet('dividends',         `user_id=eq.${uid}&select=*&order=pay_date.asc`),
+          sbGet('target_allocation', `user_id=eq.${uid}&select=*`),
+          sbGet('price_alerts',      `user_id=eq.${uid}&select=*`),
+          sbGet('holding_notes',     `user_id=eq.${uid}&select=*`),
         ]);
 
       // No data at all → new user
@@ -214,7 +258,8 @@ export default async function handler(req, res) {
                     !snapshotRows.length && !saleRows.length;
       if (empty) return res.status(200).json({ data: null });
 
-      const state = buildState(settingsRows, holdingRows, sectorRows, snapshotRows, saleRows, fxRows, marketPriceRows, tagRows, holdingTagRows);
+      const state = buildState(settingsRows, holdingRows, sectorRows, snapshotRows, saleRows, fxRows, marketPriceRows, tagRows, holdingTagRows,
+                               goalRows, dividendRows, allocationRows, alertRows, noteRows);
       return res.status(200).json({ data: JSON.stringify(state) });
     } catch (e) {
       console.error('[portfolio] get error:', e.message);
@@ -363,6 +408,68 @@ export default async function handler(req, res) {
         }
       }
       if (htRowsSave.length) await sbUpsert('holding_tags', htRowsSave);
+
+      // 10. Goals — full replace
+      await sbDelete('goals', `user_id=eq.${uid}`);
+      const goalRows = (p.goals || []).map((g, i) => ({
+        id:            g.id,
+        user_id:       id,
+        name:          g.name,
+        target_amount: g.targetAmount ?? 0,
+        target_date:   g.targetDate || null,
+        note:          g.note || null,
+        emoji:         g.emoji || null,
+        created_at:    g.createdAt || null,
+        sort_order:    i,
+      }));
+      if (goalRows.length) await sbUpsert('goals', goalRows);
+
+      // 11. Dividends (manual entries only) — full replace
+      await sbDelete('dividends', `user_id=eq.${uid}`);
+      const dividendRows = (p.dividends || []).map(d => ({
+        id:               d.id,
+        user_id:          id,
+        class_key:        d.classKey,
+        name:             d.name,
+        ex_date:          d.exDate || null,
+        pay_date:         d.payDate || null,
+        amount_per_share: d.amountPerShare ?? null,
+        total_amount:     d.totalAmount ?? null,
+        currency:         d.currency || 'THB',
+        note:             d.note || null,
+      }));
+      if (dividendRows.length) await sbUpsert('dividends', dividendRows);
+
+      // 12. Target allocation — full replace
+      await sbDelete('target_allocation', `user_id=eq.${uid}`);
+      const allocRows = Object.entries(p.targetAllocation || {})
+        .filter(([, pct]) => pct != null && !isNaN(pct))
+        .map(([classKey, pct]) => ({ user_id: id, class_key: classKey, target_pct: pct }));
+      if (allocRows.length) await sbUpsert('target_allocation', allocRows);
+
+      // 13. Price alerts — full replace
+      await sbDelete('price_alerts', `user_id=eq.${uid}`);
+      const alertRows = (p.priceAlerts || []).map(a => ({
+        id:        a.id,
+        user_id:   id,
+        class_key: a.classKey,
+        name:      a.name,
+        condition: a.condition,
+        price:     a.price,
+        note:      a.note || null,
+        triggered: a.triggered ?? false,
+      }));
+      if (alertRows.length) await sbUpsert('price_alerts', alertRows);
+
+      // 14. Holding notes — full replace ({ "classKey:name": note })
+      await sbDelete('holding_notes', `user_id=eq.${uid}`);
+      const noteRows = [];
+      for (const [key, note] of Object.entries(p.holdingNotes || {})) {
+        const ci = key.indexOf(':');
+        if (ci < 0 || !note) continue;
+        noteRows.push({ user_id: id, class_key: key.slice(0, ci), name: key.slice(ci + 1), note });
+      }
+      if (noteRows.length) await sbUpsert('holding_notes', noteRows);
 
       return res.status(200).json({ ok: true });
     } catch (e) {

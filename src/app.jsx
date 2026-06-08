@@ -13,7 +13,7 @@ function Nav({ route, setRoute, totals, open, onClose }) {
   const settings = Store.settings();
   const sym      = window.ccySymbol(settings.displayCcy);
 
-  const NO_VAL_ROUTES = new Set(['dashboard','summary','networth','wallet','transactions','debts','walletsummary','walletcalendar','bills','recurring','savingsgoals','csvimport','reconcile','pixelworld','watchlist','sectors','selllog','technical','dayreport','rebalancing','dividends','goals','tax','benchmark','risk','alerts','planning']);
+  const NO_VAL_ROUTES = new Set(['dashboard','summary','networth','wallet','transactions','debts','walletsummary','walletcalendar','bills','savingsgoals','reconcile','pixelworld','watchlist','sectors','selllog','technical','dayreport','rebalancing','dividends','goals','benchmark','risk','alerts','planning']);
 
   const billsDue = Store.getBillsDueSoon ? Store.getBillsDueSoon(3) : [];
 
@@ -67,9 +67,7 @@ function Nav({ route, setRoute, totals, open, onClose }) {
         {item('walletsummary',  'Summary',      'sliders')}
         {item('walletcalendar', 'Calendar',     'calendar')}
         {item('bills',          'Bills',        'bell')}
-        {item('recurring',      'Recurring',    'refresh-cw')}
         {item('savingsgoals',   'Savings Goals','target')}
-        {item('csvimport',      'Import CSV',   'upload')}
         {item('reconcile',      'Reconcile',    'check-square')}
         <div className="grp-h">Fun</div>
         {item('pixelworld', 'Pixel Office', 'cpu')}
@@ -844,9 +842,7 @@ function App() {
     : route === 'walletsummary'  ? 'Wallet Summary'
     : route === 'walletcalendar' ? 'Calendar'
     : route === 'bills'          ? 'Bills & Reminders'
-    : route === 'recurring'      ? 'Recurring Transactions'
     : route === 'savingsgoals'   ? 'Savings Goals'
-    : route === 'csvimport'      ? 'Import CSV'
     : route === 'reconcile'      ? 'Reconcile'
     : route === 'pixelworld'     ? 'Pixel Office'
     : route === 'watchlist'      ? 'Watchlist'
@@ -920,11 +916,10 @@ function App() {
           {route === 'risk'         && <RiskView />}
           {route === 'goals'        && <GoalsView />}
           {route === 'dividends'    && <DividendCalendar />}
-          {route === 'tax'          && <TaxView />}
           {route === 'planning'     && <PlanningView />}
           {route === 'alerts'       && <AlertsView />}
           {route === 'selllog'      && <SellLogView />}
-          {['wallet','transactions','debts','walletsummary','walletcalendar','bills','recurring','savingsgoals','csvimport','reconcile'].includes(route) && (
+          {['wallet','transactions','debts','walletsummary','walletcalendar','bills','savingsgoals','reconcile'].includes(route) && (
             <WalletLayout>
               {route === 'wallet'         && <WalletOverview />}
               {route === 'transactions'   && <TransactionLog />}
@@ -932,9 +927,7 @@ function App() {
               {route === 'walletsummary'  && <WalletSummary />}
               {route === 'walletcalendar' && <WalletCalendar />}
               {route === 'bills'          && <BillsView />}
-              {route === 'recurring'      && <RecurringView />}
               {route === 'savingsgoals'   && <SavingsGoalsView />}
-              {route === 'csvimport'      && <CSVImportView />}
               {route === 'reconcile'      && <ReconcileView />}
             </WalletLayout>
           )}
