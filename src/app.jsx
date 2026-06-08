@@ -45,7 +45,6 @@ function Nav({ route, setRoute, totals, open, onClose }) {
         {item('risk',       'Risk Analysis','shield')}
         {item('goals',      'Goals',        'star')}
         {item('dividends',  'Dividends',    'trending-up')}
-        {item('tax',        'Tax Summary',  'file')}
         {item('planning',   'Planning',     'calendar')}
         {item('alerts',     'Alerts',       'bell')}
         {item('selllog',    'Sell Log',     'trending-down')}
@@ -781,7 +780,6 @@ function App() {
     : route === 'risk'           ? 'Risk Analysis'
     : route === 'goals'          ? 'Financial Goals'
     : route === 'dividends'      ? 'Dividend Calendar'
-    : route === 'tax'            ? 'Tax Summary'
     : route === 'planning'       ? 'Planning & Projections'
     : route === 'alerts'         ? 'Price Alerts'
     : route === 'selllog'        ? 'Sell Log'
