@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "Portfolio",
+    "slug": "asset-portfolio-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.personal.assetportfolio",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#faf9f6"
+      },
+      "package": "com.personal.assetportfolio"
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-asset",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#faf9f6"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "d24992e2-f77e-40f7-a43c-05e74d38c59e"
+      }
+    }
+  }
+}
