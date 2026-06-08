@@ -1,9 +1,59 @@
 /* eslint-disable */
 /* Dashboard.jsx — KPIs, allocation charts, per-class table. Three layouts. */
 
+const BM_DEFS = [
+  { key: 'SP500',  label: 'S&P 500', symbol: '^GSPC',  color: '#f97316' },
+  { key: 'NASDAQ', label: 'NASDAQ',  symbol: '^IXIC',  color: '#8b5cf6' },
+  { key: 'SET50',  label: 'SET',     symbol: '^SET.BK', color: '#3b82f6' },
+];
+// 5D uses 1mo to get daily bars (30m intraday is too noisy for daily-snapshot comparison)
+const BM_RANGE_MAP = { '5D': '1mo', '1M': '1mo', '6M': '6mo', 'YTD': 'ytd', '1Y': '1y', '5Y': '5y', 'All': 'max' };
+
 function PortfolioHistoryCard({ settings }) {
   const snapshots = Store.getSnapshots();
   const fxRate    = Store.get().fx.USDTHB || window.SEED_FX_USDTHB;
+
+  const [range,     setRangeState] = React.useState('1M');
+  const [activeBMs, setActiveBMs]  = React.useState(new Set());
+  const [bmCache,   setBmCache]    = React.useState({});
+  const [bmLoading, setBmLoading]  = React.useState(new Set());
+
+  async function fetchBM(key, symbol, r) {
+    const ck = `${key}:${r}`;
+    if (bmCache[ck]) return;
+    setBmLoading(prev => new Set([...prev, key]));
+    try {
+      const res = await fetch(`/api/chart?symbol=${encodeURIComponent(symbol)}&range=${BM_RANGE_MAP[r] || '1mo'}`);
+      const j   = await res.json();
+      if (j && j.points) setBmCache(prev => ({ ...prev, [ck]: j.points }));
+    } catch (_) {}
+    setBmLoading(prev => { const s = new Set(prev); s.delete(key); return s; });
+  }
+
+  function toggleBM(key) {
+    const def = BM_DEFS.find(d => d.key === key);
+    setActiveBMs(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) { next.delete(key); return next; }
+      next.add(key);
+      fetchBM(key, def.symbol, range);
+      return next;
+    });
+  }
+
+  function handleRangeChange(r) {
+    setRangeState(r);
+    activeBMs.forEach(key => {
+      const def = BM_DEFS.find(d => d.key === key);
+      if (def) fetchBM(key, def.symbol, r);
+    });
+  }
+
+  const benchmarks = BM_DEFS
+    .filter(d => activeBMs.has(d.key))
+    .map(d => ({ label: d.label, color: d.color, points: bmCache[`${d.key}:${range}`] || [] }))
+    .filter(b => b.points.length > 0);
+
   return (
     <div className="card" style={{ marginTop: 18 }}>
       <div className="card-h">
@@ -11,9 +61,33 @@ function PortfolioHistoryCard({ settings }) {
           <div className="t">Portfolio History</div>
           <div className="s">Daily snapshots · valued in {settings.displayCcy} · snapshotted on price refresh</div>
         </div>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {BM_DEFS.map(d => {
+            const active  = activeBMs.has(d.key);
+            const loading = bmLoading.has(d.key);
+            return (
+              <button key={d.key} onClick={() => toggleBM(d.key)} style={{
+                fontSize: 11, padding: '2px 8px', borderRadius: 4, cursor: 'pointer',
+                border: `1.5px solid ${active ? d.color : 'var(--border-2)'}`,
+                color: active ? d.color : 'var(--fg-3)',
+                background: active ? d.color + '1a' : 'transparent',
+                transition: 'all 0.15s',
+              }}>
+                {loading ? '…' : d.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
       <div className="card-b">
-        <PortfolioLineChart snapshots={snapshots} displayCcy={settings.displayCcy} fxRate={fxRate} />
+        <PortfolioLineChart
+          snapshots={snapshots}
+          displayCcy={settings.displayCcy}
+          fxRate={fxRate}
+          benchmarks={benchmarks}
+          range={range}
+          onRangeChange={handleRangeChange}
+        />
       </div>
     </div>
   );
