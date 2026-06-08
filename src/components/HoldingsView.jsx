@@ -360,7 +360,7 @@ function BentoTooltip({ data, sym, x, y, containerW }) {
   const pctLabel = dayPct != null ? 'Day' : 'Total P/L';
   const pct      = dayPct != null ? dayPct : totalPct;
   const pctStr   = pct != null ? (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%' : '—';
-  const pctColor = pct == null ? 'var(--fg-2)' : pct >= 0 ? '#30d158' : '#ff453a';
+  const pctColor = pct == null ? 'var(--fg-2)' : pct >= 0 ? 'var(--green-600)' : 'var(--red-600)';
 
   return (
     <div style={{
@@ -396,7 +396,7 @@ function BentoTooltip({ data, sym, x, y, containerW }) {
       {data.profit != null && (
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
           <span style={{ color: 'var(--fg-2)' }}>P/L</span>
-          <span style={{ color: data.profit >= 0 ? '#30d158' : '#ff453a', fontVariantNumeric: 'tabular-nums' }}>
+          <span style={{ color: data.profit >= 0 ? 'var(--green-600)' : 'var(--red-600)', fontVariantNumeric: 'tabular-nums' }}>
             {data.profit >= 0 ? '+' : ''}{sym}{window.fmtBig(Math.abs(data.profit))}
           </span>
         </div>

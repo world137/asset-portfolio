@@ -166,6 +166,10 @@ body { background: var(--bg-app); display: block; padding: 0; }
 .down { color: var(--red-600); }
 [data-theme="dark"] .up { color: #30d158; }
 [data-theme="dark"] .down { color: #ff453a; }
+[data-theme="light"] .up { color: var(--green-600); }
+[data-theme="light"] .down { color: var(--red-600); }
+[data-theme="light"] .kpi .big.up { color: var(--green-600); }
+[data-theme="light"] .kpi .big.down { color: var(--red-600); }
 .up-bg { background: var(--green-50); }
 .down-bg { background: var(--red-50); }
 

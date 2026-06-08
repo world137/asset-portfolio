@@ -14,6 +14,7 @@
    ============================================================================ */
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+const FRED_API_KEY = process.env.FRED_API_KEY;
 
 // ── Shared helper ─────────────────────────────────────────────────────────────
 
@@ -126,24 +127,23 @@ async function fetchMOF() {
   }
 }
 
-// ── Fetcher: FRED / OECD harmonized long-term rates (CSV, no API key) ─────────
+// ── Fetcher: FRED official API — OECD harmonized long-term rates ──────────────
 // Monthly frequency. Series IDs: IRLTLT01{CC}M156N (OECD MEI dataset via FRED).
-// Covers all OECD members + major G20 partners (AU, FR, KR, IN).
+// Uses official api.stlouisfed.org endpoint (requires FRED_API_KEY env var).
 
 async function fetchFRED(seriesId) {
+  if (!FRED_API_KEY) return null;
   try {
-    const r = await fetch(
-      `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${seriesId}`,
-      { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(12000) }
-    );
+    const url = `https://api.stlouisfed.org/fred/series/observations?series_id=${seriesId}&api_key=${encodeURIComponent(FRED_API_KEY)}&file_type=json&sort_order=desc&limit=5`;
+    const r = await fetch(url, { signal: AbortSignal.timeout(12000) });
     if (!r.ok) return null;
-    const text = await r.text();
-    const vals = text.split('\n')
-      .filter(l => /^\d{4}-\d{2}-\d{2}/.test(l))
-      .map(l => parseFloat(l.split(',')[1]))
+    const j = await r.json();
+    const obs = (j?.observations || [])
+      .filter(o => o.value !== '.')
+      .map(o => parseFloat(o.value))
       .filter(v => !isNaN(v));
-    if (!vals.length) return null;
-    return makeResult(vals[vals.length - 1], vals.length >= 2 ? vals[vals.length - 2] : null);
+    if (!obs.length) return null;
+    return makeResult(obs[0], obs.length >= 2 ? obs[1] : null);
   } catch (_) {
     return null;
   }
