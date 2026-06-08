@@ -252,7 +252,7 @@ function SignalBadge({ isBuy, isSell, obVeto }) {
     : isSell
     ? ['SELL', 'var(--red-50)',    'var(--red-600)']
     : obVeto
-    ? ['OB VETO', 'rgba(255,159,10,0.12)', '#ff9f0a']
+    ? ['OB VETO', 'rgba(255,159,10,0.12)', '#b45309']
     : ['HOLD', 'var(--bg-sunken)', 'var(--fg-2)'];
   return (
     <span style={{
@@ -335,11 +335,11 @@ function StatChip({ label, value, bull, bear }) {
 
 function yieldLevel(val) {
   if (val == null) return null;
-  if (val < 1.5)  return { label: 'Very Low',  color: '#34c759' };
-  if (val < 3.0)  return { label: 'Low',       color: '#34c759' };
-  if (val < 4.5)  return { label: 'Normal',    color: '#8e8e93' };
-  if (val < 6.0)  return { label: 'Elevated',  color: '#ff9f0a' };
-  return                 { label: 'High',      color: '#ff453a' };
+  if (val < 1.5)  return { label: 'Very Low',  color: '#16a34a' };
+  if (val < 3.0)  return { label: 'Low',       color: '#16a34a' };
+  if (val < 4.5)  return { label: 'Normal',    color: '#6b7280' };
+  if (val < 6.0)  return { label: 'Elevated',  color: '#b45309' };
+  return                 { label: 'High',      color: '#dc2626' };
 }
 
 function BondYieldsTable() {
@@ -431,10 +431,10 @@ function BondYieldsTable() {
           </table>
           <div style={{ marginTop: 10, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             {[
-              { label: 'Very Low / Low  < 3%', color: '#34c759' },
-              { label: 'Normal  3–4.5%',        color: '#8e8e93' },
-              { label: 'Elevated  4.5–6%',      color: '#ff9f0a' },
-              { label: 'High  > 6%',            color: '#ff453a' },
+              { label: 'Very Low / Low  < 3%', color: '#16a34a' },
+              { label: 'Normal  3–4.5%',        color: '#6b7280' },
+              { label: 'Elevated  4.5–6%',      color: '#b45309' },
+              { label: 'High  > 6%',            color: '#dc2626' },
             ].map(({ label, color }) => (
               <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11 }}>
                 <div style={{ width: 10, height: 10, borderRadius: 2, background: color }} />
@@ -499,60 +499,60 @@ const MACRO_INFO = {
     title: 'Federal Funds Rate',
     description: 'The target interest rate set by the Fed\'s FOMC 8 times per year. Banks charge each other this rate for overnight lending — it cascades into all borrowing costs: mortgages, corporate bonds, credit cards.',
     levels: [
-      { max: 1.5,      label: 'Very Low',    color: '#34c759', note: 'Ultra-accommodative. Cheap money era — strong tailwind for equities, real estate, and growth stocks.' },
-      { max: 3.0,      label: 'Low',         color: '#34c759', note: 'Accommodative. Supportive for risk assets. Bond yields typically low, equity valuations elevated.' },
-      { max: 4.5,      label: 'Elevated',    color: '#ff9f0a', note: 'Restrictive. Pressure on growth stocks, REITs, and bonds. USD tends to strengthen.' },
-      { max: Infinity, label: 'High',        color: '#ff453a', note: 'Highly restrictive. Significant headwind for risk assets. Recession risk elevated. Cash/bonds attractive.' },
+      { max: 1.5,      label: 'Very Low',    color: '#16a34a', note: 'Ultra-accommodative. Cheap money era — strong tailwind for equities, real estate, and growth stocks.' },
+      { max: 3.0,      label: 'Low',         color: '#16a34a', note: 'Accommodative. Supportive for risk assets. Bond yields typically low, equity valuations elevated.' },
+      { max: 4.5,      label: 'Elevated',    color: '#b45309', note: 'Restrictive. Pressure on growth stocks, REITs, and bonds. USD tends to strengthen.' },
+      { max: Infinity, label: 'High',        color: '#dc2626', note: 'Highly restrictive. Significant headwind for risk assets. Recession risk elevated. Cash/bonds attractive.' },
     ],
   },
   us10y: {
     title: 'US 10-Year Treasury Yield',
     description: 'Yield on 10-year US government bonds — the global benchmark "risk-free rate." It anchors mortgage rates, corporate borrowing costs, and equity valuations (P/E multiples) worldwide.',
     levels: [
-      { max: 2.0,      label: 'Low',         color: '#34c759', note: 'Low cost of capital. Favorable for equities, especially growth/tech. Bond prices are high.' },
-      { max: 3.5,      label: 'Normal',      color: '#8e8e93', note: 'Historically normal range. Balanced between growth and inflation expectations.' },
-      { max: 5.0,      label: 'Elevated',    color: '#ff9f0a', note: 'High yields compress P/E multiples and pressure REITs. Bonds start competing with equities.' },
-      { max: Infinity, label: 'High',        color: '#ff453a', note: 'Very high yields. Bonds become a strong competitor to stocks. Watch for equity outflows.' },
+      { max: 2.0,      label: 'Low',         color: '#16a34a', note: 'Low cost of capital. Favorable for equities, especially growth/tech. Bond prices are high.' },
+      { max: 3.5,      label: 'Normal',      color: '#6b7280', note: 'Historically normal range. Balanced between growth and inflation expectations.' },
+      { max: 5.0,      label: 'Elevated',    color: '#b45309', note: 'High yields compress P/E multiples and pressure REITs. Bonds start competing with equities.' },
+      { max: Infinity, label: 'High',        color: '#dc2626', note: 'Very high yields. Bonds become a strong competitor to stocks. Watch for equity outflows.' },
     ],
   },
   cpi: {
     title: 'CPI Inflation (Year-over-Year)',
     description: 'Consumer Price Index — the primary inflation gauge. The Fed targets ~2%. Persistent high CPI forces the Fed to keep rates high, hurting bond prices and growth stocks.',
     levels: [
-      { max: 1.0,      label: 'Low',         color: '#ff9f0a', note: 'Below target. Deflation risk. Fed may cut rates aggressively to stimulate the economy.' },
-      { max: 2.5,      label: 'Stable',      color: '#34c759', note: 'Near Fed\'s 2% target — ideal. Rate cuts possible, earnings forecasts stable, risk assets supported.' },
-      { max: 4.0,      label: 'Elevated',    color: '#ff9f0a', note: 'Above target. Fed stays hawkish. Bond prices fall. Commodities and energy tend to outperform.' },
-      { max: Infinity, label: 'High',        color: '#ff453a', note: 'High inflation. Rate cuts off the table. Real returns eroded. Gold, oil, and commodities favored.' },
+      { max: 1.0,      label: 'Low',         color: '#b45309', note: 'Below target. Deflation risk. Fed may cut rates aggressively to stimulate the economy.' },
+      { max: 2.5,      label: 'Stable',      color: '#16a34a', note: 'Near Fed\'s 2% target — ideal. Rate cuts possible, earnings forecasts stable, risk assets supported.' },
+      { max: 4.0,      label: 'Elevated',    color: '#b45309', note: 'Above target. Fed stays hawkish. Bond prices fall. Commodities and energy tend to outperform.' },
+      { max: Infinity, label: 'High',        color: '#dc2626', note: 'High inflation. Rate cuts off the table. Real returns eroded. Gold, oil, and commodities favored.' },
     ],
   },
   vix: {
     title: 'VIX — Volatility Index',
     description: 'CBOE Volatility Index measuring implied 30-day volatility of S&P 500 options. Known as the "Fear Index." Spikes during selloffs and crashes, drops in calm trending markets.',
     levels: [
-      { max: 15,       label: 'Low',         color: '#34c759', note: 'Markets calm. Low fear — possibly complacent. Good environment for carry trades and income.' },
-      { max: 20,       label: 'Normal',      color: '#8e8e93', note: 'Normal volatility. Healthy risk environment with no extreme fear or greed.' },
-      { max: 30,       label: 'Elevated',    color: '#ff9f0a', note: 'Fear rising. Selloff may be in progress. Consider reducing risk or adding hedges.' },
-      { max: Infinity, label: 'High',        color: '#ff453a', note: 'High fear. Active selloff or crisis mode. Historically a contrarian buy signal near extreme peaks.' },
+      { max: 15,       label: 'Low',         color: '#16a34a', note: 'Markets calm. Low fear — possibly complacent. Good environment for carry trades and income.' },
+      { max: 20,       label: 'Normal',      color: '#6b7280', note: 'Normal volatility. Healthy risk environment with no extreme fear or greed.' },
+      { max: 30,       label: 'Elevated',    color: '#b45309', note: 'Fear rising. Selloff may be in progress. Consider reducing risk or adding hedges.' },
+      { max: Infinity, label: 'High',        color: '#dc2626', note: 'High fear. Active selloff or crisis mode. Historically a contrarian buy signal near extreme peaks.' },
     ],
   },
   dxy: {
     title: 'DXY — US Dollar Index',
     description: 'Measures the USD against a basket of 6 major currencies (EUR, JPY, GBP, CAD, SEK, CHF). A strong dollar tightens global financial conditions and squeezes emerging markets.',
     levels: [
-      { max: 90,       label: 'Weak',        color: '#ff9f0a', note: 'Weak dollar. Strong tailwind for gold, oil, emerging markets (EM), and commodity exporters like Thailand.' },
-      { max: 100,      label: 'Normal',      color: '#8e8e93', note: 'Dollar in normal range. Balanced global currency flows. THB relatively stable.' },
-      { max: 106,      label: 'Strong',      color: '#ff9f0a', note: 'Strong dollar. Pressure on EM stocks, gold, and commodities. THB may weaken vs USD.' },
-      { max: Infinity, label: 'Very Strong', color: '#ff453a', note: 'Very strong dollar. Significant EM debt stress risk. THB under pressure, import costs rise.' },
+      { max: 90,       label: 'Weak',        color: '#b45309', note: 'Weak dollar. Strong tailwind for gold, oil, emerging markets (EM), and commodity exporters like Thailand.' },
+      { max: 100,      label: 'Normal',      color: '#6b7280', note: 'Dollar in normal range. Balanced global currency flows. THB relatively stable.' },
+      { max: 106,      label: 'Strong',      color: '#b45309', note: 'Strong dollar. Pressure on EM stocks, gold, and commodities. THB may weaken vs USD.' },
+      { max: Infinity, label: 'Very Strong', color: '#dc2626', note: 'Very strong dollar. Significant EM debt stress risk. THB under pressure, import costs rise.' },
     ],
   },
   oil: {
     title: 'WTI Crude Oil Price (USD/barrel)',
     description: 'West Texas Intermediate — the US crude oil benchmark. Oil is the world\'s most-traded commodity. Rising oil drives CPI inflation directly (fuel, transport, goods), forces the Fed to stay hawkish, and squeezes consumer spending globally. Thailand is a net oil importer, so high oil widens the trade deficit and weakens THB.',
     levels: [
-      { max: 50,       label: 'Low',      color: '#34c759', note: 'Low oil = low inflation. Consumer spending power is boosted. Fed has room to cut. Good for growth stocks and bonds.' },
-      { max: 70,       label: 'Normal',   color: '#8e8e93', note: 'Normal range. Balanced inflation impact. Energy sector stable. No major macro stress from oil.' },
-      { max: 90,       label: 'Elevated', color: '#ff9f0a', note: 'Elevated oil adds to CPI. Energy stocks outperform. Bonds under pressure as yields rise. Growth stocks face cost headwinds.' },
-      { max: Infinity, label: 'High',     color: '#ff453a', note: 'High oil = stagflation risk. Fed cannot cut. Real income squeezed. Energy dominates. Gold benefits as inflation hedge. THB under pressure.' },
+      { max: 50,       label: 'Low',      color: '#16a34a', note: 'Low oil = low inflation. Consumer spending power is boosted. Fed has room to cut. Good for growth stocks and bonds.' },
+      { max: 70,       label: 'Normal',   color: '#6b7280', note: 'Normal range. Balanced inflation impact. Energy sector stable. No major macro stress from oil.' },
+      { max: 90,       label: 'Elevated', color: '#b45309', note: 'Elevated oil adds to CPI. Energy stocks outperform. Bonds under pressure as yields rise. Growth stocks face cost headwinds.' },
+      { max: Infinity, label: 'High',     color: '#dc2626', note: 'High oil = stagflation risk. Fed cannot cut. Real income squeezed. Energy dominates. Gold benefits as inflation hedge. THB under pressure.' },
     ],
   },
 };
@@ -741,7 +741,7 @@ function MacroDashboard() {
         </div>
         {!loading && activeRows.length > 0 && (
           <div style={{
-            fontSize: 11, color: '#ff453a', background: 'rgba(255,69,58,0.1)',
+            fontSize: 11, color: 'var(--red-600)', background: 'var(--red-50)',
             border: '1px solid rgba(255,69,58,0.3)', padding: '4px 10px',
             borderRadius: 8, fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap',
           }}>
