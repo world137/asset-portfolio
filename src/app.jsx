@@ -420,7 +420,7 @@ function PortfolioGrowthPanel() {
       <div className="card-h" style={{ padding: '14px 18px' }}>
         <div>
           <div className="t">Portfolio Growth</div>
-          <div className="s">Price return by period · snapshot-based · in THB · excludes unrealized impact of sell log</div>
+          <div className="s">Price return by period · snapshot-based · in THB · <strong>From Cost</strong> row: cost-basis return (current holdings only)</div>
         </div>
       </div>
       <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
@@ -438,6 +438,29 @@ function PortfolioGrowthPanel() {
             </tr>
           </thead>
           <tbody>
+            {(() => {
+              const grand = Store.grandTotals();
+              const gPct  = grand.pct;
+              return (
+                <tr style={{ background: 'var(--bg-sunken)', borderBottom: '1px solid var(--border)' }}>
+                  <td style={{ fontWeight: 700, fontSize: 12, color: 'var(--fg-1)', whiteSpace: 'nowrap' }}>From Cost</td>
+                  <td className={'num ' + (gPct >= 0 ? 'up' : 'down')} style={{ fontWeight: 700 }}>
+                    {(gPct >= 0 ? '+' : '') + gPct.toFixed(2) + '%'}
+                  </td>
+                  {classes.map(cls => {
+                    const t = Store.classTotals(cls.key);
+                    const v = t.cost > 0 ? t.pct : null;
+                    return (
+                      <td key={cls.key} className={'num ' + (v == null ? '' : v >= 0 ? 'up' : 'down')} style={{ fontSize: 12 }}>
+                        {v == null
+                          ? <span style={{ color: 'var(--fg-4)' }}>—</span>
+                          : (v >= 0 ? '+' : '') + v.toFixed(2) + '%'}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })()}
             {PERIODS.map(({ label, days, ytd, max }) => {
               const past = findPast(days, ytd, max);
               if (!past) {
