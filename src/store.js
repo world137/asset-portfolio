@@ -55,7 +55,9 @@
       holdingTags: {},   // { "classKey:name": [tagId, ...] }
       holdingNotes: {},  // { "classKey:name": "note text" }
       goals: [],         // [{ id, name, targetAmount, targetDate, note, emoji }]
-      dividends: [],     // [{ id, classKey, name, exDate, payDate, amountPerShare, totalAmount, currency, note }]
+      dividends: [],     // [{ id, classKey, name, exDate, payDate, amountPerShare, totalAmount, currency, note }] — manual entries (persisted)
+      autoDividends: [], // same shape, auto:true — fetched from /api/dividends for holdings; NOT persisted
+      autoDividendsAt: null, // epoch ms of last successful fetch (not persisted)
       targetAllocation: {}, // { thaiStock: 30, usaStock: 20, ... } — target % per class
       priceAlerts: [],   // [{ id, classKey, name, condition: 'above'|'below', price, note, triggered }]
       prePostPrices: {}, // { "classKey:name": { price, pct, type: 'pre'|'post' } } — not persisted
@@ -70,7 +72,6 @@
       transactions: [],
       debts: [],
       bills: [],       // [{ id, name, amount, currency, dueDay, categoryId, note, active }]
-      recurring: [],   // [{ id, name, amount, flow, accountId, categoryId, dayOfMonth, note, active, lastGenerated }]
       savingsGoals: [], // [{ id, name, targetAmount, currency, targetDate, linkedAccountId, note, emoji }]
       walletSnapshots: [], // [{ date, netWorth, cash, liabilities }]
     };
@@ -122,7 +123,6 @@
       transactions:    saved.transactions    || [],
       debts:           saved.debts           || [],
       bills:           saved.bills           || [],
-      recurring:       saved.recurring       || [],
       savingsGoals:    saved.savingsGoals    || [],
       walletSnapshots: saved.walletSnapshots || [],
     };
@@ -1060,36 +1060,6 @@
       subs.forEach(fn => fn()); scheduleWalletSave();
     },
 
-    // ── Recurring transaction mutations ────────────────────────────────────────
-    addRecurring(data) {
-      wallet.recurring = wallet.recurring || [];
-      wallet.recurring.push({ id: uid(), name: data.name, amount: +data.amount || 0,
-        flow: data.flow || 'expense', accountId: data.accountId || null, categoryId: data.categoryId || null,
-        dayOfMonth: +data.dayOfMonth || 1, note: data.note || '', active: true, lastGenerated: null });
-      subs.forEach(fn => fn()); scheduleWalletSave();
-    },
-    updateRecurring(id, patch) {
-      wallet.recurring = wallet.recurring || [];
-      const i = wallet.recurring.findIndex(r => r.id === id);
-      if (i < 0) return;
-      wallet.recurring[i] = { ...wallet.recurring[i], ...patch };
-      subs.forEach(fn => fn()); scheduleWalletSave();
-    },
-    deleteRecurring(id) {
-      wallet.recurring = (wallet.recurring || []).filter(r => r.id !== id);
-      subs.forEach(fn => fn()); scheduleWalletSave();
-    },
-    generateRecurring(id, date) {
-      wallet.recurring = wallet.recurring || [];
-      const i = wallet.recurring.findIndex(r => r.id === id);
-      if (i < 0) return;
-      const r = wallet.recurring[i];
-      wallet.transactions.push({ id: uid(), accountId: r.accountId, date, amount: r.amount,
-        flow: r.flow, categoryId: r.categoryId, note: r.note || r.name, toAccountId: null, fxRate: null, tags: [] });
-      wallet.recurring[i] = { ...r, lastGenerated: date };
-      subs.forEach(fn => fn()); scheduleWalletSave();
-    },
-
     // ── Savings goals mutations ────────────────────────────────────────────────
     addSavingsGoal(data) {
       wallet.savingsGoals = wallet.savingsGoals || [];
@@ -1269,6 +1239,55 @@
     },
     deleteDividend(id) { state.dividends = (state.dividends || []).filter(d => d.id !== id); emit(); },
     getDividends() { return state.dividends || []; },
+
+    // ── Auto-fetched dividends (from /api/dividends, holdings only) ─────────────
+    // These are read-only and NOT persisted — re-fetched per session/load.
+    getAutoDividends() { return state.autoDividends || []; },
+    getDividendFetchedAt() { return state.autoDividendsAt; },
+    async fetchDividends(force) {
+      // Cache: skip if fetched within the last 6h and we already have data.
+      const FRESH_MS = 6 * 60 * 60 * 1000;
+      if (!force && state.autoDividendsAt && (Date.now() - state.autoDividendsAt < FRESH_MS)
+          && (state.autoDividends || []).length) {
+        return { cached: true };
+      }
+      // Build the request from currently-held Yahoo equities only (skip gold —
+      // GC=F has no dividends — and non-Yahoo classes).
+      const yahoo = [];
+      for (const cls of window.ASSET_CLASSES) {
+        if (cls.live !== 'yahoo' || cls.key === 'gold') continue;
+        for (const name of uniqueNames(cls.key)) {
+          const symbol = cls.yahooSymbol || (name + (cls.yahooSuffix || ''));
+          yahoo.push({ key: cls.key, name, symbol, ccy: cls.ccy });
+        }
+      }
+      if (!yahoo.length) { state.autoDividends = []; state.autoDividendsAt = Date.now(); emit(); return { count: 0 }; }
+      try {
+        const r = await fetch('/api/dividends', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ yahoo }),
+        });
+        const ct = r.headers.get('content-type') || '';
+        if (!r.ok || !ct.includes('application/json')) throw new Error('no-api');
+        const data = await r.json();
+        const list = Array.isArray(data.dividends) ? data.dividends : [];
+        state.autoDividends = list.map(d => ({
+          id: `auto:${d.classKey}:${d.name}:${d.exDate}`,
+          classKey: d.classKey, name: d.name,
+          exDate: d.exDate, payDate: d.payDate || d.exDate,
+          amountPerShare: d.amountPerShare != null ? +d.amountPerShare : null,
+          totalAmount: null, // computed live from current qty in the view
+          currency: d.currency || 'USD', note: '', auto: true,
+        }));
+        state.autoDividendsAt = Date.now();
+        emit();
+        return { count: state.autoDividends.length, errors: data.errors || [] };
+      } catch (e) {
+        // Leave any previously fetched entries intact on failure.
+        return { error: e.message };
+      }
+    },
 
     // ── Holding notes ──────────────────────────────────────────────────────────
     setHoldingNote(classKey, name, note) {

@@ -971,7 +971,7 @@ function TechnicalAnalysisCore({ initSymbol, compact }) {
     setErr(null);
     setBars(null);
     try {
-      const r = await fetch(`/api/technical?symbol=${encodeURIComponent(s)}&range=2y`);
+      const r = await fetch(`/api/chart?symbol=${encodeURIComponent(s)}&range=2y&format=bars`);
       const j = await r.json();
       if (j.error) throw new Error(j.error);
       if (!j.bars || j.bars.length < 60) throw new Error(`Not enough data (got ${j.bars?.length ?? 0} bars, need 60+)`);
