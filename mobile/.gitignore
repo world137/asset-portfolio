@@ -21,3 +21,5 @@ yarn-error.*
 
 # Env
 .env*.local
+.vercel
+.env*

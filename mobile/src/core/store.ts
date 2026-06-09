@@ -50,6 +50,23 @@ export interface Sale {
   cost: number; proceeds: number; realizedPnl: number; pnlPct: number;
 }
 
+export interface Goal {
+  id: string; name: string; targetAmount: number;
+  targetDate: string | null; note: string; emoji: string; createdAt?: string;
+}
+
+export interface Dividend {
+  id: string; classKey: string; name: string;
+  exDate: string | null; payDate: string;
+  amountPerShare: number | null; totalAmount: number | null;
+  currency: string; note: string; auto?: boolean;
+}
+
+export interface PriceAlert {
+  id: string; classKey: string; name: string;
+  condition: 'above' | 'below'; price: number; note: string; triggered: boolean;
+}
+
 export interface State {
   holdings: Record<string, Lot[]>;
   sectors: Record<string, string>;
@@ -62,6 +79,13 @@ export interface State {
   sales: Sale[];
   tags: Tag[];
   holdingTags: Record<string, string[]>;
+  holdingNotes: Record<string, string>;
+  goals: Goal[];
+  dividends: Dividend[];
+  autoDividends: Dividend[];
+  autoDividendsAt: number | null;
+  targetAllocation: Record<string, number>;
+  priceAlerts: PriceAlert[];
   prePostPrices: Record<string, { price: number; pct: number; type: 'pre' | 'post' }>;
   dayChangePrices: Record<string, number>;
 }
@@ -96,11 +120,28 @@ export interface Debt {
   installment?: { months: number; interestRate: number; paidMonths: number } | null;
 }
 
+export interface Bill {
+  id: string; name: string; amount: number; currency: string;
+  dueDay: number; categoryId?: string | null; note?: string; active: boolean;
+}
+
+export interface SavingsGoal {
+  id: string; name: string; targetAmount: number; currency: string;
+  targetDate?: string | null; linkedAccountId?: string | null; note?: string; emoji: string;
+}
+
+export interface WalletSnapshot {
+  date: string; netWorth: number; cash: number; liabilities: number;
+}
+
 export interface WalletState {
   accounts: WalletAccount[];
   categories: WalletCategory[];
   transactions: WalletTransaction[];
   debts: Debt[];
+  bills: Bill[];
+  savingsGoals: SavingsGoal[];
+  walletSnapshots: WalletSnapshot[];
 }
 
 // ── Internal state ─────────────────────────────────────────────────────────────
@@ -129,6 +170,13 @@ function freshState(): State {
     sales: [],
     tags: [],
     holdingTags: {},
+    holdingNotes: {},
+    goals: [],
+    dividends: [],
+    autoDividends: [],
+    autoDividendsAt: null,
+    targetAllocation: {},
+    priceAlerts: [],
     prePostPrices: {},
     dayChangePrices: {},
   };
@@ -140,6 +188,9 @@ function freshWallet(): WalletState {
     categories: DEFAULT_WALLET_CATEGORIES.map(c => ({ ...c } as WalletCategory)),
     transactions: [],
     debts: [],
+    bills: [],
+    savingsGoals: [],
+    walletSnapshots: [],
   };
 }
 
@@ -167,6 +218,9 @@ function buildSavePayload() {
     settings: state.settings, lastPriceSync: state.lastPriceSync,
     priceMode: state.priceMode, snapshots: state.snapshots, sales: state.sales,
     tags: state.tags, holdingTags: state.holdingTags,
+    holdingNotes: state.holdingNotes, goals: state.goals,
+    dividends: state.dividends, targetAllocation: state.targetAllocation,
+    priceAlerts: state.priceAlerts,
   });
 }
 
@@ -239,6 +293,13 @@ function restoreFromSaved(saved: Partial<State>): State {
     sales: saved.sales || [],
     tags: saved.tags || [],
     holdingTags: saved.holdingTags || {},
+    holdingNotes: saved.holdingNotes || {},
+    goals: saved.goals || [],
+    dividends: saved.dividends || [],
+    autoDividends: [],
+    autoDividendsAt: null,
+    targetAllocation: saved.targetAllocation || {},
+    priceAlerts: saved.priceAlerts || [],
     prePostPrices: {},
     dayChangePrices: {},
   };
@@ -248,10 +309,13 @@ function restoreWalletFromSaved(saved: Partial<WalletState>): WalletState {
   const base = freshWallet();
   const savedCats = saved.categories || [];
   return {
-    accounts:     saved.accounts     || [],
-    categories:   savedCats.length ? savedCats : base.categories,
-    transactions: saved.transactions || [],
-    debts:        saved.debts        || [],
+    accounts:        saved.accounts        || [],
+    categories:      savedCats.length ? savedCats : base.categories,
+    transactions:    saved.transactions    || [],
+    debts:           saved.debts           || [],
+    bills:           saved.bills           || [],
+    savingsGoals:    saved.savingsGoals    || [],
+    walletSnapshots: saved.walletSnapshots || [],
   };
 }
 
@@ -957,6 +1021,7 @@ const Store = {
       state.lastPriceSync = Date.now();
       state.priceMode = 'api';
       state.priceErrors = j.errors || [];
+      takeSnapshot();
       emitOnly();
       return { errors: j.errors || [] };
     } catch (e) {
@@ -965,6 +1030,214 @@ const Store = {
       emitOnly();
       return { errors: [String(e)] };
     }
+  },
+
+  // ── Target allocation ───────────────────────────────────────────────────────
+  setTargetAllocation(classKey: string, pct: number) {
+    state.targetAllocation = state.targetAllocation || {};
+    state.targetAllocation[classKey] = +pct;
+    emit();
+  },
+  getTargetAllocation: () => state.targetAllocation || {},
+
+  // ── Goals ───────────────────────────────────────────────────────────────────
+  addGoal(data: { name: string; targetAmount: number; targetDate?: string | null; note?: string; emoji?: string }) {
+    state.goals = state.goals || [];
+    state.goals.push({
+      id: uid(), name: data.name, targetAmount: +data.targetAmount,
+      targetDate: data.targetDate || null, note: data.note || '',
+      emoji: data.emoji || '🎯', createdAt: new Date().toISOString().slice(0, 10),
+    });
+    emit();
+  },
+  updateGoal(id: string, patch: Partial<Goal>) {
+    const i = (state.goals || []).findIndex(g => g.id === id);
+    if (i < 0) return;
+    state.goals[i] = { ...state.goals[i], ...patch };
+    emit();
+  },
+  deleteGoal(id: string) { state.goals = (state.goals || []).filter(g => g.id !== id); emit(); },
+  getGoals: () => state.goals || [],
+
+  // ── Dividends ───────────────────────────────────────────────────────────────
+  addDividend(data: { classKey: string; name: string; exDate?: string | null; payDate: string; amountPerShare?: number | null; totalAmount?: number | null; currency?: string; note?: string }) {
+    state.dividends = state.dividends || [];
+    state.dividends.push({
+      id: uid(), classKey: data.classKey, name: data.name,
+      exDate: data.exDate || null, payDate: data.payDate,
+      amountPerShare: data.amountPerShare ? +data.amountPerShare : null,
+      totalAmount: data.totalAmount ? +data.totalAmount : null,
+      currency: data.currency || 'THB', note: data.note || '',
+    });
+    emit();
+  },
+  updateDividend(id: string, patch: Partial<Dividend>) {
+    const i = (state.dividends || []).findIndex(d => d.id === id);
+    if (i < 0) return;
+    state.dividends[i] = { ...state.dividends[i], ...patch };
+    emit();
+  },
+  deleteDividend(id: string) { state.dividends = (state.dividends || []).filter(d => d.id !== id); emit(); },
+  getDividends: () => state.dividends || [],
+  getAutoDividends: () => state.autoDividends || [],
+  getDividendFetchedAt: () => state.autoDividendsAt,
+  async fetchDividends(force?: boolean): Promise<{ cached?: boolean; count?: number; errors?: string[]; error?: string }> {
+    const FRESH_MS = 6 * 60 * 60 * 1000;
+    if (!force && state.autoDividendsAt && (Date.now() - state.autoDividendsAt < FRESH_MS) && (state.autoDividends || []).length) {
+      return { cached: true };
+    }
+    const yahoo: { key: string; name: string; symbol: string; ccy: string }[] = [];
+    for (const cls of ASSET_CLASSES) {
+      if (cls.live !== 'yahoo' || cls.key === 'gold') continue;
+      const names = [...new Set((state.holdings[cls.key] || []).map(l => l.name))];
+      for (const name of names) {
+        const symbol = cls.yahooSymbol || (name + (cls.yahooSuffix || ''));
+        yahoo.push({ key: cls.key, name, symbol, ccy: cls.ccy });
+      }
+    }
+    if (!yahoo.length) { state.autoDividends = []; state.autoDividendsAt = Date.now(); emitOnly(); return { count: 0 }; }
+    try {
+      const r = await fetch(`${API_BASE}/api/dividends`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ yahoo }),
+      });
+      const ct = r.headers.get('content-type') || '';
+      if (!r.ok || !ct.includes('application/json')) throw new Error('no-api');
+      const data = await r.json();
+      const list = Array.isArray(data.dividends) ? data.dividends : [];
+      state.autoDividends = list.map((d: any) => ({
+        id: `auto:${d.classKey}:${d.name}:${d.exDate}`,
+        classKey: d.classKey, name: d.name,
+        exDate: d.exDate, payDate: d.payDate || d.exDate,
+        amountPerShare: d.amountPerShare != null ? +d.amountPerShare : null,
+        totalAmount: null, currency: d.currency || 'USD', note: '', auto: true,
+      }));
+      state.autoDividendsAt = Date.now();
+      emitOnly();
+      return { count: state.autoDividends.length, errors: data.errors || [] };
+    } catch (e) {
+      return { error: String(e) };
+    }
+  },
+
+  // ── Holding notes ───────────────────────────────────────────────────────────
+  setHoldingNote(classKey: string, name: string, note: string) {
+    state.holdingNotes = state.holdingNotes || {};
+    const key = classKey + ':' + name;
+    if (!note || !note.trim()) delete state.holdingNotes[key];
+    else state.holdingNotes[key] = note.trim();
+    emit();
+  },
+  getHoldingNote: (classKey: string, name: string) => (state.holdingNotes || {})[classKey + ':' + name] || '',
+  getHoldingNotes: () => state.holdingNotes || {},
+
+  // ── Price alerts ────────────────────────────────────────────────────────────
+  addPriceAlert(data: { classKey: string; name: string; condition: 'above' | 'below'; price: number; note?: string }) {
+    state.priceAlerts = state.priceAlerts || [];
+    state.priceAlerts.push({
+      id: uid(), classKey: data.classKey, name: data.name,
+      condition: data.condition, price: +data.price, note: data.note || '', triggered: false,
+    });
+    emit();
+  },
+  deletePriceAlert(id: string) { state.priceAlerts = (state.priceAlerts || []).filter(a => a.id !== id); emit(); },
+  getPriceAlerts: () => state.priceAlerts || [],
+  markAlertTriggered(id: string) {
+    const i = (state.priceAlerts || []).findIndex(a => a.id === id);
+    if (i >= 0) { state.priceAlerts[i] = { ...state.priceAlerts[i], triggered: true }; emit(); }
+  },
+
+  // ── Bills ───────────────────────────────────────────────────────────────────
+  addBill(data: { name: string; amount: number; currency?: string; dueDay: number; categoryId?: string | null; note?: string }) {
+    wallet.bills = wallet.bills || [];
+    wallet.bills.push({ id: uid(), name: data.name, amount: +data.amount || 0, currency: data.currency || 'THB',
+      dueDay: +data.dueDay || 1, categoryId: data.categoryId || null, note: data.note || '', active: true });
+    scheduleWalletSave(); emitOnly();
+  },
+  updateBill(id: string, patch: Partial<Bill>) {
+    wallet.bills = wallet.bills || [];
+    const i = wallet.bills.findIndex(b => b.id === id);
+    if (i < 0) return;
+    wallet.bills[i] = { ...wallet.bills[i], ...patch };
+    scheduleWalletSave(); emitOnly();
+  },
+  deleteBill(id: string) {
+    wallet.bills = (wallet.bills || []).filter(b => b.id !== id);
+    scheduleWalletSave(); emitOnly();
+  },
+  getBillsDueSoon(withinDays = 3) {
+    const bills = wallet.bills || [];
+    const today = new Date();
+    return bills.filter(b => {
+      if (!b.active) return false;
+      const thisMonth = new Date(today.getFullYear(), today.getMonth(), b.dueDay);
+      const diff = (thisMonth.getTime() - today.getTime()) / 86400000;
+      return diff >= 0 && diff <= withinDays;
+    });
+  },
+
+  // ── Savings goals ───────────────────────────────────────────────────────────
+  addSavingsGoal(data: { name: string; targetAmount: number; currency?: string; targetDate?: string | null; linkedAccountId?: string | null; note?: string; emoji?: string }) {
+    wallet.savingsGoals = wallet.savingsGoals || [];
+    wallet.savingsGoals.push({ id: uid(), name: data.name, targetAmount: +data.targetAmount || 0,
+      currency: data.currency || 'THB', targetDate: data.targetDate || null,
+      linkedAccountId: data.linkedAccountId || null, note: data.note || '', emoji: data.emoji || '🎯' });
+    scheduleWalletSave(); emitOnly();
+  },
+  updateSavingsGoal(id: string, patch: Partial<SavingsGoal>) {
+    wallet.savingsGoals = wallet.savingsGoals || [];
+    const i = wallet.savingsGoals.findIndex(g => g.id === id);
+    if (i < 0) return;
+    wallet.savingsGoals[i] = { ...wallet.savingsGoals[i], ...patch };
+    scheduleWalletSave(); emitOnly();
+  },
+  deleteSavingsGoal(id: string) {
+    wallet.savingsGoals = (wallet.savingsGoals || []).filter(g => g.id !== id);
+    scheduleWalletSave(); emitOnly();
+  },
+
+  // ── Wallet snapshots ────────────────────────────────────────────────────────
+  takeWalletSnapshot() {
+    const today = new Date().toISOString().slice(0, 10);
+    wallet.walletSnapshots = wallet.walletSnapshots || [];
+    const nw = Store.netWorthSummary();
+    const snap: WalletSnapshot = { date: today, netWorth: nw.netWorth, cash: nw.cashTotal, liabilities: nw.totalLiabilities };
+    const idx = wallet.walletSnapshots.findIndex(s => s.date === today);
+    if (idx >= 0) wallet.walletSnapshots[idx] = snap;
+    else wallet.walletSnapshots.push(snap);
+    if (wallet.walletSnapshots.length > 365) wallet.walletSnapshots = wallet.walletSnapshots.slice(-365);
+    scheduleWalletSave();
+  },
+  getWalletSnapshots: () => wallet.walletSnapshots || [],
+
+  // ── Data export / import ──────────────────────────────────────────────────────
+  async exportData() {
+    const id = portfolioId;
+    const [pRes, wRes] = await Promise.all([
+      fetch(`${API_BASE}/api/portfolio?id=${encodeURIComponent(id)}`),
+      fetch(`${API_BASE}/api/wallet?id=${encodeURIComponent(id)}`),
+    ]);
+    if (!pRes.ok) throw new Error('export-portfolio-failed');
+    if (!wRes.ok) throw new Error('export-wallet-failed');
+    const pJson = await pRes.json();
+    const wJson = await wRes.json();
+    const portfolio = pJson.data ? JSON.parse(pJson.data) : null;
+    const walletData = wJson.data ? JSON.parse(wJson.data) : null;
+    return { portfolio, wallet: walletData, exportedAt: new Date().toISOString(), version: 1 };
+  },
+  async importData({ portfolio, wallet: walletData, mode }: { portfolio: any; wallet: any; mode: string }) {
+    const r = await fetch(`${API_BASE}/api/data-transfer`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: portfolioId, mode, portfolio, wallet: walletData }),
+    });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({} as any));
+      throw new Error(j.error || 'import-failed');
+    }
+    await Promise.all([Store.loadFromCloud(), Store.loadWalletFromCloud()]);
+    emitOnly();
   },
 };
 
