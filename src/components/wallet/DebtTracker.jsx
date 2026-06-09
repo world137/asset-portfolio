@@ -300,11 +300,10 @@ function DebtTracker() {
                 const totalMo       = d.installment ? d.installment.months : 0;
                 const canPay        = d.installment && !d.settled && paidMo < totalMo;
 
-                // For CC-linked non-installment debts: show actual remaining CC balance, not original amount
                 const linkedAcct = d.linkedAccountId ? wallet.accounts.find(a => a.id === d.linkedAccountId) : null;
                 const isCCLinked = !d.installment && linkedAcct && linkedAcct.type === 'credit_card';
-                const displayAmt = isCCLinked
-                  ? Math.max(0, -Store.accountBalance(d.linkedAccountId))
+                const displayAmt = d.installment
+                  ? (d.amount * (1 + ((d.installment.interestRate || 0) / 100) * (d.installment.months / 12)) / d.installment.months * ((d.installment.months || 0) - (d.installment.paidMonths || 0)))
                   : d.amount;
 
                 return (
@@ -327,11 +326,6 @@ function DebtTracker() {
                     <td style={{ fontWeight: 500 }}>{d.counterparty}</td>
                     <td className="num" style={{ fontWeight: 600, color: isOutstanding ? 'var(--green-600)' : 'var(--red-600)' }}>
                       {window.fmtCcy(displayAmt, d.currency)}
-                      {isCCLinked && displayAmt !== d.amount && (
-                        <div style={{ fontWeight: 400, fontSize: 11, color: 'var(--fg-4)', marginTop: 2, textDecoration: 'line-through' }}>
-                          {window.fmtCcy(d.amount, d.currency)}
-                        </div>
-                      )}
                       {instCalc && (
                         <div style={{ fontWeight: 400, fontSize: 11, color: 'var(--fg-3)', marginTop: 2 }}>
                           {window.fmtCcy(instCalc.monthlyPayment, d.currency)}/mo
