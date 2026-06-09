@@ -731,6 +731,21 @@
           note:      `Sell ${window.fmtQty ? window.fmtQty(+qty) : qty} ${name}`,
         });
       }
+      // FIFO lot reduction: deduct sold qty from oldest lots first
+      let toDeduct = +qty;
+      const matchingLots = (state.holdings[classKey] || [])
+        .filter(l => l.name === name)
+        .sort((a, b) => (a.boughtAt || '0000-00-00').localeCompare(b.boughtAt || '0000-00-00'));
+      for (const lot of matchingLots) {
+        if (toDeduct <= 0) break;
+        if (lot.qty <= toDeduct) {
+          toDeduct -= lot.qty;
+          state.holdings[classKey] = state.holdings[classKey].filter(l => l.id !== lot.id);
+        } else {
+          lot.qty = +(lot.qty - toDeduct).toFixed(8);
+          toDeduct = 0;
+        }
+      }
       emit();
     },
     deleteSale(id) { state.sales = (state.sales || []).filter(s => s.id !== id); emit(); },

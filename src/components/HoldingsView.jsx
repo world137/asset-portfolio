@@ -346,10 +346,14 @@ function squarifiedTreemap(dataItems, totalW, totalH) {
 function getDayChangeBg(pct, totalPct) {
   const v = pct != null ? pct : totalPct;
   if (v == null) return { bg: 'var(--bg-sunken)', text: 'var(--fg-2)', border: 'transparent' };
-  if (v >= 3)   return { bg: '#1a7a3a', text: '#fff', border: 'transparent' };
-  if (v >= 0)   return { bg: 'rgba(48,209,88,0.22)', text: 'var(--fg-1)', border: 'transparent' };
-  if (v >= -3)  return { bg: 'rgba(255,69,58,0.22)', text: 'var(--fg-1)', border: 'transparent' };
-  return              { bg: '#a01a1a', text: '#fff', border: 'transparent' };
+  if (v >= 3)  return { bg: '#0d5c1a', text: '#fff',        border: 'transparent' };
+  if (v >= 2)  return { bg: '#1a7a3a', text: '#fff',        border: 'transparent' };
+  if (v >= 1)  return { bg: 'rgba(48,209,88,0.55)', text: '#fff',        border: 'transparent' };
+  if (v >= 0)  return { bg: 'rgba(48,209,88,0.18)', text: 'var(--fg-1)', border: 'transparent' };
+  if (v >= -1) return { bg: 'rgba(255,69,58,0.18)', text: 'var(--fg-1)', border: 'transparent' };
+  if (v >= -2) return { bg: 'rgba(255,69,58,0.55)', text: '#fff',        border: 'transparent' };
+  if (v >= -3) return { bg: '#7a1a1a', text: '#fff',        border: 'transparent' };
+  return             { bg: '#4a0a0a', text: '#ffb3b3',      border: 'transparent' };
 }
 
 function BentoTooltip({ data, sym, x, y, containerW }) {

@@ -142,6 +142,81 @@ function ExpenseHeatmap({ monthPrefix, transactions, accounts, sym }) {
   );
 }
 
+// ── Income Heatmap (day-of-week × week-of-month) ──────────────────────────────
+function IncomeHeatmap({ monthPrefix, transactions, accounts, sym }) {
+  const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const WEEKS = 5;
+
+  const [y, m] = monthPrefix.split('-').map(Number);
+  const firstDOW = new Date(y, m - 1, 1).getDay();
+  const daysInMonth = new Date(y, m, 0).getDate();
+
+  const dayTotals = {};
+  for (const t of transactions) {
+    if (!t.date.startsWith(monthPrefix) || t.flow !== 'income') continue;
+    const acc = accounts.find(a => a.id === t.accountId);
+    const ccy = acc ? acc.currency : 'THB';
+    const amt = Store.walletToDisplay(t.amount, ccy);
+    const d = parseInt(t.date.slice(8));
+    dayTotals[d] = (dayTotals[d] || 0) + amt;
+  }
+
+  const maxVal = Math.max(...Object.values(dayTotals), 1);
+
+  const cells = Array.from({ length: WEEKS * 7 }, (_, i) => {
+    const gridDay = i - firstDOW + 1;
+    if (gridDay < 1 || gridDay > daysInMonth) return null;
+    return gridDay;
+  });
+
+  const intensityColor = (val) => {
+    if (!val) return 'var(--bg-3)';
+    const pct = Math.sqrt(val / maxVal);
+    const r = Math.round(48  + (20  - 48)  * pct);
+    const g = Math.round(209 + (140 - 209) * pct);
+    const b = Math.round(88  + (60  - 88)  * pct);
+    return `rgba(${r},${g},${b},${0.15 + pct * 0.75})`;
+  };
+
+  if (Object.keys(dayTotals).length === 0) return null;
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>Income Heatmap</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3, marginBottom: 3 }}>
+        {DOW.map(d => (
+          <div key={d} style={{ textAlign: 'center', fontSize: 10, color: 'var(--fg-3)', fontWeight: 600 }}>{d}</div>
+        ))}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3 }}>
+        {cells.map((day, i) => {
+          if (!day) return <div key={i} />;
+          const val = dayTotals[day] || 0;
+          return (
+            <div key={i} title={day + ': ' + (val ? sym + window.fmtBig(val) : 'No income')}
+                 style={{
+                   height: 28, borderRadius: 5,
+                   background: intensityColor(val),
+                   display: 'flex', alignItems: 'center', justifyContent: 'center',
+                   fontSize: 9.5, color: val > maxVal * 0.5 ? '#fff' : 'var(--fg-2)', fontWeight: 600,
+                   cursor: 'default',
+                 }}>
+              {day}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 10, color: 'var(--fg-3)' }}>
+        <span>Low</span>
+        {[0.1, 0.3, 0.5, 0.7, 0.9].map(p => (
+          <div key={p} style={{ width: 14, height: 10, borderRadius: 2, background: intensityColor(p * p * maxVal) }} />
+        ))}
+        <span>High</span>
+      </div>
+    </div>
+  );
+}
+
 // ── Wallet Summary page ───────────────────────────────────────────────────────
 function WalletSummary() {
   useStore();
@@ -234,27 +309,37 @@ function WalletSummary() {
             {catData.income.length === 0 ? (
               <div className="empty">No income transactions this month.</div>
             ) : (
-              <div className="chartwrap">
-                <Donut segments={catData.income} size={180} style={settings.chartStyle}
-                       hot={hot} onHover={setHot}
-                       center={
-                         <React.Fragment>
-                           <div className="c-lab">Income</div>
-                           <div className="c-val up">{sym}{window.fmtBig(totalIncome)}</div>
-                         </React.Fragment>
-                       } />
-                <div className="legend">
-                  {catData.income.map((c, i) => (
-                    <div key={c.label} className="row"
-                         onMouseEnter={() => setHot(i)} onMouseLeave={() => setHot(null)}>
-                      <span className="sw" style={{ background: c.color }} />
-                      <span className="nm">{c.label}</span>
-                      <span className="vv up">{sym}{window.fmtBig(c.value)}</span>
-                      <span className="pc">{((c.value / totalIncome) * 100).toFixed(1)}%</span>
-                    </div>
-                  ))}
+              <React.Fragment>
+                <div className="chartwrap">
+                  <Donut segments={catData.income} size={180} style={settings.chartStyle}
+                         hot={hot} onHover={setHot}
+                         center={
+                           <React.Fragment>
+                             <div className="c-lab">Income</div>
+                             <div className="c-val up">{sym}{window.fmtBig(totalIncome)}</div>
+                           </React.Fragment>
+                         } />
+                  <div className="legend">
+                    {catData.income.map((c, i) => (
+                      <div key={c.label} className="row"
+                           onMouseEnter={() => setHot(i)} onMouseLeave={() => setHot(null)}>
+                        <span className="sw" style={{ background: c.color }} />
+                        <span className="nm">{c.label}</span>
+                        <span className="vv up">{sym}{window.fmtBig(c.value)}</span>
+                        <span className="pc">{((c.value / totalIncome) * 100).toFixed(1)}%</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+                <div style={{ padding: '0 16px 16px' }}>
+                  <IncomeHeatmap
+                    monthPrefix={monthPrefix}
+                    transactions={wallet.transactions}
+                    accounts={wallet.accounts}
+                    sym={sym}
+                  />
+                </div>
+              </React.Fragment>
             )}
           </div>
         </div>

@@ -158,8 +158,8 @@ function SellLogView() {
                   </div>
                 )}
                 {name.trim() && !selectedPos && (
-                  <div className="t-small" style={{ marginTop: 5, color: '#f59e0b' }}>
-                    "{name}" not found in {cls.label} holdings — you can still record the sale.
+                  <div className="t-small" style={{ marginTop: 5, color: 'var(--fg-3)' }}>
+                    Not in holdings — enter cost &amp; sell price below to calculate P/L.
                   </div>
                 )}
               </div>
@@ -179,6 +179,18 @@ function SellLogView() {
                 <label className="flabel">Quantity / Units Sold</label>
                 <input className="input" type="number" step="any" style={{ width: '100%', minWidth: 0, boxSizing: 'border-box' }} value={qty}
                        onChange={e => setQty(e.target.value)} placeholder="Number of units sold" />
+                {selectedPos && availableQty > 0 && (
+                  <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                    {[25, 50, 75, 100].map(pct => (
+                      <button key={pct} className="icon-toggle"
+                              style={{ flex: 1, fontSize: 11, fontWeight: 600, padding: '3px 0', borderRadius: 6,
+                                       background: 'var(--bg-inset,var(--bg-app))', border: '1px solid var(--border-1)' }}
+                              onClick={() => setQty(String(+(availableQty * pct / 100).toFixed(6)))}>
+                        {pct}%
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {overQty && (
                   <div className="t-small" style={{ marginTop: 5, color: '#f59e0b' }}>
                     Warning: exceeds current holding of {window.fmtQty(availableQty)} units.

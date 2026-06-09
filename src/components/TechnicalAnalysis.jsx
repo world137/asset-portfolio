@@ -854,11 +854,11 @@ function MacroDashboard() {
                           <td key={col} style={{ padding: '5px 4px', borderBottom: '1px solid var(--border-1)', textAlign: 'center' }}>
                             <div style={{
                               background: st.bg, border: '1px solid ' + st.border, borderRadius: 6,
-                              padding: '5px 2px', opacity: active ? 1 : 0.5,
-                              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
+                              padding: '5px 2px', opacity: active ? 1 : 0.4,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
                             }}>
                               <span style={{ fontSize: 12, fontWeight: 700, color: st.text, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
-                                {impactArrow(impact)}
+                                {impact > 0 ? '+' : ''}{impact !== 0 ? impact : '·'}
                               </span>
                             </div>
                           </td>
@@ -906,16 +906,16 @@ function MacroDashboard() {
             <span style={{ fontSize: 10, color: 'var(--fg-3)', fontWeight: 600 }}>Scale:</span>
             {[3, 2, 1, 0, -1, -2, -3].map(level => {
               const st = macroImpactStyle(level);
-              const label = level >= 3 ? '↑↑↑ Strong Bull'
-                          : level === 2 ? '↑↑ Bull'
-                          : level === 1 ? '↑ Mild Bull'
-                          : level === 0 ? '· Neutral'
-                          : level === -1 ? '↓ Mild Bear'
-                          : level === -2 ? '↓↓ Bear'
-                          : '↓↓↓ Strong Bear';
+              const label = level >= 3 ? 'Strong Bull (+3)'
+                          : level === 2 ? 'Bull (+2)'
+                          : level === 1 ? 'Mild Bull (+1)'
+                          : level === 0 ? 'Neutral (0)'
+                          : level === -1 ? 'Mild Bear (-1)'
+                          : level === -2 ? 'Bear (-2)'
+                          : 'Strong Bear (-3)';
               return (
                 <div key={level} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10 }}>
-                  <div style={{ width: 12, height: 12, borderRadius: 3, background: st.bg, border: '1px solid ' + st.border, flexShrink: 0 }} />
+                  <div style={{ width: 16, height: 12, borderRadius: 3, background: st.bg, border: '1px solid ' + st.border, flexShrink: 0 }} />
                   <span style={{ color: 'var(--fg-3)' }}>{label}</span>
                 </div>
               );
