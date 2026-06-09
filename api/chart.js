@@ -12,6 +12,7 @@ const INTERVAL_MAP = {
   '3mo': '1d',
   '6mo': '1wk',
   '1y':  '1wk',
+  '2y':  '1d',
   '5y':  '1mo',
   'ytd': '1d',
   'max': '3mo',
@@ -24,8 +25,9 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
 
-  const { symbol, range = '1mo' } = req.query;
+  const { symbol, range = '1mo', format } = req.query;
   if (!symbol) return res.status(400).json({ error: 'symbol required' });
+  const isBars = format === 'bars';
 
   const interval = INTERVAL_MAP[range] || '1d';
   const hosts = ['query1.finance.yahoo.com', 'query2.finance.yahoo.com'];
@@ -55,6 +57,25 @@ export default async function handler(req, res) {
       })).filter(p => p.c != null);
 
       res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
+
+      if (isBars) {
+        // bars format for technical analysis — t in seconds, includes volume
+        const bars = timestamps.map((t, i) => ({
+          t,
+          o: quote.open?.[i]   ?? null,
+          h: quote.high?.[i]   ?? null,
+          l: quote.low?.[i]    ?? null,
+          c: quote.close?.[i]  ?? null,
+          v: quote.volume?.[i] ?? null,
+        })).filter(b => b.c != null && b.h != null && b.l != null);
+        return res.status(200).json({
+          bars,
+          currency: meta.currency || 'USD',
+          symbol:   meta.symbol   || symbol,
+          name:     meta.shortName || meta.longName || symbol,
+        });
+      }
+
       return res.status(200).json({
         symbol,
         currency: meta.currency || 'USD',

@@ -63,7 +63,7 @@ export interface TechnicalData {
 
 export async function apiTechnical(symbol: string): Promise<TechnicalData | null> {
   try {
-    const r = await fetch(`${API_BASE}/api/technical?symbol=${encodeURIComponent(symbol)}`);
+    const r = await fetch(`${API_BASE}/api/chart?symbol=${encodeURIComponent(symbol)}&range=2y&format=bars`);
     if (!r.ok) return null;
     return r.json();
   } catch { return null; }
