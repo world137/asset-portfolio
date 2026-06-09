@@ -854,8 +854,13 @@ function MacroDashboard() {
                           <td key={col} style={{ padding: '5px 4px', borderBottom: '1px solid var(--border-1)', textAlign: 'center' }}>
                             <div style={{
                               background: st.bg, border: '1px solid ' + st.border, borderRadius: 6,
-                              height: 28, opacity: active ? 1 : 0.4,
-                            }} title={col + ': ' + (impact > 0 ? '+' : '') + impact} />
+                              padding: '5px 2px', opacity: active ? 1 : 0.4,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}>
+                              <span style={{ fontSize: 12, fontWeight: 700, color: st.text, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
+                                {impact > 0 ? '+' : ''}{impact !== 0 ? impact : '·'}
+                              </span>
+                            </div>
                           </td>
                         );
                       })}
