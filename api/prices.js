@@ -65,6 +65,7 @@ async function yahooPrice(symbol) {
         prevClose: meta.chartPreviousClose ?? meta.previousClose ?? null,
         pre,
         post,
+        pe: meta.trailingPE ?? null,
       };
     } catch (e) { lastErr = e; }
   }
@@ -154,15 +155,17 @@ export default async function handler(req, res) {
   const prices = {};
   const prePost = {};
   const prevCloses = {};
+  const peRatios = {};
   const errors = [];
   const tasks = [];
 
   for (const it of (body.yahoo || [])) {
     tasks.push(yahooPrice(it.symbol)
-      .then(({ price, prevClose, pre, post }) => {
+      .then(({ price, prevClose, pre, post, pe }) => {
         const k = `${it.key}:${it.name}`;
         prices[k] = price;
         if (prevClose != null) prevCloses[k] = prevClose;
+        if (pe != null && isFinite(pe) && pe > 0) peRatios[k] = +pe.toFixed(2);
         const active = post || pre;
         if (active) prePost[k] = { ...active, type: post ? 'post' : 'pre' };
       })
@@ -204,5 +207,5 @@ export default async function handler(req, res) {
 
   // light caching at the edge (30s)
   res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=120');
-  return res.status(200).json({ prices, prePost, prevCloses, fx, errors, ts: Date.now() });
+  return res.status(200).json({ prices, prePost, prevCloses, peRatios, fx, errors, ts: Date.now() });
 }

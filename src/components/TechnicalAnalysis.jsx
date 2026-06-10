@@ -889,7 +889,7 @@ function MacroDashboard() {
                             display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
                           }}>
                             <span style={{ fontSize: 12, fontWeight: 800, color: st.text, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
-                              {net > 0 ? '+' : ''}{net}
+                              {clamped > 0 ? '+' : ''}{clamped}
                             </span>
                           </div>
                         </td>

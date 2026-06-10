@@ -577,6 +577,7 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
 
   const hasChart   = cls.live && cls.live !== 'settrade';
   const hasDayChg  = !!cls.live; // all live-price classes show day change
+  const hasPE      = cls.live === 'yahoo'; // P/E only from Yahoo Finance (stocks, ETFs, gold)
   const isLive     = !!cls.live;
   const isOther    = classKey === 'other';
   const isCrypto   = classKey === 'crypto';
@@ -589,8 +590,15 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
   const toggle = (n) => setExpanded(e => ({ ...e, [n]: !e[n] }));
 
   const sortedFiltered = sortBy ? [...filtered].sort((a, b) => {
-    const av = sortBy === 'sector' && isOther ? (a.type || '') : (a[sortBy] ?? '');
-    const bv = sortBy === 'sector' && isOther ? (b.type || '') : (b[sortBy] ?? '');
+    let av, bv;
+    if (sortBy === 'sector' && isOther) {
+      av = a.type || ''; bv = b.type || '';
+    } else if (sortBy === 'dayPct') {
+      av = Store.dayChangePct(classKey, a.name) ?? -Infinity;
+      bv = Store.dayChangePct(classKey, b.name) ?? -Infinity;
+    } else {
+      av = a[sortBy] ?? ''; bv = b[sortBy] ?? '';
+    }
     if (typeof av === 'string') return sortDir * bv.localeCompare(av);
     return sortDir * (bv - av);
   }) : filtered;
@@ -702,7 +710,8 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
                   <SortTh col="qty"      label="Units"    right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
                   <SortTh col="avgPrice" label="Avg cost" right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
                   <SortTh col="cur"      label="Current"  right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
-                  {hasDayChg && !isOther && <th className="num" style={{ whiteSpace: 'nowrap' }}>% Day</th>}
+                  {hasPE && !isOther && <th className="num" style={{ whiteSpace: 'nowrap' }}>P/E</th>}
+                  {hasDayChg && !isOther && <SortTh col="dayPct" label="% Day" right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />}
                   <SortTh col="value"    label="Value"    right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
                   <SortTh col="profit"   label="P/L"      right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
                   <SortTh col="pct"      label="%"        right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
@@ -711,7 +720,7 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
               </thead>
               <tbody>
                 {sortedFiltered.length === 0 && (
-                  <tr><td colSpan={hasDayChg && !isOther ? 11 : 10}><div className="empty">No holdings yet. <a className="t-link" onClick={() => onAdd(classKey)}>Add your first one →</a></div></td></tr>
+                  <tr><td colSpan={10 + (hasDayChg && !isOther ? 1 : 0) + (hasPE && !isOther ? 1 : 0)}><div className="empty">No holdings yet. <a className="t-link" onClick={() => onAdd(classKey)}>Add your first one →</a></div></td></tr>
                 )}
                 {sortedFiltered.map(p => {
                   const color   = window.CLASS_COLORS[classKey];
@@ -757,6 +766,16 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
                           <PriceEdit position={p} classKey={classKey} ccy={cls.ccy} />
                           <PrePostBadge classKey={classKey} name={p.name} ccy={cls.ccy} />
                         </td>
+                        {hasPE && !isOther && (
+                          <td className="num">
+                            {(() => {
+                              const pe = Store.getPERatio(classKey, p.name);
+                              return pe != null
+                                ? <span style={{ fontSize: 12, color: pe > 40 ? 'var(--red-600)' : pe < 15 ? 'var(--green-600)' : 'var(--fg-2)', fontVariantNumeric: 'tabular-nums' }}>{pe.toFixed(1)}x</span>
+                                : <span style={{ color: 'var(--fg-4)', fontSize: 11 }}>—</span>;
+                            })()}
+                          </td>
+                        )}
                         {hasDayChg && !isOther && (
                           <td className="num">
                             {dayPct != null

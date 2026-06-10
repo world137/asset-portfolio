@@ -1,5 +1,163 @@
 /* eslint-disable */
-/* DividendCalendar.jsx — Feature #2: Dividend / Income Calendar */
+/* DividendCalendar.jsx — Portfolio Calendar: dividends + economic events */
+
+// ── Economic events data (2025–2026) ──────────────────────────────────────────
+// Type color map for badges
+const ECO_TYPE_COLORS = {
+  fomc:   { bg: '#7c3aed', text: '#fff', label: 'FOMC' },
+  cpi:    { bg: '#2563eb', text: '#fff', label: 'CPI' },
+  nfp:    { bg: '#059669', text: '#fff', label: 'NFP' },
+  pce:    { bg: '#0891b2', text: '#fff', label: 'PCE' },
+  gdp:    { bg: '#d97706', text: '#fff', label: 'GDP' },
+  pmi:    { bg: '#64748b', text: '#fff', label: 'PMI' },
+  retail: { bg: '#db2777', text: '#fff', label: 'Retail' },
+  other:  { bg: '#6b7280', text: '#fff', label: 'Eco' },
+};
+
+// Hardcoded major US economic events 2026
+// Dates: FOMC=decision day, CPI=release day, NFP=first Friday, PCE=end-of-month Friday
+const HARDCODED_ECO_EVENTS = [
+  // FOMC 2026 (8 meetings)
+  { date: '2026-01-28', type: 'fomc', label: 'FOMC Rate Decision', importance: 'high' },
+  { date: '2026-03-18', type: 'fomc', label: 'FOMC Rate Decision', importance: 'high' },
+  { date: '2026-04-29', type: 'fomc', label: 'FOMC Rate Decision', importance: 'high' },
+  { date: '2026-06-10', type: 'fomc', label: 'FOMC Rate Decision', importance: 'high' },
+  { date: '2026-07-29', type: 'fomc', label: 'FOMC Rate Decision', importance: 'high' },
+  { date: '2026-09-16', type: 'fomc', label: 'FOMC Rate Decision', importance: 'high' },
+  { date: '2026-10-28', type: 'fomc', label: 'FOMC Rate Decision', importance: 'high' },
+  { date: '2026-12-09', type: 'fomc', label: 'FOMC Rate Decision', importance: 'high' },
+  // CPI 2026 (monthly)
+  { date: '2026-01-14', type: 'cpi', label: 'CPI Inflation (Dec)', importance: 'high' },
+  { date: '2026-02-11', type: 'cpi', label: 'CPI Inflation (Jan)', importance: 'high' },
+  { date: '2026-03-11', type: 'cpi', label: 'CPI Inflation (Feb)', importance: 'high' },
+  { date: '2026-04-13', type: 'cpi', label: 'CPI Inflation (Mar)', importance: 'high' },
+  { date: '2026-05-13', type: 'cpi', label: 'CPI Inflation (Apr)', importance: 'high' },
+  { date: '2026-06-11', type: 'cpi', label: 'CPI Inflation (May)', importance: 'high' },
+  { date: '2026-07-14', type: 'cpi', label: 'CPI Inflation (Jun)', importance: 'high' },
+  { date: '2026-08-12', type: 'cpi', label: 'CPI Inflation (Jul)', importance: 'high' },
+  { date: '2026-09-11', type: 'cpi', label: 'CPI Inflation (Aug)', importance: 'high' },
+  { date: '2026-10-14', type: 'cpi', label: 'CPI Inflation (Sep)', importance: 'high' },
+  { date: '2026-11-12', type: 'cpi', label: 'CPI Inflation (Oct)', importance: 'high' },
+  { date: '2026-12-11', type: 'cpi', label: 'CPI Inflation (Nov)', importance: 'high' },
+  // NFP 2026 (first Friday)
+  { date: '2026-01-09', type: 'nfp', label: 'Jobs Report (Dec)', importance: 'high' },
+  { date: '2026-02-06', type: 'nfp', label: 'Jobs Report (Jan)', importance: 'high' },
+  { date: '2026-03-06', type: 'nfp', label: 'Jobs Report (Feb)', importance: 'high' },
+  { date: '2026-04-03', type: 'nfp', label: 'Jobs Report (Mar)', importance: 'high' },
+  { date: '2026-05-01', type: 'nfp', label: 'Jobs Report (Apr)', importance: 'high' },
+  { date: '2026-06-05', type: 'nfp', label: 'Jobs Report (May)', importance: 'high' },
+  { date: '2026-07-10', type: 'nfp', label: 'Jobs Report (Jun)', importance: 'high' },
+  { date: '2026-08-07', type: 'nfp', label: 'Jobs Report (Jul)', importance: 'high' },
+  { date: '2026-09-04', type: 'nfp', label: 'Jobs Report (Aug)', importance: 'high' },
+  { date: '2026-10-02', type: 'nfp', label: 'Jobs Report (Sep)', importance: 'high' },
+  { date: '2026-11-06', type: 'nfp', label: 'Jobs Report (Oct)', importance: 'high' },
+  { date: '2026-12-04', type: 'nfp', label: 'Jobs Report (Nov)', importance: 'high' },
+  // PCE 2026 (late-month Fridays)
+  { date: '2026-01-30', type: 'pce', label: 'PCE Inflation (Dec)', importance: 'medium' },
+  { date: '2026-02-27', type: 'pce', label: 'PCE Inflation (Jan)', importance: 'medium' },
+  { date: '2026-03-27', type: 'pce', label: 'PCE Inflation (Feb)', importance: 'medium' },
+  { date: '2026-04-30', type: 'pce', label: 'PCE Inflation (Mar)', importance: 'medium' },
+  { date: '2026-05-29', type: 'pce', label: 'PCE Inflation (Apr)', importance: 'medium' },
+  { date: '2026-06-26', type: 'pce', label: 'PCE Inflation (May)', importance: 'medium' },
+  { date: '2026-07-31', type: 'pce', label: 'PCE Inflation (Jun)', importance: 'medium' },
+  { date: '2026-08-28', type: 'pce', label: 'PCE Inflation (Jul)', importance: 'medium' },
+  { date: '2026-09-25', type: 'pce', label: 'PCE Inflation (Aug)', importance: 'medium' },
+  { date: '2026-10-30', type: 'pce', label: 'PCE Inflation (Sep)', importance: 'medium' },
+  { date: '2026-11-25', type: 'pce', label: 'PCE Inflation (Oct)', importance: 'medium' },
+  { date: '2026-12-18', type: 'pce', label: 'PCE Inflation (Nov)', importance: 'medium' },
+  // GDP 2026 (quarterly advance estimates)
+  { date: '2026-01-29', type: 'gdp', label: 'GDP Q4 2025 (Advance)', importance: 'medium' },
+  { date: '2026-04-29', type: 'gdp', label: 'GDP Q1 2026 (Advance)', importance: 'medium' },
+  { date: '2026-07-30', type: 'gdp', label: 'GDP Q2 2026 (Advance)', importance: 'medium' },
+  { date: '2026-10-29', type: 'gdp', label: 'GDP Q3 2026 (Advance)', importance: 'medium' },
+  // PMI 2026 (1st biz day of each month)
+  { date: '2026-01-02', type: 'pmi', label: 'ISM Manufacturing PMI', importance: 'low' },
+  { date: '2026-02-02', type: 'pmi', label: 'ISM Manufacturing PMI', importance: 'low' },
+  { date: '2026-03-02', type: 'pmi', label: 'ISM Manufacturing PMI', importance: 'low' },
+  { date: '2026-04-01', type: 'pmi', label: 'ISM Manufacturing PMI', importance: 'low' },
+  { date: '2026-05-01', type: 'pmi', label: 'ISM Manufacturing PMI', importance: 'low' },
+  { date: '2026-06-01', type: 'pmi', label: 'ISM Manufacturing PMI', importance: 'low' },
+  { date: '2026-07-01', type: 'pmi', label: 'ISM Manufacturing PMI', importance: 'low' },
+  { date: '2026-08-03', type: 'pmi', label: 'ISM Manufacturing PMI', importance: 'low' },
+  { date: '2026-09-01', type: 'pmi', label: 'ISM Manufacturing PMI', importance: 'low' },
+  { date: '2026-10-01', type: 'pmi', label: 'ISM Manufacturing PMI', importance: 'low' },
+  { date: '2026-11-02', type: 'pmi', label: 'ISM Manufacturing PMI', importance: 'low' },
+  { date: '2026-12-01', type: 'pmi', label: 'ISM Manufacturing PMI', importance: 'low' },
+  // Retail Sales 2026 (~mid-month)
+  { date: '2026-01-15', type: 'retail', label: 'Retail Sales (Dec)', importance: 'low' },
+  { date: '2026-02-13', type: 'retail', label: 'Retail Sales (Jan)', importance: 'low' },
+  { date: '2026-03-13', type: 'retail', label: 'Retail Sales (Feb)', importance: 'low' },
+  { date: '2026-04-15', type: 'retail', label: 'Retail Sales (Mar)', importance: 'low' },
+  { date: '2026-05-15', type: 'retail', label: 'Retail Sales (Apr)', importance: 'low' },
+  { date: '2026-06-12', type: 'retail', label: 'Retail Sales (May)', importance: 'low' },
+  { date: '2026-07-16', type: 'retail', label: 'Retail Sales (Jun)', importance: 'low' },
+  { date: '2026-08-14', type: 'retail', label: 'Retail Sales (Jul)', importance: 'low' },
+  { date: '2026-09-15', type: 'retail', label: 'Retail Sales (Aug)', importance: 'low' },
+  { date: '2026-10-14', type: 'retail', label: 'Retail Sales (Sep)', importance: 'low' },
+  { date: '2026-11-13', type: 'retail', label: 'Retail Sales (Oct)', importance: 'low' },
+  { date: '2026-12-11', type: 'retail', label: 'Retail Sales (Nov)', importance: 'low' },
+];
+
+// ── Economic event modal ───────────────────────────────────────────────────────
+function EcoEventModal({ item, onClose }) {
+  const isEdit = !!item;
+  const [date,  setDate]  = React.useState(item ? item.date  : '');
+  const [type,  setType]  = React.useState(item ? item.type  : 'other');
+  const [label, setLabel] = React.useState(item ? item.label : '');
+  const [importance, setImportance] = React.useState(item ? (item.importance || 'medium') : 'medium');
+  const [note,  setNote]  = React.useState(item ? (item.note || '') : '');
+
+  function save() {
+    if (!date || !label) return;
+    const data = { date, type, label, importance, note: note || undefined };
+    if (isEdit) Store.updateEcoEvent(item.id, data);
+    else Store.addEcoEvent(data);
+    onClose();
+  }
+
+  return (
+    <Modal open onClose={onClose} title={isEdit ? 'Edit event' : 'Add economic event'} width={420}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div>
+          <label className="form-label">Date *</label>
+          <input type="date" value={date} onChange={e => setDate(e.target.value)} required />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div>
+            <label className="form-label">Type</label>
+            <select value={type} onChange={e => setType(e.target.value)}>
+              {Object.entries(ECO_TYPE_COLORS).map(([k, v]) => (
+                <option key={k} value={k}>{v.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="form-label">Importance</label>
+            <select value={importance} onChange={e => setImportance(e.target.value)}>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label className="form-label">Label *</label>
+          <input type="text" value={label} onChange={e => setLabel(e.target.value)} placeholder="e.g. FOMC Rate Decision" />
+        </div>
+        <div>
+          <label className="form-label">Note</label>
+          <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="Optional note…" />
+        </div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+          <Button variant="secondary" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" onClick={save} disabled={!date || !label}>
+            {isEdit ? 'Save changes' : 'Add event'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
 function DividendModal({ item, onClose }) {
@@ -109,7 +267,6 @@ function DividendCalendar() {
 
   const [fetching, setFetching] = React.useState(false);
 
-  // Auto-fetch dividends for held assets on first open (cached 6h in the store).
   React.useEffect(() => {
     let alive = true;
     setFetching(true);
@@ -122,8 +279,7 @@ function DividendCalendar() {
     Promise.resolve(Store.fetchDividends(true)).finally(() => setFetching(false));
   }
 
-  // Merge manual entries with auto-fetched ones. An auto entry is hidden when a
-  // manual entry already covers the same holding + date (manual takes priority).
+  // Merge manual + auto dividends (manual takes priority for same holding+date)
   const manual = Store.getDividends();
   const auto   = Store.getAutoDividends();
   const dividends = [
@@ -134,14 +290,30 @@ function DividendCalendar() {
   ];
   const fetchedAt = Store.getDividendFetchedAt();
 
-  const [modalOpen,   setModalOpen]   = React.useState(false);
-  const [editItem,    setEditItem]    = React.useState(null);
+  // Eco events: hardcoded schedule + user-added custom events
+  const customEcoEvents = Store.getEcoEvents ? Store.getEcoEvents() : [];
+  const allEcoEvents = [...HARDCODED_ECO_EVENTS, ...customEcoEvents];
+
+  const [divModalOpen,  setDivModalOpen]  = React.useState(false);
+  const [ecoModalOpen,  setEcoModalOpen]  = React.useState(false);
+  const [editItem,      setEditItem]      = React.useState(null);
+  const [editEcoItem,   setEditEcoItem]   = React.useState(null);
+  const [showEcoTypes,  setShowEcoTypes]  = React.useState(
+    () => Object.fromEntries(Object.keys(ECO_TYPE_COLORS).map(k => [k, true]))
+  );
   const [viewMonth,   setViewMonth]   = React.useState(() => {
     const now = new Date();
     return now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
   });
 
-  const [tab, setTab] = React.useState('calendar'); // 'calendar' | 'list' | 'summary'
+  const [tab, setTab] = React.useState('calendar');
+
+  const [isMobile, setIsMobile] = React.useState(() => window.innerWidth < 900);
+  React.useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 900);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
 
   const [year, mon] = viewMonth.split('-').map(Number);
 
@@ -150,22 +322,13 @@ function DividendCalendar() {
     setViewMonth(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'));
   }
 
-  // All dividends sorted by payDate
   const sorted = [...dividends].sort((a, b) => (a.payDate || '').localeCompare(b.payDate || ''));
-
-  // This month's dividends
   const monthPrefix = viewMonth;
   const thisMonth   = sorted.filter(d => (d.payDate || '').startsWith(monthPrefix));
 
-  // Year totals (THB)
   const USDTHB = Store.get().fx.USDTHB || window.SEED_FX_USDTHB;
-  function toTHB(amount, ccy) {
-    return ccy === 'USD' ? (amount || 0) * USDTHB : (amount || 0);
-  }
-  function toDisplay(amount, ccy) {
-    return Store.toDisplay(toTHB(amount, ccy), 'THB');
-  }
-
+  function toTHB(amount, ccy) { return ccy === 'USD' ? (amount || 0) * USDTHB : (amount || 0); }
+  function toDisplay(amount, ccy) { return Store.toDisplay(toTHB(amount, ccy), 'THB'); }
   function effectiveAmount(d) {
     const raw = d.totalAmount || (d.amountPerShare ? d.amountPerShare * ((Store.positions(d.classKey).find(p => p.name === d.name) || {}).qty || 0) : 0);
     return toDisplay(raw, d.currency);
@@ -173,8 +336,7 @@ function DividendCalendar() {
 
   const totalThisMonth = thisMonth.reduce((a, d) => a + effectiveAmount(d), 0);
 
-  // Calendar grid
-  const firstDay  = new Date(year, mon - 1, 1).getDay(); // 0=Sun
+  const firstDay  = new Date(year, mon - 1, 1).getDay();
   const daysInMon = new Date(year, mon, 0).getDate();
   const cells = [];
   for (let i = 0; i < firstDay; i++) cells.push(null);
@@ -187,7 +349,6 @@ function DividendCalendar() {
     return d.name + (d.totalAmount ? ` · ${sym}${window.fmtBig(effectiveAmount(d))}` : '');
   }
 
-  // Annual summary by ticker
   const curYear = new Date().getFullYear();
   const yearDivs = sorted.filter(d => (d.payDate || '').startsWith(String(curYear)));
   const tickerMap = new Map();
@@ -195,98 +356,177 @@ function DividendCalendar() {
     const key = d.classKey + ':' + d.name;
     const amt = effectiveAmount(d);
     if (!tickerMap.has(key)) tickerMap.set(key, { name: d.name, classKey: d.classKey, total: 0, count: 0 });
-    const e = tickerMap.get(key);
-    e.total += amt; e.count++;
+    const e = tickerMap.get(key); e.total += amt; e.count++;
   }
   const tickerRows = [...tickerMap.values()].sort((a, b) => b.total - a.total);
   const yearTotal  = tickerRows.reduce((a, r) => a + r.total, 0);
+
+  // Filtered eco events for the current month
+  const monthEcoEvents = allEcoEvents.filter(e => e.date && e.date.startsWith(monthPrefix) && showEcoTypes[e.type]);
 
   return (
     <div className="page">
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         <div>
-          <h1 className="t-h1" style={{ margin: '0 0 2px' }}>Dividend Calendar</h1>
+          <h1 className="t-h1" style={{ margin: '0 0 2px' }}>Portfolio Calendar</h1>
           <div className="t-small">
-            Auto-synced from your holdings via Yahoo Finance
+            Dividends auto-synced via Yahoo Finance · Economic events schedule
             {fetchedAt ? ` · updated ${window.timeAgo(fetchedAt)}` : ''}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Button variant="secondary" size="sm" icon="history" onClick={syncDividends} disabled={fetching}>
             {fetching ? 'Syncing…' : 'Sync'}
           </Button>
-          <Button size="sm" icon="plus" onClick={() => { setEditItem(null); setModalOpen(true); }}>Add entry</Button>
+          <Button variant="secondary" size="sm" icon="calendar" onClick={() => { setEditEcoItem(null); setEcoModalOpen(true); }}>Add event</Button>
+          <Button size="sm" icon="plus" onClick={() => { setEditItem(null); setDivModalOpen(true); }}>Add dividend</Button>
         </div>
       </div>
 
       {/* Tab bar */}
       <div className="layoutseg" style={{ marginBottom: 16 }}>
         <button className={tab === 'calendar' ? 'on' : ''} onClick={() => setTab('calendar')}>Calendar</button>
-        <button className={tab === 'list'     ? 'on' : ''} onClick={() => setTab('list')}>All entries</button>
-        <button className={tab === 'summary'  ? 'on' : ''} onClick={() => setTab('summary')}>Annual summary</button>
+        <button className={tab === 'dividends' ? 'on' : ''} onClick={() => setTab('dividends')}>Dividends</button>
+        <button className={tab === 'events'   ? 'on' : ''} onClick={() => setTab('events')}>Eco Events</button>
+        <button className={tab === 'summary'  ? 'on' : ''} onClick={() => setTab('summary')}>Summary</button>
       </div>
 
       {/* ── CALENDAR TAB ─────────────────────────────────────────────────────── */}
       {tab === 'calendar' && (
         <React.Fragment>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10, flexWrap: 'wrap' }}>
             <button className="icon-toggle" onClick={() => changeMonth(-1)}><Icon name="chevron-left" size={16} /></button>
             <span style={{ fontWeight: 700, fontSize: 16, minWidth: 160, textAlign: 'center' }}>
               {MONTHS[mon - 1]} {year}
             </span>
             <button className="icon-toggle" onClick={() => changeMonth(1)}><Icon name="chevron-right" size={16} /></button>
             {totalThisMonth > 0 && (
-              <span style={{ marginLeft: 8, fontSize: 13, color: 'var(--green-600)', fontWeight: 600 }}>
-                Income: {sym}{window.fmtBig(totalThisMonth)}
+              <span style={{ marginLeft: 4, fontSize: 13, color: 'var(--green-600)', fontWeight: 600 }}>
+                💰 {sym}{window.fmtBig(totalThisMonth)}
               </span>
             )}
+            {monthEcoEvents.length > 0 && (
+              <span style={{ fontSize: 13, color: 'var(--fg-3)' }}>
+                · {monthEcoEvents.length} eco event{monthEcoEvents.length !== 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+
+          {/* Eco event type filters */}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+            {Object.entries(ECO_TYPE_COLORS).map(([k, v]) => (
+              <button key={k} onClick={() => setShowEcoTypes(s => ({ ...s, [k]: !s[k] }))}
+                style={{
+                  padding: '2px 8px', borderRadius: 99, fontSize: 10, fontWeight: 700, cursor: 'pointer',
+                  border: '1px solid ' + (showEcoTypes[k] ? v.bg : 'var(--border-2)'),
+                  background: showEcoTypes[k] ? v.bg : 'transparent',
+                  color: showEcoTypes[k] ? v.text : 'var(--fg-3)',
+                  opacity: showEcoTypes[k] ? 1 : 0.5,
+                }}>
+                {v.label}
+              </button>
+            ))}
           </div>
 
           <div className="card" style={{ marginBottom: 16 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1px solid var(--border-1)' }}>
               {DAYS.map(d => (
-                <div key={d} style={{ padding: '8px 4px', textAlign: 'center', fontSize: 11, fontWeight: 700, color: 'var(--fg-3)' }}>{d}</div>
+                <div key={d} style={{ padding: isMobile ? '6px 2px' : '8px 4px', textAlign: 'center', fontSize: 11, fontWeight: 700, color: 'var(--fg-3)' }}>
+                  {isMobile ? d[0] : d}
+                </div>
               ))}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
               {cells.map((day, i) => {
-                if (!day) return <div key={'e' + i} style={{ minHeight: 70, borderRight: '1px solid var(--border-1)', borderBottom: '1px solid var(--border-1)' }} />;
+                if (!day) return <div key={'e' + i} style={{ minHeight: isMobile ? 52 : 80, borderRight: '1px solid var(--border-1)', borderBottom: '1px solid var(--border-1)', overflow: 'hidden', minWidth: 0 }} />;
                 const dayStr = viewMonth + '-' + String(day).padStart(2, '0');
                 const dayDivs = sorted.filter(d => d.payDate === dayStr || d.exDate === dayStr);
+                const dayEco  = allEcoEvents.filter(e => e.date === dayStr && showEcoTypes[e.type]);
                 const isToday = dayStr === new Date().toISOString().slice(0, 10);
+                const hasEvents = dayDivs.length > 0 || dayEco.length > 0;
                 return (
                   <div key={day} style={{
-                    minHeight: 70, padding: '6px 4px',
+                    minHeight: isMobile ? 52 : 80,
+                    padding: isMobile ? '4px 2px' : '6px 4px',
                     borderRight: '1px solid var(--border-1)', borderBottom: '1px solid var(--border-1)',
                     background: isToday ? 'var(--accent-bg, rgba(59,130,246,0.07))' : 'transparent',
+                    overflow: 'hidden', minWidth: 0,
                   }}>
-                    <div style={{ fontSize: 11, fontWeight: isToday ? 700 : 400, color: isToday ? 'var(--accent)' : 'var(--fg-3)', marginBottom: 3 }}>{day}</div>
-                    {dayDivs.map(d => (
-                      <div key={d.id} title={payLabel(d)}
-                           style={{ fontSize: 10, padding: '1px 4px', borderRadius: 3, marginBottom: 2,
-                             background: d.payDate === dayStr ? 'var(--green-600)' : 'var(--fg-4)',
-                             color: '#fff', cursor: d.auto ? 'default' : 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                           opacity: d.auto ? 0.85 : 1 }}
-                           onClick={() => { if (!d.auto) { setEditItem(d); setModalOpen(true); } }}>
-                        {d.payDate === dayStr ? '💰 ' : '📋 '}{d.name.replace(/THB$/, '')}
-                      </div>
-                    ))}
+                    <div style={{ fontSize: isMobile ? 10 : 11, fontWeight: isToday ? 700 : 400, color: isToday ? 'var(--accent)' : 'var(--fg-3)', marginBottom: isMobile ? 2 : 3, textAlign: isMobile ? 'center' : 'left' }}>{day}</div>
+                    {isMobile ? (
+                      /* ── Dot mode for mobile ── */
+                      hasEvents && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 2, justifyContent: 'center' }}>
+                          {dayDivs.map(d => (
+                            <div key={d.id} title={payLabel(d)}
+                                 style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+                                   background: d.payDate === dayStr ? 'var(--green-600)' : 'var(--fg-4)',
+                                   opacity: d.auto ? 0.8 : 1, cursor: d.auto ? 'default' : 'pointer' }}
+                                 onClick={() => { if (!d.auto) { setEditItem(d); setDivModalOpen(true); } }} />
+                          ))}
+                          {dayEco.map((e, ei) => {
+                            const tc = ECO_TYPE_COLORS[e.type] || ECO_TYPE_COLORS.other;
+                            const isCustom = !e._hardcoded && e.id;
+                            return (
+                              <div key={e.id || e.label + ei} title={e.label + (e.note ? ' · ' + e.note : '')}
+                                   style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+                                     background: tc.bg, opacity: e.importance === 'low' ? 0.6 : 1,
+                                     cursor: isCustom ? 'pointer' : 'default' }}
+                                   onClick={() => { if (isCustom) { setEditEcoItem(e); setEcoModalOpen(true); } }} />
+                            );
+                          })}
+                        </div>
+                      )
+                    ) : (
+                      /* ── Full badge mode for desktop ── */
+                      <React.Fragment>
+                        {dayDivs.map(d => (
+                          <div key={d.id} title={payLabel(d)}
+                               style={{ fontSize: 10, padding: '1px 4px', borderRadius: 3, marginBottom: 2,
+                                 background: d.payDate === dayStr ? 'var(--green-600)' : 'var(--fg-4)',
+                                 color: '#fff', cursor: d.auto ? 'default' : 'pointer',
+                                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                 opacity: d.auto ? 0.85 : 1 }}
+                               onClick={() => { if (!d.auto) { setEditItem(d); setDivModalOpen(true); } }}>
+                            <span style={{ fontSize: 9, fontWeight: 700, marginRight: 3, opacity: 0.9 }}>
+                              {d.payDate === dayStr ? 'PAY' : 'EX'}
+                            </span>{d.name.replace(/THB$/, '')}
+                          </div>
+                        ))}
+                        {dayEco.map((e, ei) => {
+                          const tc = ECO_TYPE_COLORS[e.type] || ECO_TYPE_COLORS.other;
+                          const isCustom = !e._hardcoded && e.id;
+                          return (
+                            <div key={e.id || e.label + ei} title={e.label + (e.note ? ' · ' + e.note : '')}
+                                 style={{ fontSize: 10, padding: '1px 4px', borderRadius: 3, marginBottom: 2,
+                                   background: tc.bg + 'dd', color: tc.text,
+                                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                   cursor: isCustom ? 'pointer' : 'default',
+                                   opacity: e.importance === 'low' ? 0.7 : 1,
+                                 }}
+                                 onClick={() => { if (isCustom) { setEditEcoItem(e); setEcoModalOpen(true); } }}>
+                              <span style={{ fontWeight: 700, marginRight: 2 }}>{tc.label}</span>{e.label.replace(new RegExp('^' + tc.label + '\\s*', 'i'), '')}
+                            </div>
+                          );
+                        })}
+                      </React.Fragment>
+                    )}
                   </div>
                 );
               })}
             </div>
           </div>
 
-          {thisMonth.length === 0 && (
+          {(thisMonth.length === 0 && monthEcoEvents.length === 0) && (
             <div style={{ textAlign: 'center', color: 'var(--fg-3)', padding: '24px 0', fontSize: 13 }}>
-              No dividends scheduled this month.
+              No events scheduled this month.
             </div>
           )}
         </React.Fragment>
       )}
 
-      {/* ── LIST TAB ─────────────────────────────────────────────────────────── */}
-      {tab === 'list' && (
+      {/* ── DIVIDENDS TAB ────────────────────────────────────────────────────── */}
+      {tab === 'dividends' && (
         <div className="card">
           <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
             <table className="ptable">
@@ -304,7 +544,7 @@ function DividendCalendar() {
               </thead>
               <tbody>
                 {sorted.length === 0 && (
-                  <tr><td colSpan={8}><div className="empty">No dividend entries yet. Click "Add entry" to start.</div></td></tr>
+                  <tr><td colSpan={8}><div className="empty">No dividend entries yet. Click "Add dividend" to start.</div></td></tr>
                 )}
                 {sorted.map(d => {
                   const cls = window.ASSET_CLASSES.find(c => c.key === d.classKey);
@@ -331,7 +571,7 @@ function DividendCalendar() {
                           <span className="t-small" style={{ color: 'var(--fg-3)' }}>—</span>
                         ) : (
                           <div style={{ display: 'flex', gap: 4 }}>
-                            <button className="icon-toggle" onClick={() => { setEditItem(d); setModalOpen(true); }}><Icon name="edit-2" size={13} /></button>
+                            <button className="icon-toggle" onClick={() => { setEditItem(d); setDivModalOpen(true); }}><Icon name="edit-2" size={13} /></button>
                             <button className="icon-toggle" onClick={() => Store.deleteDividend(d.id)} style={{ color: 'var(--red-600)' }}><Icon name="trash-2" size={13} /></button>
                           </div>
                         )}
@@ -343,6 +583,80 @@ function DividendCalendar() {
             </table>
           </div>
         </div>
+      )}
+
+      {/* ── ECO EVENTS TAB ───────────────────────────────────────────────────── */}
+      {tab === 'events' && (
+        <React.Fragment>
+          {/* Type filter pills */}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+            {Object.entries(ECO_TYPE_COLORS).map(([k, v]) => (
+              <button key={k} onClick={() => setShowEcoTypes(s => ({ ...s, [k]: !s[k] }))}
+                style={{
+                  padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                  border: '1px solid ' + (showEcoTypes[k] ? v.bg : 'var(--border-2)'),
+                  background: showEcoTypes[k] ? v.bg : 'transparent',
+                  color: showEcoTypes[k] ? v.text : 'var(--fg-3)',
+                }}>
+                {v.label}
+              </button>
+            ))}
+          </div>
+          <div className="card">
+            <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+              <table className="ptable">
+                <thead>
+                  <tr>
+                    <th>Event</th>
+                    <th className="num">Date</th>
+                    <th>Importance</th>
+                    <th>Note</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {allEcoEvents
+                    .filter(e => showEcoTypes[e.type])
+                    .sort((a, b) => a.date.localeCompare(b.date))
+                    .map((e, i) => {
+                      const tc = ECO_TYPE_COLORS[e.type] || ECO_TYPE_COLORS.other;
+                      const isPast = e.date < new Date().toISOString().slice(0, 10);
+                      const isCustom = !e._hardcoded && e.id;
+                      return (
+                        <tr key={e.id || e.label + i} className="pos" style={{ opacity: isPast ? 0.5 : 1 }}>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                              <span style={{ padding: '2px 7px', borderRadius: 99, fontSize: 10, fontWeight: 700, background: tc.bg, color: tc.text }}>
+                                {tc.label}
+                              </span>
+                              <span style={{ fontWeight: 600, fontSize: 13 }}>{e.label}</span>
+                            </div>
+                          </td>
+                          <td className="num" style={{ fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>{e.date}</td>
+                          <td>
+                            <span style={{
+                              fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
+                              background: e.importance === 'high' ? 'rgba(220,38,38,0.12)' : e.importance === 'medium' ? 'rgba(217,119,6,0.12)' : 'var(--bg-sunken)',
+                              color: e.importance === 'high' ? 'var(--red-600)' : e.importance === 'medium' ? '#d97706' : 'var(--fg-3)',
+                            }}>{e.importance || 'low'}</span>
+                          </td>
+                          <td style={{ fontSize: 12, color: 'var(--fg-3)' }}>{e.note || '—'}</td>
+                          <td>
+                            {isCustom ? (
+                              <div style={{ display: 'flex', gap: 4 }}>
+                                <button className="icon-toggle" onClick={() => { setEditEcoItem(e); setEcoModalOpen(true); }}><Icon name="edit-2" size={13} /></button>
+                                <button className="icon-toggle" onClick={() => Store.deleteEcoEvent && Store.deleteEcoEvent(e.id)} style={{ color: 'var(--red-600)' }}><Icon name="trash-2" size={13} /></button>
+                              </div>
+                            ) : <span style={{ fontSize: 10, color: 'var(--fg-4)' }}>built-in</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </React.Fragment>
       )}
 
       {/* ── SUMMARY TAB ──────────────────────────────────────────────────────── */}
@@ -361,19 +675,14 @@ function DividendCalendar() {
             </div>
           </div>
 
-          {/* Monthly breakdown */}
           <div className="card" style={{ marginBottom: 16 }}>
             <div className="card-h"><div className="t">Monthly income {curYear}</div></div>
             <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
               <table className="ptable">
-                <thead>
-                  <tr>
-                    <th>Month</th>
-                    <th className="num">Income</th>
-                    <th className="num">Entries</th>
-                    <th>Holdings</th>
-                  </tr>
-                </thead>
+                <thead><tr>
+                  <th>Month</th><th className="num">Income</th>
+                  <th className="num">Entries</th><th>Holdings</th>
+                </tr></thead>
                 <tbody>
                   {Array.from({ length: 12 }, (_, i) => {
                     const m   = String(i + 1).padStart(2, '0');
@@ -398,14 +707,10 @@ function DividendCalendar() {
             <div className="card-h"><div className="t">By holding {curYear}</div></div>
             <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
               <table className="ptable">
-                <thead>
-                  <tr>
-                    <th>Holding</th>
-                    <th className="num">Total Income</th>
-                    <th className="num">Entries</th>
-                    <th className="num">Share</th>
-                  </tr>
-                </thead>
+                <thead><tr>
+                  <th>Holding</th><th className="num">Total Income</th>
+                  <th className="num">Entries</th><th className="num">Share</th>
+                </tr></thead>
                 <tbody>
                   {tickerRows.length === 0 && <tr><td colSpan={4}><div className="empty">No data for {curYear}.</div></td></tr>}
                   {tickerRows.map(r => (
@@ -432,10 +737,16 @@ function DividendCalendar() {
         </React.Fragment>
       )}
 
-      {(modalOpen) && (
+      {divModalOpen && (
         <DividendModal
           item={editItem}
-          onClose={() => { setModalOpen(false); setEditItem(null); }}
+          onClose={() => { setDivModalOpen(false); setEditItem(null); }}
+        />
+      )}
+      {ecoModalOpen && (
+        <EcoEventModal
+          item={editEcoItem}
+          onClose={() => { setEcoModalOpen(false); setEditEcoItem(null); }}
         />
       )}
     </div>
