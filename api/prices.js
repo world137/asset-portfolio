@@ -72,6 +72,27 @@ async function yahooPrice(symbol) {
   throw lastErr || new Error('yahoo failed');
 }
 
+// ---- Yahoo Finance quote API — batch P/E fetch (more reliable than chart meta) -----
+async function yahooQuotePE(symbols) {
+  const hosts = ['query1.finance.yahoo.com', 'query2.finance.yahoo.com'];
+  for (const host of hosts) {
+    try {
+      const url = `https://${host}/v7/finance/quote?symbols=${symbols.map(encodeURIComponent).join(',')}`;
+      const r = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' } });
+      if (!r.ok) continue;
+      const j = await r.json();
+      const map = {};
+      for (const q of (j?.quoteResponse?.result || [])) {
+        if (q.symbol && q.trailingPE != null && isFinite(q.trailingPE) && q.trailingPE > 0) {
+          map[q.symbol] = +q.trailingPE.toFixed(2);
+        }
+      }
+      return map;
+    } catch (_) {}
+  }
+  return {};
+}
+
 // ---- settrade mutual-fund NAV (=setMutualfundInfo) --------------------------
 function getField(field, contentText, input, result) {
   const m = contentText.match(new RegExp(`${field}:([\\w\\$]+)`));
@@ -159,7 +180,8 @@ export default async function handler(req, res) {
   const errors = [];
   const tasks = [];
 
-  for (const it of (body.yahoo || [])) {
+  const yahooItems = body.yahoo || [];
+  for (const it of yahooItems) {
     tasks.push(yahooPrice(it.symbol)
       .then(({ price, prevClose, pre, post, pe }) => {
         const k = `${it.key}:${it.name}`;
@@ -170,6 +192,19 @@ export default async function handler(req, res) {
         if (active) prePost[k] = { ...active, type: post ? 'post' : 'pre' };
       })
       .catch(e => errors.push(`${it.key}:${it.name} ${e.message}`)));
+  }
+  // Batch P/E via quote endpoint — more reliable than chart meta; overwrites chart-based values
+  if (yahooItems.length) {
+    tasks.push(
+      yahooQuotePE(yahooItems.map(it => it.symbol))
+        .then(map => {
+          for (const it of yahooItems) {
+            const pe = map[it.symbol];
+            if (pe != null) peRatios[`${it.key}:${it.name}`] = pe;
+          }
+        })
+        .catch(() => {}) // silent — chart-based P/E remains as fallback
+    );
   }
   for (const it of (body.funds || [])) {
     tasks.push(fundNav(it.ticker)

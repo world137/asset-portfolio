@@ -315,6 +315,9 @@ function DividendCalendar() {
     return () => window.removeEventListener('resize', handler);
   }, []);
 
+  const [selectedDay, setSelectedDay] = React.useState(null);
+  React.useEffect(() => { setSelectedDay(null); }, [viewMonth]);
+
   const [year, mon] = viewMonth.split('-').map(Number);
 
   function changeMonth(delta) {
@@ -461,18 +464,17 @@ function DividendCalendar() {
                             <div key={d.id} title={payLabel(d)}
                                  style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
                                    background: d.payDate === dayStr ? 'var(--green-600)' : 'var(--fg-4)',
-                                   opacity: d.auto ? 0.8 : 1, cursor: d.auto ? 'default' : 'pointer' }}
-                                 onClick={() => { if (!d.auto) { setEditItem(d); setDivModalOpen(true); } }} />
+                                   opacity: d.auto ? 0.8 : 1, cursor: 'pointer' }}
+                                 onClick={() => setSelectedDay(s => s === dayStr ? null : dayStr)} />
                           ))}
                           {dayEco.map((e, ei) => {
                             const tc = ECO_TYPE_COLORS[e.type] || ECO_TYPE_COLORS.other;
-                            const isCustom = !e._hardcoded && e.id;
                             return (
                               <div key={e.id || e.label + ei} title={e.label + (e.note ? ' · ' + e.note : '')}
                                    style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
                                      background: tc.bg, opacity: e.importance === 'low' ? 0.6 : 1,
-                                     cursor: isCustom ? 'pointer' : 'default' }}
-                                   onClick={() => { if (isCustom) { setEditEcoItem(e); setEcoModalOpen(true); } }} />
+                                     cursor: 'pointer' }}
+                                   onClick={() => setSelectedDay(s => s === dayStr ? null : dayStr)} />
                             );
                           })}
                         </div>
@@ -516,6 +518,52 @@ function DividendCalendar() {
               })}
             </div>
           </div>
+
+          {isMobile && selectedDay && (() => {
+            const selDivs = sorted.filter(d => d.payDate === selectedDay || d.exDate === selectedDay);
+            const selEco  = allEcoEvents.filter(e => e.date === selectedDay && showEcoTypes[e.type]);
+            if (selDivs.length === 0 && selEco.length === 0) return null;
+            return (
+              <div className="card" style={{ marginTop: 8, padding: '12px 14px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <span style={{ fontWeight: 700, fontSize: 13 }}>{selectedDay}</span>
+                  <button className="icon-toggle" onClick={() => setSelectedDay(null)}><Icon name="x" size={13} /></button>
+                </div>
+                {selDivs.map(d => {
+                  const isPay = d.payDate === selectedDay;
+                  const amt = effectiveAmount(d);
+                  return (
+                    <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, fontSize: 13 }}>
+                      <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 3,
+                        background: isPay ? 'var(--green-600)' : 'var(--fg-4)', color: '#fff', flexShrink: 0 }}>
+                        {isPay ? 'PAY' : 'EX'}
+                      </span>
+                      <span style={{ fontWeight: 600 }}>{d.name.replace(/THB$/, '')}</span>
+                      {d.note && <span style={{ fontSize: 11, color: 'var(--fg-3)', marginLeft: 2 }}>{d.note}</span>}
+                      {amt > 0 && <span style={{ color: 'var(--green-600)', marginLeft: 'auto', fontWeight: 600 }}>{sym}{window.fmtBig(amt)}</span>}
+                    </div>
+                  );
+                })}
+                {selEco.map((e, i) => {
+                  const tc = ECO_TYPE_COLORS[e.type] || ECO_TYPE_COLORS.other;
+                  return (
+                    <div key={e.id || e.label + i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, fontSize: 13 }}>
+                      <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 99,
+                        background: tc.bg, color: tc.text, flexShrink: 0 }}>
+                        {tc.label}
+                      </span>
+                      <span style={{ fontWeight: 500 }}>{e.label}</span>
+                      {e.note && <span style={{ fontSize: 11, color: 'var(--fg-3)' }}>{e.note}</span>}
+                      <span style={{ fontSize: 10, marginLeft: 'auto', fontWeight: 700,
+                        color: e.importance === 'high' ? 'var(--red-600)' : e.importance === 'medium' ? '#d97706' : 'var(--fg-3)' }}>
+                        {e.importance || 'low'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           {(thisMonth.length === 0 && monthEcoEvents.length === 0) && (
             <div style={{ textAlign: 'center', color: 'var(--fg-3)', padding: '24px 0', fontSize: 13 }}>
