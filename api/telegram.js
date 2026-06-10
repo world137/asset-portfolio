@@ -1,7 +1,7 @@
 /* ============================================================================
    api/telegram.js — Send daily portfolio report to Telegram
 
-   Called automatically by Vercel cron at 00:00 UTC (= 07:00 AM Thailand).
+   Called automatically by Vercel cron at 06:00 & 18:00 Thailand time.
    Also accepts POST /api/telegram { manual: true } for on-demand sends.
 
    Required env vars:
@@ -22,7 +22,6 @@ const PORTFOLIO_ID  = process.env.PORTFOLIO_ID;
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
-// Asset classes included in the report
 const REPORT_CLASSES = [
   { key: 'crypto',    label: 'Crypto', short: 'Crypto', live: 'crypto', ccy: 'THB' },
   { key: 'usaStock',  label: 'USA',    short: 'USA',    live: 'yahoo',  ccy: 'USD' },
@@ -31,7 +30,6 @@ const REPORT_CLASSES = [
   { key: 'gold',      label: 'Gold',   short: 'Gold',   live: 'yahoo',  ccy: 'USD', yahooSymbol: 'GC=F' },
 ];
 
-// CoinGecko ID mapping (mirrors seed.js CRYPTO_MAP)
 const CRYPTO_MAP = {
   BTC:    'bitcoin',      ETH:    'ethereum',     BNB:    'binancecoin',
   SOL:    'solana',       XRP:    'ripple',        USDT:   'tether',
@@ -40,6 +38,65 @@ const CRYPTO_MAP = {
   LTC:    'litecoin',     MATIC:  'matic-network',
   BTCTHB: 'bitcoin',      ETHTHB: 'ethereum',
 };
+
+// ── Supabase helpers ───────────────────────────────────────────────────────────
+
+function sbHeaders() {
+  return {
+    apikey: SUPABASE_KEY,
+    Authorization: `Bearer ${SUPABASE_KEY}`,
+    'Content-Type': 'application/json',
+  };
+}
+
+async function sbGet(table, qs) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${qs}`, { headers: sbHeaders() });
+  if (!r.ok) throw new Error(`sb-${table}-${r.status}`);
+  return r.json();
+}
+
+// ── Data loaders ───────────────────────────────────────────────────────────────
+
+async function loadHoldings(portfolioId) {
+  const uid = encodeURIComponent(portfolioId);
+  return sbGet('holdings', `user_id=eq.${uid}&select=class_key,name,qty`);
+}
+
+async function loadPortfolioMeta(portfolioId) {
+  const uid = encodeURIComponent(portfolioId);
+  try {
+    const [fxRows, alertRows, allocRows] = await Promise.all([
+      sbGet('fx_rates',          `user_id=eq.${uid}&select=pair,rate`),
+      sbGet('price_alerts',      `user_id=eq.${uid}&select=*`),
+      sbGet('target_allocation', `user_id=eq.${uid}&select=class_key,target_pct`),
+    ]);
+
+    const fx = { USDTHB: 34.5, JPYTHB: 0.23, KRWTHB: 0.026 };
+    for (const row of fxRows) {
+      if (row.pair === 'USDTHB') fx.USDTHB = parseFloat(row.rate);
+      else if (row.pair === 'JPYTHB') fx.JPYTHB = parseFloat(row.rate);
+      else if (row.pair === 'KRWTHB') fx.KRWTHB = parseFloat(row.rate);
+    }
+
+    const priceAlerts = alertRows.map(r => ({
+      id:        r.id,
+      classKey:  r.class_key,
+      name:      r.name,
+      condition: r.condition,
+      price:     parseFloat(r.price),
+      note:      r.note || '',
+      triggered: r.triggered,
+    }));
+
+    const targetAllocation = {};
+    for (const a of allocRows) targetAllocation[a.class_key] = parseFloat(a.target_pct);
+
+    return { fx, priceAlerts, targetAllocation };
+  } catch (e) {
+    console.warn('[telegram] loadPortfolioMeta error:', e.message);
+    return { fx: { USDTHB: 34.5 }, priceAlerts: [], targetAllocation: {} };
+  }
+}
 
 // ── Price fetchers ─────────────────────────────────────────────────────────────
 
@@ -54,9 +111,10 @@ async function yahooPrice(symbol) {
       const j = await r.json();
       const meta = j?.chart?.result?.[0]?.meta;
       if (!meta) { lastErr = new Error('no meta'); continue; }
-      const price     = meta.regularMarketPrice;
-      const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? null;
-      return { price, prevClose };
+      return {
+        price:     meta.regularMarketPrice,
+        prevClose: meta.chartPreviousClose ?? meta.previousClose ?? null,
+      };
     } catch (e) { lastErr = e; }
   }
   throw lastErr || new Error('yahoo failed: ' + symbol);
@@ -70,111 +128,16 @@ async function cryptoDayChanges(ids) {
   return r.json();
 }
 
-// ── Supabase helpers ───────────────────────────────────────────────────────────
-
-function sbHeaders() {
-  return {
-    apikey: SUPABASE_KEY,
-    Authorization: `Bearer ${SUPABASE_KEY}`,
-    'Content-Type': 'application/json',
-  };
-}
-
-async function loadHoldings(portfolioId) {
-  const uid = encodeURIComponent(portfolioId);
-  const r   = await fetch(
-    `${SUPABASE_URL}/rest/v1/holdings?user_id=eq.${uid}&select=class_key,name`,
-    { headers: sbHeaders() },
-  );
-  if (!r.ok) throw new Error('Supabase holdings error: ' + r.status);
-  return r.json();
-}
-
-async function loadPortfolioData(portfolioId) {
-  const uid = encodeURIComponent(portfolioId);
-  const r   = await fetch(
-    `${SUPABASE_URL}/rest/v1/portfolio_data?user_id=eq.${uid}&select=data&limit=1`,
-    { headers: sbHeaders() },
-  );
-  if (!r.ok) return null;
-  const rows = await r.json();
-  if (!rows || !rows[0] || !rows[0].data) return null;
-  try { return JSON.parse(rows[0].data); } catch (_) { return null; }
-}
-
-// ── Price alert checker ────────────────────────────────────────────────────────
-
-function checkPriceAlerts(priceAlerts, assetData) {
-  if (!priceAlerts || !priceAlerts.length) return [];
-  const triggered = [];
-  for (const alert of priceAlerts) {
-    if (alert.triggered) continue;
-    const key  = `${alert.classKey}:${alert.name}`;
-    const data = assetData[key];
-    if (!data || data.price == null) continue;
-    const hit = alert.condition === 'above'
-      ? data.price >= alert.price
-      : data.price <= alert.price;
-    if (hit) {
-      triggered.push({ alert, price: data.price });
-    }
-  }
-  return triggered;
-}
-
-// ── Rebalancing drift checker ──────────────────────────────────────────────────
-
-function checkRebalancingDrift(portfolioData, assetData) {
-  if (!portfolioData) return [];
-  const targetAlloc = portfolioData.targetAllocation || {};
-  const holdings    = portfolioData.holdings || {};
-  if (!Object.keys(targetAlloc).some(k => (targetAlloc[k] || 0) > 0)) return [];
-
-  const ASSET_CLASSES = [
-    { key: 'thaiStock', ccy: 'THB' }, { key: 'usaStock', ccy: 'USD' },
-    { key: 'etf', ccy: 'USD' },       { key: 'fund', ccy: 'THB' },
-    { key: 'crypto', ccy: 'THB' },    { key: 'gold', ccy: 'USD' },
-    { key: 'other', ccy: 'THB' },
-  ];
-  const USDTHB = portfolioData.fx?.USDTHB || 34.5;
-
-  let totalValue = 0;
-  const classValues = {};
-  for (const cls of ASSET_CLASSES) {
-    let v = 0;
-    for (const lot of (holdings[cls.key] || [])) {
-      const cur   = lot.cur != null ? lot.cur : lot.price;
-      const val   = cur * lot.qty;
-      const inTHB = cls.ccy === 'USD' ? val * USDTHB : val;
-      v += inTHB;
-    }
-    classValues[cls.key] = v;
-    totalValue += v;
-  }
-
-  if (totalValue === 0) return [];
-  const alerts = [];
-  for (const [key, tgt] of Object.entries(targetAlloc)) {
-    if (!tgt) continue;
-    const curPct  = (classValues[key] || 0) / totalValue * 100;
-    const drift   = curPct - tgt;
-    if (Math.abs(drift) >= 5) {
-      alerts.push({ key, tgt, curPct, drift });
-    }
-  }
-  return alerts;
-}
-
 // ── Report builder ─────────────────────────────────────────────────────────────
 
+// Returns { groups, assetData }
+// assetData keyed by "classKey:rawName" → { price, prevClose, changeAbs, pct, ccy }
 async function buildReport(holdings) {
-  // Group holdings by class
   const byClass = {};
   for (const h of holdings) {
     (byClass[h.class_key] ||= new Set()).add(h.name);
   }
 
-  // "classKey:name" → { pct, price, changeAbs, ccy, classShort }
   const assetData = {};
   const tasks = [];
 
@@ -183,10 +146,7 @@ async function buildReport(holdings) {
     if (!names.length) continue;
 
     if (rc.live === 'crypto') {
-      const mapped = names
-        .map(n => ({ name: n, id: CRYPTO_MAP[n] }))
-        .filter(x => x.id);
-
+      const mapped = names.map(n => ({ name: n, id: CRYPTO_MAP[n] })).filter(x => x.id);
       if (mapped.length) {
         tasks.push(
           cryptoDayChanges(mapped.map(x => x.id))
@@ -198,13 +158,12 @@ async function buildReport(holdings) {
                   const pct      = entry.thb_24h_change;
                   const prevClose = price / (1 + pct / 100);
                   assetData[`${rc.key}:${name}`] = {
-                    pct, price, changeAbs: price - prevClose,
+                    price, prevClose, pct, changeAbs: price - prevClose,
                     ccy: rc.ccy, classShort: rc.short,
                   };
                 }
               }
-            })
-            .catch(() => {}),
+            }).catch(() => {}),
         );
       }
     } else {
@@ -215,13 +174,14 @@ async function buildReport(holdings) {
             .then(({ price, prevClose }) => {
               if (price != null && prevClose != null && prevClose > 0) {
                 assetData[`${rc.key}:${name}`] = {
-                  pct: ((price - prevClose) / prevClose) * 100,
-                  price, changeAbs: price - prevClose,
-                  ccy: rc.ccy, classShort: rc.short,
+                  price, prevClose,
+                  pct:       ((price - prevClose) / prevClose) * 100,
+                  changeAbs: price - prevClose,
+                  ccy:       rc.ccy,
+                  classShort: rc.short,
                 };
               }
-            })
-            .catch(() => {}),
+            }).catch(() => {}),
         );
       }
     }
@@ -229,12 +189,10 @@ async function buildReport(holdings) {
 
   await Promise.allSettled(tasks);
 
-  // Assemble report groups (still used for hasData check)
   const groups = [];
   for (const rc of REPORT_CLASSES) {
     const names = [...(byClass[rc.key] || [])];
     if (!names.length) continue;
-
     const assets = names
       .map(n => {
         const d = assetData[`${rc.key}:${n}`];
@@ -242,84 +200,200 @@ async function buildReport(holdings) {
       })
       .filter(Boolean)
       .sort((a, b) => b.pct - a.pct);
-
     if (!assets.length) continue;
-    groups.push({ label: rc.label, assets });
+    groups.push({ key: rc.key, label: rc.label, assets });
   }
 
-  return groups;
+  return { groups, assetData };
 }
 
-function todayTH() {
-  const now    = new Date();
-  const local  = new Date(now.getTime() + 7 * 60 * 60000);
-  const [y, m, d] = local.toISOString().slice(0, 10).split('-');
-  return `${d}-${m}-${y}`;
+// ── Portfolio value calculator ─────────────────────────────────────────────────
+
+function computePortfolioSummary(holdings, assetData, fx) {
+  const USDTHB = fx?.USDTHB || 34.5;
+  let totalTHB = 0, dayPnlTHB = 0, coveredCount = 0;
+
+  for (const h of holdings) {
+    const key = `${h.class_key}:${h.name}`;
+    const d   = assetData[key];
+    if (!d || d.price == null) continue;
+    const qty = parseFloat(h.qty) || 0;
+    const mul = d.ccy === 'USD' ? USDTHB : 1;
+    totalTHB += qty * d.price * mul;
+    if (d.changeAbs != null) dayPnlTHB += qty * d.changeAbs * mul;
+    coveredCount++;
+  }
+
+  const prevTotal  = totalTHB - dayPnlTHB;
+  const dayPnlPct  = prevTotal > 0 ? (dayPnlTHB / prevTotal) * 100 : 0;
+  return { totalTHB, dayPnlTHB, dayPnlPct, coveredCount };
 }
+
+// ── Checkers ───────────────────────────────────────────────────────────────────
+
+function checkPriceAlerts(priceAlerts, assetData) {
+  if (!priceAlerts?.length) return [];
+  return priceAlerts
+    .filter(a => !a.triggered)
+    .flatMap(alert => {
+      const key  = `${alert.classKey}:${alert.name}`;
+      const d    = assetData[key];
+      if (!d || d.price == null) return [];
+      const hit  = alert.condition === 'above' ? d.price >= alert.price : d.price <= alert.price;
+      return hit ? [{ alert, price: d.price }] : [];
+    });
+}
+
+function checkRebalancingDrift(targetAllocation, holdings, assetData, fx) {
+  if (!targetAllocation || !Object.keys(targetAllocation).some(k => (targetAllocation[k] || 0) > 0)) return [];
+  const ASSET_CLASSES = [
+    { key: 'thaiStock', ccy: 'THB' }, { key: 'usaStock', ccy: 'USD' },
+    { key: 'etf',       ccy: 'USD' }, { key: 'fund',     ccy: 'THB' },
+    { key: 'crypto',    ccy: 'THB' }, { key: 'gold',     ccy: 'USD' },
+    { key: 'other',     ccy: 'THB' },
+  ];
+  const USDTHB = fx?.USDTHB || 34.5;
+
+  let totalValue = 0;
+  const classValues = {};
+  for (const cls of ASSET_CLASSES) {
+    let v = 0;
+    for (const h of holdings) {
+      if (h.class_key !== cls.key) continue;
+      const key = `${cls.key}:${h.name}`;
+      const d   = assetData[key];
+      const price = d?.price ?? null;
+      if (price == null) continue;
+      const val = parseFloat(h.qty) * price;
+      v += cls.ccy === 'USD' ? val * USDTHB : val;
+    }
+    classValues[cls.key] = v;
+    totalValue += v;
+  }
+  if (totalValue === 0) return [];
+
+  return Object.entries(targetAllocation)
+    .filter(([, tgt]) => tgt)
+    .flatMap(([key, tgt]) => {
+      const curPct = (classValues[key] || 0) / totalValue * 100;
+      const drift  = curPct - tgt;
+      return Math.abs(drift) >= 5 ? [{ key, tgt, curPct, drift }] : [];
+    });
+}
+
+// ── Formatters ─────────────────────────────────────────────────────────────────
 
 function escHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function fmtChangeAbs(v, ccy) {
-  const sym = ccy === 'USD' ? '$' : '฿'; // ฿
+function todayTH() {
+  const local = new Date(new Date().getTime() + 7 * 3600000);
+  const [y, m, d] = local.toISOString().slice(0, 10).split('-');
+  const h = String(local.getUTCHours()).padStart(2, '0');
+  const min = String(local.getUTCMinutes()).padStart(2, '0');
+  return { date: `${d}-${m}-${y}`, time: `${h}:${min}` };
+}
+
+function fmtBig(v) {
+  if (v >= 1e9) return (v / 1e9).toFixed(2) + 'B';
+  if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M';
+  if (v >= 1e3) return (v / 1e3).toFixed(1) + 'K';
+  return v.toFixed(2);
+}
+
+function fmtPrice(v, ccy) {
+  const sym = ccy === 'USD' ? '$' : '฿';
   const abs = Math.abs(v);
   let s;
-  if (abs >= 100000) s = Math.round(abs).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  else if (abs >= 1000) s = abs.toFixed(0);
+  if (abs >= 1e6)    s = (abs / 1e6).toFixed(2) + 'M';
+  else if (abs >= 1000) s = abs.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  else if (abs >= 10)   s = abs.toFixed(2);
+  else if (abs >= 0.01) s = abs.toFixed(4);
+  else                  s = abs.toFixed(6);
+  return (v < 0 ? '-' : '') + sym + s;
+}
+
+function fmtChange(v, ccy) {
+  const sym = ccy === 'USD' ? '$' : '฿';
+  const abs = Math.abs(v);
+  let s;
+  if (abs >= 1000) s = abs.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   else if (abs >= 10)   s = abs.toFixed(2);
   else if (abs >= 0.01) s = abs.toFixed(4);
   else                  s = abs.toFixed(6);
   return (v >= 0 ? '+' : '-') + sym + s;
 }
 
-function formatMessage(groups) {
-  let msg = `Report [${todayTH()}]\n`;
-  for (const g of groups) {
-    msg += `${g.label} :\n`;
+function formatMessage(groups, assetData, summary) {
+  if (!groups.length) return null;
+
+  const { date, time } = todayTH();
+  const pnlSign  = summary.dayPnlTHB >= 0 ? '+' : '';
+  const pnlEmoji = summary.dayPnlTHB >= 0 ? '📈' : '📉';
+
+  let msg = `📊 <b>Portfolio Report</b> — ${date} ${time} TH\n`;
+
+  // ── Portfolio summary ─────────────────────────────────────────────────
+  if (summary.totalTHB > 0) {
+    msg += `\n💰 <b>Total: ฿${fmtBig(summary.totalTHB)}</b>`;
+    if (summary.dayPnlTHB !== 0) {
+      msg += `   ${pnlEmoji} Day: <b>${pnlSign}฿${fmtBig(Math.abs(summary.dayPnlTHB))} (${pnlSign}${summary.dayPnlPct.toFixed(2)}%)</b>`;
+    }
+    msg += '\n';
+  }
+
+  msg += '\n';
+
+  // ── Best & worst per class ────────────────────────────────────────────
+  const classLines = groups.map(g => {
     if (g.assets.length === 1) {
       const a    = g.assets[0];
       const sign = a.pct >= 0 ? '+' : '';
-      msg += `${a.name} (${sign}${a.pct.toFixed(2)}%)\n`;
-    } else {
-      const best  = g.assets[0];
-      const worst = g.assets[g.assets.length - 1];
-      msg += `Best : ${best.name} (${best.pct >= 0 ? '+' : ''}${best.pct.toFixed(2)}%)\n`;
-      msg += `Worst : ${worst.name} (${worst.pct >= 0 ? '+' : ''}${worst.pct.toFixed(2)}%)\n`;
+      return `${g.label.padEnd(7)} · ${a.name} ${sign}${a.pct.toFixed(2)}%`;
     }
-    msg += `——————————————————\n`;
+    const best  = g.assets[0];
+    const worst = g.assets[g.assets.length - 1];
+    const bs    = best.pct  >= 0 ? '+' : '';
+    const ws    = worst.pct >= 0 ? '+' : '';
+    return `${g.label.padEnd(7)} · 🏆 ${best.name} ${bs}${best.pct.toFixed(2)}%  /  💀 ${worst.name} ${ws}${worst.pct.toFixed(2)}%`;
+  });
+
+  msg += `<pre>${escHtml(classLines.join('\n'))}</pre>\n`;
+
+  // ── All-assets table ──────────────────────────────────────────────────
+  const rows = groups.flatMap(g =>
+    g.assets.map(a => ({
+      name: a.name,
+      cls:  a.classShort || g.label,
+      pct:  (a.pct >= 0 ? '+' : '') + a.pct.toFixed(2) + '%',
+      price: fmtPrice(a.price, a.ccy),
+      chg:  a.changeAbs != null ? fmtChange(a.changeAbs, a.ccy) : '—',
+    }))
+  ).sort((a, b) => parseFloat(b.pct) - parseFloat(a.pct));
+
+  if (rows.length) {
+    const pad  = (s, n) => String(s).padEnd(n);
+    const padR = (s, n) => String(s).padStart(n);
+    const nW   = Math.max(5, ...rows.map(r => r.name.length));
+    const cW   = Math.max(5, ...rows.map(r => r.cls.length));
+    const pW   = Math.max(4, ...rows.map(r => r.pct.length));
+    const prW  = Math.max(7, ...rows.map(r => r.price.length));
+    const gW   = Math.max(6, ...rows.map(r => r.chg.length));
+
+    const header = `${pad('Asset', nW)}  ${pad('Class', cW)}  ${padR('Day%', pW)}  ${padR('Price', prW)}  ${padR('Change', gW)}`;
+    const sep    = '─'.repeat(header.length);
+    const body   = rows.map(r =>
+      `${pad(r.name, nW)}  ${pad(r.cls, cW)}  ${padR(r.pct, pW)}  ${padR(r.price, prW)}  ${padR(r.chg, gW)}`
+    ).join('\n');
+
+    msg += `\n<pre>${escHtml(`${header}\n${sep}\n${body}`)}</pre>`;
   }
 
-  const rows = groups.flatMap(g =>
-    g.assets.map(a => ({ ...a, classShort: a.classShort || g.label }))
-  ).sort((a, b) => b.pct - a.pct);
-
-  if (!rows.length) return `Report [${todayTH()}]\nNo data.`;
-
-  const fmt = rows.map(r => ({
-    name: r.name,
-    cls:  r.classShort,
-    pct:  (r.pct >= 0 ? '+' : '') + r.pct.toFixed(2) + '%',
-    chg:  r.changeAbs != null ? fmtChangeAbs(r.changeAbs, r.ccy) : '—',
-  }));
-
-  const pad  = (s, n) => String(s).padEnd(n);
-  const padR = (s, n) => String(s).padStart(n);
-
-  const nW = Math.max(5, ...fmt.map(r => r.name.length));
-  const cW = Math.max(5, ...fmt.map(r => r.cls.length));
-  const pW = Math.max(4, ...fmt.map(r => r.pct.length));
-  const gW = Math.max(6, ...fmt.map(r => r.chg.length));
-
-  const header = `${pad('Asset', nW)}  ${pad('Class', cW)}  ${padR('Day%', pW)}  ${padR('Change', gW)}`;
-  const sep    = '─'.repeat(header.length);
-  const body   = fmt.map(r =>
-    `${pad(r.name, nW)}  ${pad(r.cls, cW)}  ${padR(r.pct, pW)}  ${padR(r.chg, gW)}`
-  ).join('\n');
-
-  const table = escHtml(`${header}\n${sep}\n${body}`);
-  return msg + `\n<pre>${table}</pre>`;
+  return msg;
 }
+
+// ── Telegram sender ────────────────────────────────────────────────────────────
 
 async function sendTelegram(text) {
   const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
@@ -327,89 +401,89 @@ async function sendTelegram(text) {
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({ chat_id: CHAT_ID, text, parse_mode: 'HTML' }),
   });
-  if (!r.ok) throw new Error('Telegram API error: ' + r.status);
+  if (!r.ok) {
+    const body = await r.text().catch(() => '');
+    throw new Error('Telegram API error: ' + r.status + ' ' + body);
+  }
   return r.json();
 }
 
 // ── Handler ────────────────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(204).end();
 
-  if (!BOT_TOKEN) return res.status(400).json({ error: 'TELEGRAM_BOT_TOKEN not set' });
-  if (!CHAT_ID)   return res.status(400).json({ error: 'TELEGRAM_CHAT_ID not set' });
-  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(400).json({ error: 'Supabase not configured' });
+  if (!BOT_TOKEN)                       return res.status(400).json({ error: 'TELEGRAM_BOT_TOKEN not set' });
+  if (!CHAT_ID)                         return res.status(400).json({ error: 'TELEGRAM_CHAT_ID not set' });
+  if (!SUPABASE_URL || !SUPABASE_KEY)   return res.status(400).json({ error: 'Supabase not configured' });
 
-  // Manual POST from browser sends portfolioId in body; cron GET uses env var.
   let pid = PORTFOLIO_ID;
   if (req.method === 'POST') {
     try {
       const body = await readBody(req);
-      if (body && body.portfolioId) pid = body.portfolioId;
+      if (body?.portfolioId) pid = body.portfolioId;
     } catch (_) {}
   }
 
-  if (!pid) return res.status(400).json({ error: 'PORTFOLIO_ID not configured — set it in Vercel env vars or check your sync ID' });
+  if (!pid) return res.status(400).json({ error: 'PORTFOLIO_ID not configured' });
 
   console.log(`[telegram] method=${req.method} pid=${pid?.slice(0, 8)}…`);
 
   try {
-    const [holdings, portfolioData] = await Promise.all([
+    const [holdings, meta] = await Promise.all([
       loadHoldings(pid),
-      loadPortfolioData(pid),
+      loadPortfolioMeta(pid),
     ]);
-    console.log(`[telegram] holdings found: ${holdings.length}`);
-    if (!holdings.length) return res.status(200).json({ ok: true, note: 'no holdings found for this portfolio ID' });
 
-    const groups = await buildReport(holdings);
+    console.log(`[telegram] holdings: ${holdings.length}`);
+    if (!holdings.length) return res.status(200).json({ ok: true, note: 'no holdings' });
 
-    // Rebuild assetData map for alert checking
-    const assetDataMap = {};
-    for (const g of groups) {
-      for (const a of g.assets) {
-        assetDataMap[`${g._key || ''}:${a.rawName || a.name}`] = { price: a.price, changeAbs: a.changeAbs, ccy: a.ccy };
-      }
-    }
-
-    // Check price alerts
-    const priceAlerts = portfolioData?.priceAlerts || [];
-    const triggeredAlerts = checkPriceAlerts(priceAlerts, assetDataMap);
-
-    // Check rebalancing drift
-    const rebalAlerts = checkRebalancingDrift(portfolioData, assetDataMap);
+    const { groups, assetData } = await buildReport(holdings);
+    const summary               = computePortfolioSummary(holdings, assetData, meta.fx);
+    const triggeredAlerts       = checkPriceAlerts(meta.priceAlerts, assetData);
+    const rebalAlerts           = checkRebalancingDrift(meta.targetAllocation, holdings, assetData, meta.fx);
 
     if (!groups.length && !triggeredAlerts.length && !rebalAlerts.length) {
-      return res.status(200).json({ ok: true, note: 'no live price data available yet' });
+      return res.status(200).json({ ok: true, note: 'no live price data' });
     }
 
-    let message = groups.length ? formatMessage(groups) : `Report [${todayTH()}]\nNo market data available.\n`;
+    const { date, time } = todayTH();
+    let message = formatMessage(groups, assetData, summary)
+      || `📊 <b>Portfolio Report</b> — ${date} ${time} TH\nNo market data available.\n`;
 
-    // Append price alert section
+    // ── Price alert section ──────────────────────────────────────────────
     if (triggeredAlerts.length > 0) {
-      message += '\n🚨 <b>Price Alerts Triggered</b>\n';
+      message += '\n\n🚨 <b>Price Alerts Triggered</b>\n';
       for (const { alert, price } of triggeredAlerts) {
-        const dir = alert.condition === 'above' ? '▲ above' : '▼ below';
-        message += `• ${escHtml(alert.name.replace(/THB$/, ''))} — ${dir} ${price.toLocaleString()} (target: ${alert.price.toLocaleString()})\n`;
-        if (alert.note) message += `  ${escHtml(alert.note)}\n`;
+        const dir    = alert.condition === 'above' ? '▲ above' : '▼ below';
+        const target = alert.price.toLocaleString('en', { maximumFractionDigits: 4 });
+        message += `• <b>${escHtml(alert.name.replace(/THB$/, ''))}</b> — ${dir} ${escHtml(String(price.toLocaleString()))} (target: ${target})\n`;
+        if (alert.note) message += `  <i>${escHtml(alert.note)}</i>\n`;
       }
     }
 
-    // Append rebalancing drift section
+    // ── Rebalancing drift section ────────────────────────────────────────
     if (rebalAlerts.length > 0) {
-      message += '\n⚖️ <b>Rebalancing Needed (&gt;5% drift)</b>\n';
-      const CLASS_LABELS = { thaiStock: 'Thai Stock', usaStock: 'USA Stock', etf: 'ETF', fund: 'Fund', crypto: 'Crypto', gold: 'Gold', other: 'Other' };
+      message += '\n\n⚖️ <b>Rebalancing Needed (&gt;5% drift)</b>\n';
+      const LABELS = { thaiStock: 'Thai Stock', usaStock: 'USA Stock', etf: 'ETF', fund: 'Fund', crypto: 'Crypto', gold: 'Gold', other: 'Other' };
       for (const a of rebalAlerts) {
-        const direction = a.drift > 0 ? `overweight +${a.drift.toFixed(1)}%` : `underweight ${a.drift.toFixed(1)}%`;
-        message += `• ${escHtml(CLASS_LABELS[a.key] || a.key)}: ${a.curPct.toFixed(1)}% vs target ${a.tgt}% (${direction})\n`;
+        const dir = a.drift > 0 ? `overweight +${a.drift.toFixed(1)}%` : `underweight ${a.drift.toFixed(1)}%`;
+        message += `• ${escHtml(LABELS[a.key] || a.key)}: ${a.curPct.toFixed(1)}% vs target ${a.tgt}% (${dir})\n`;
       }
     }
 
     await sendTelegram(message);
     console.log('[telegram] sent ok');
-    return res.status(200).json({ ok: true, message, triggeredAlerts: triggeredAlerts.length, rebalAlerts: rebalAlerts.length });
+    return res.status(200).json({
+      ok: true,
+      summary: { totalTHB: Math.round(summary.totalTHB), dayPnlTHB: Math.round(summary.dayPnlTHB), dayPnlPct: summary.dayPnlPct.toFixed(2) },
+      triggeredAlerts: triggeredAlerts.length,
+      rebalAlerts: rebalAlerts.length,
+    });
   } catch (e) {
     console.error('[telegram] error:', e);
     return res.status(500).json({ error: e.message });

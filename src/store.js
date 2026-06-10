@@ -111,7 +111,7 @@
       tags: state.tags, holdingTags: state.holdingTags,
       holdingNotes: state.holdingNotes, goals: state.goals,
       dividends: state.dividends, targetAllocation: state.targetAllocation,
-      priceAlerts: state.priceAlerts,
+      priceAlerts: state.priceAlerts, ecoEvents: state.ecoEvents,
     });
   }
 
