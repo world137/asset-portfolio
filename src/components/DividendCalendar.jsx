@@ -96,6 +96,87 @@ const HARDCODED_ECO_EVENTS = [
   { date: '2026-10-14', type: 'retail', label: 'Retail Sales (Sep)', importance: 'low' },
   { date: '2026-11-13', type: 'retail', label: 'Retail Sales (Oct)', importance: 'low' },
   { date: '2026-12-11', type: 'retail', label: 'Retail Sales (Nov)', importance: 'low' },
+
+  // ── 2027 ──────────────────────────────────────────────────────────────────────
+  // FOMC 2027 (8 meetings — decision days)
+  { date: '2027-01-27', type: 'fomc', label: 'FOMC Rate Decision', importance: 'high' },
+  { date: '2027-03-17', type: 'fomc', label: 'FOMC Rate Decision', importance: 'high' },
+  { date: '2027-04-28', type: 'fomc', label: 'FOMC Rate Decision', importance: 'high' },
+  { date: '2027-06-16', type: 'fomc', label: 'FOMC Rate Decision', importance: 'high' },
+  { date: '2027-07-28', type: 'fomc', label: 'FOMC Rate Decision', importance: 'high' },
+  { date: '2027-09-15', type: 'fomc', label: 'FOMC Rate Decision', importance: 'high' },
+  { date: '2027-10-27', type: 'fomc', label: 'FOMC Rate Decision', importance: 'high' },
+  { date: '2027-12-15', type: 'fomc', label: 'FOMC Rate Decision', importance: 'high' },
+  // CPI 2027 (monthly — approx 2nd Wednesday)
+  { date: '2027-01-13', type: 'cpi', label: 'CPI Inflation (Dec)', importance: 'high' },
+  { date: '2027-02-10', type: 'cpi', label: 'CPI Inflation (Jan)', importance: 'high' },
+  { date: '2027-03-10', type: 'cpi', label: 'CPI Inflation (Feb)', importance: 'high' },
+  { date: '2027-04-14', type: 'cpi', label: 'CPI Inflation (Mar)', importance: 'high' },
+  { date: '2027-05-12', type: 'cpi', label: 'CPI Inflation (Apr)', importance: 'high' },
+  { date: '2027-06-09', type: 'cpi', label: 'CPI Inflation (May)', importance: 'high' },
+  { date: '2027-07-14', type: 'cpi', label: 'CPI Inflation (Jun)', importance: 'high' },
+  { date: '2027-08-11', type: 'cpi', label: 'CPI Inflation (Jul)', importance: 'high' },
+  { date: '2027-09-08', type: 'cpi', label: 'CPI Inflation (Aug)', importance: 'high' },
+  { date: '2027-10-13', type: 'cpi', label: 'CPI Inflation (Sep)', importance: 'high' },
+  { date: '2027-11-10', type: 'cpi', label: 'CPI Inflation (Oct)', importance: 'high' },
+  { date: '2027-12-08', type: 'cpi', label: 'CPI Inflation (Nov)', importance: 'high' },
+  // NFP 2027 (first Friday of each month)
+  { date: '2027-01-08', type: 'nfp', label: 'Jobs Report (Dec)', importance: 'high' },
+  { date: '2027-02-05', type: 'nfp', label: 'Jobs Report (Jan)', importance: 'high' },
+  { date: '2027-03-05', type: 'nfp', label: 'Jobs Report (Feb)', importance: 'high' },
+  { date: '2027-04-02', type: 'nfp', label: 'Jobs Report (Mar)', importance: 'high' },
+  { date: '2027-05-07', type: 'nfp', label: 'Jobs Report (Apr)', importance: 'high' },
+  { date: '2027-06-04', type: 'nfp', label: 'Jobs Report (May)', importance: 'high' },
+  { date: '2027-07-02', type: 'nfp', label: 'Jobs Report (Jun)', importance: 'high' },
+  { date: '2027-08-06', type: 'nfp', label: 'Jobs Report (Jul)', importance: 'high' },
+  { date: '2027-09-03', type: 'nfp', label: 'Jobs Report (Aug)', importance: 'high' },
+  { date: '2027-10-01', type: 'nfp', label: 'Jobs Report (Sep)', importance: 'high' },
+  { date: '2027-11-05', type: 'nfp', label: 'Jobs Report (Oct)', importance: 'high' },
+  { date: '2027-12-03', type: 'nfp', label: 'Jobs Report (Nov)', importance: 'high' },
+  // PCE 2027 (late-month Fridays)
+  { date: '2027-01-29', type: 'pce', label: 'PCE Inflation (Dec)', importance: 'medium' },
+  { date: '2027-02-26', type: 'pce', label: 'PCE Inflation (Jan)', importance: 'medium' },
+  { date: '2027-03-26', type: 'pce', label: 'PCE Inflation (Feb)', importance: 'medium' },
+  { date: '2027-04-30', type: 'pce', label: 'PCE Inflation (Mar)', importance: 'medium' },
+  { date: '2027-05-28', type: 'pce', label: 'PCE Inflation (Apr)', importance: 'medium' },
+  { date: '2027-06-25', type: 'pce', label: 'PCE Inflation (May)', importance: 'medium' },
+  { date: '2027-07-30', type: 'pce', label: 'PCE Inflation (Jun)', importance: 'medium' },
+  { date: '2027-08-27', type: 'pce', label: 'PCE Inflation (Jul)', importance: 'medium' },
+  { date: '2027-09-24', type: 'pce', label: 'PCE Inflation (Aug)', importance: 'medium' },
+  { date: '2027-10-29', type: 'pce', label: 'PCE Inflation (Sep)', importance: 'medium' },
+  { date: '2027-11-26', type: 'pce', label: 'PCE Inflation (Oct)', importance: 'medium' },
+  { date: '2027-12-17', type: 'pce', label: 'PCE Inflation (Nov)', importance: 'medium' },
+  // GDP 2027 (quarterly advance estimates)
+  { date: '2027-01-28', type: 'gdp', label: 'GDP Q4 2026 (Advance)', importance: 'medium' },
+  { date: '2027-04-29', type: 'gdp', label: 'GDP Q1 2027 (Advance)', importance: 'medium' },
+  { date: '2027-07-29', type: 'gdp', label: 'GDP Q2 2027 (Advance)', importance: 'medium' },
+  { date: '2027-10-28', type: 'gdp', label: 'GDP Q3 2027 (Advance)', importance: 'medium' },
+  // PMI 2027 (first business day of each month)
+  { date: '2027-01-04', type: 'pmi', label: 'ISM Manufacturing PMI', importance: 'low' },
+  { date: '2027-02-01', type: 'pmi', label: 'ISM Manufacturing PMI', importance: 'low' },
+  { date: '2027-03-01', type: 'pmi', label: 'ISM Manufacturing PMI', importance: 'low' },
+  { date: '2027-04-01', type: 'pmi', label: 'ISM Manufacturing PMI', importance: 'low' },
+  { date: '2027-05-03', type: 'pmi', label: 'ISM Manufacturing PMI', importance: 'low' },
+  { date: '2027-06-01', type: 'pmi', label: 'ISM Manufacturing PMI', importance: 'low' },
+  { date: '2027-07-01', type: 'pmi', label: 'ISM Manufacturing PMI', importance: 'low' },
+  { date: '2027-08-02', type: 'pmi', label: 'ISM Manufacturing PMI', importance: 'low' },
+  { date: '2027-09-01', type: 'pmi', label: 'ISM Manufacturing PMI', importance: 'low' },
+  { date: '2027-10-01', type: 'pmi', label: 'ISM Manufacturing PMI', importance: 'low' },
+  { date: '2027-11-01', type: 'pmi', label: 'ISM Manufacturing PMI', importance: 'low' },
+  { date: '2027-12-01', type: 'pmi', label: 'ISM Manufacturing PMI', importance: 'low' },
+  // Retail Sales 2027 (~mid-month)
+  { date: '2027-01-14', type: 'retail', label: 'Retail Sales (Dec)', importance: 'low' },
+  { date: '2027-02-11', type: 'retail', label: 'Retail Sales (Jan)', importance: 'low' },
+  { date: '2027-03-11', type: 'retail', label: 'Retail Sales (Feb)', importance: 'low' },
+  { date: '2027-04-14', type: 'retail', label: 'Retail Sales (Mar)', importance: 'low' },
+  { date: '2027-05-12', type: 'retail', label: 'Retail Sales (Apr)', importance: 'low' },
+  { date: '2027-06-09', type: 'retail', label: 'Retail Sales (May)', importance: 'low' },
+  { date: '2027-07-14', type: 'retail', label: 'Retail Sales (Jun)', importance: 'low' },
+  { date: '2027-08-11', type: 'retail', label: 'Retail Sales (Jul)', importance: 'low' },
+  { date: '2027-09-09', type: 'retail', label: 'Retail Sales (Aug)', importance: 'low' },
+  { date: '2027-10-14', type: 'retail', label: 'Retail Sales (Sep)', importance: 'low' },
+  { date: '2027-11-11', type: 'retail', label: 'Retail Sales (Oct)', importance: 'low' },
+  { date: '2027-12-10', type: 'retail', label: 'Retail Sales (Nov)', importance: 'low' },
 ];
 
 // ── Economic event modal ───────────────────────────────────────────────────────
@@ -315,6 +396,9 @@ function DividendCalendar() {
     return () => window.removeEventListener('resize', handler);
   }, []);
 
+  const [selectedDay, setSelectedDay] = React.useState(null);
+  React.useEffect(() => { setSelectedDay(null); }, [viewMonth]);
+
   const [year, mon] = viewMonth.split('-').map(Number);
 
   function changeMonth(delta) {
@@ -461,18 +545,17 @@ function DividendCalendar() {
                             <div key={d.id} title={payLabel(d)}
                                  style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
                                    background: d.payDate === dayStr ? 'var(--green-600)' : 'var(--fg-4)',
-                                   opacity: d.auto ? 0.8 : 1, cursor: d.auto ? 'default' : 'pointer' }}
-                                 onClick={() => { if (!d.auto) { setEditItem(d); setDivModalOpen(true); } }} />
+                                   opacity: d.auto ? 0.8 : 1, cursor: 'pointer' }}
+                                 onClick={() => setSelectedDay(s => s === dayStr ? null : dayStr)} />
                           ))}
                           {dayEco.map((e, ei) => {
                             const tc = ECO_TYPE_COLORS[e.type] || ECO_TYPE_COLORS.other;
-                            const isCustom = !e._hardcoded && e.id;
                             return (
                               <div key={e.id || e.label + ei} title={e.label + (e.note ? ' · ' + e.note : '')}
                                    style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
                                      background: tc.bg, opacity: e.importance === 'low' ? 0.6 : 1,
-                                     cursor: isCustom ? 'pointer' : 'default' }}
-                                   onClick={() => { if (isCustom) { setEditEcoItem(e); setEcoModalOpen(true); } }} />
+                                     cursor: 'pointer' }}
+                                   onClick={() => setSelectedDay(s => s === dayStr ? null : dayStr)} />
                             );
                           })}
                         </div>
@@ -516,6 +599,52 @@ function DividendCalendar() {
               })}
             </div>
           </div>
+
+          {isMobile && selectedDay && (() => {
+            const selDivs = sorted.filter(d => d.payDate === selectedDay || d.exDate === selectedDay);
+            const selEco  = allEcoEvents.filter(e => e.date === selectedDay && showEcoTypes[e.type]);
+            if (selDivs.length === 0 && selEco.length === 0) return null;
+            return (
+              <div className="card" style={{ marginTop: 8, padding: '12px 14px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <span style={{ fontWeight: 700, fontSize: 13 }}>{selectedDay}</span>
+                  <button className="icon-toggle" onClick={() => setSelectedDay(null)}><Icon name="x" size={13} /></button>
+                </div>
+                {selDivs.map(d => {
+                  const isPay = d.payDate === selectedDay;
+                  const amt = effectiveAmount(d);
+                  return (
+                    <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, fontSize: 13 }}>
+                      <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 3,
+                        background: isPay ? 'var(--green-600)' : 'var(--fg-4)', color: '#fff', flexShrink: 0 }}>
+                        {isPay ? 'PAY' : 'EX'}
+                      </span>
+                      <span style={{ fontWeight: 600 }}>{d.name.replace(/THB$/, '')}</span>
+                      {d.note && <span style={{ fontSize: 11, color: 'var(--fg-3)', marginLeft: 2 }}>{d.note}</span>}
+                      {amt > 0 && <span style={{ color: 'var(--green-600)', marginLeft: 'auto', fontWeight: 600 }}>{sym}{window.fmtBig(amt)}</span>}
+                    </div>
+                  );
+                })}
+                {selEco.map((e, i) => {
+                  const tc = ECO_TYPE_COLORS[e.type] || ECO_TYPE_COLORS.other;
+                  return (
+                    <div key={e.id || e.label + i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, fontSize: 13 }}>
+                      <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 99,
+                        background: tc.bg, color: tc.text, flexShrink: 0 }}>
+                        {tc.label}
+                      </span>
+                      <span style={{ fontWeight: 500 }}>{e.label}</span>
+                      {e.note && <span style={{ fontSize: 11, color: 'var(--fg-3)' }}>{e.note}</span>}
+                      <span style={{ fontSize: 10, marginLeft: 'auto', fontWeight: 700,
+                        color: e.importance === 'high' ? 'var(--red-600)' : e.importance === 'medium' ? '#d97706' : 'var(--fg-3)' }}>
+                        {e.importance || 'low'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           {(thisMonth.length === 0 && monthEcoEvents.length === 0) && (
             <div style={{ textAlign: 'center', color: 'var(--fg-3)', padding: '24px 0', fontSize: 13 }}>

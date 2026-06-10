@@ -1,28 +1,36 @@
 /* ============================================================================
-   api/telegram.js — Send daily portfolio report to Telegram
+   api/telegram.js — Telegram bot: daily portfolio report + command webhook
 
-   Called automatically by Vercel cron at 00:00 UTC (= 07:00 AM Thailand).
-   Also accepts POST /api/telegram { manual: true } for on-demand sends.
+   POST /api/telegram { manual: true }  — send report on demand
+   POST /api/telegram (cron)            — send scheduled report
+   GET  /api/telegram?setup=1           — register the Telegram webhook
+   POST /api/telegram (Telegram update) — receive bot commands (detected via
+                                          x-telegram-bot-api-secret-token header
+                                          or Content-Type absence of manual flag)
 
    Required env vars:
-     TELEGRAM_BOT_TOKEN   — BotFather token
-     TELEGRAM_CHAT_ID     — your personal chat ID or channel ID
-     PORTFOLIO_ID         — your portfolio sync ID (from sidebar footer)
-     SUPABASE_URL         — Supabase project URL
-     SUPABASE_SERVICE_KEY — Supabase service_role key
+     TELEGRAM_BOT_TOKEN      — BotFather token
+     TELEGRAM_CHAT_ID        — personal chat ID or channel ID
+     PORTFOLIO_ID            — portfolio sync ID
+     SUPABASE_URL            — Supabase project URL
+     SUPABASE_SERVICE_KEY    — Supabase service_role key
+   Optional:
+     TELEGRAM_WEBHOOK_SECRET — random string ≥ 32 chars for webhook validation
    ============================================================================ */
 
 import { readBody } from './_lib.js';
 
-const SUPABASE_URL  = process.env.SUPABASE_URL;
-const SUPABASE_KEY  = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
-const BOT_TOKEN     = process.env.TELEGRAM_BOT_TOKEN;
-const CHAT_ID       = process.env.TELEGRAM_CHAT_ID;
-const PORTFOLIO_ID  = process.env.PORTFOLIO_ID;
+const SUPABASE_URL   = process.env.SUPABASE_URL;
+const SUPABASE_KEY   = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
+const BOT_TOKEN      = process.env.TELEGRAM_BOT_TOKEN;
+const CHAT_ID        = process.env.TELEGRAM_CHAT_ID;
+const PORTFOLIO_ID   = process.env.PORTFOLIO_ID;
+const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
-// Asset classes included in the report
+// ── Report constants ───────────────────────────────────────────────────────────
+
 const REPORT_CLASSES = [
   { key: 'crypto',    label: 'Crypto', short: 'Crypto', live: 'crypto', ccy: 'THB' },
   { key: 'usaStock',  label: 'USA',    short: 'USA',    live: 'yahoo',  ccy: 'USD' },
@@ -31,15 +39,75 @@ const REPORT_CLASSES = [
   { key: 'gold',      label: 'Gold',   short: 'Gold',   live: 'yahoo',  ccy: 'USD', yahooSymbol: 'GC=F' },
 ];
 
-// CoinGecko ID mapping (mirrors seed.js CRYPTO_MAP)
 const CRYPTO_MAP = {
-  BTC:    'bitcoin',      ETH:    'ethereum',     BNB:    'binancecoin',
-  SOL:    'solana',       XRP:    'ripple',        USDT:   'tether',
-  USDC:   'usd-coin',     ADA:    'cardano',       DOGE:   'dogecoin',
-  DOT:    'polkadot',     AVAX:   'avalanche-2',   LINK:   'chainlink',
-  LTC:    'litecoin',     MATIC:  'matic-network',
+  BTC:    'bitcoin',      ETH:    'ethereum',      BNB:    'binancecoin',
+  SOL:    'solana',       XRP:    'ripple',         USDT:   'tether',
+  USDC:   'usd-coin',     ADA:    'cardano',        DOGE:   'dogecoin',
+  DOT:    'polkadot',     AVAX:   'avalanche-2',    LINK:   'chainlink',
+  LTC:    'litecoin',     MATIC:  'matic-network',  TON:    'the-open-network',
+  SHIB:   'shiba-inu',    UNI:    'uniswap',        ATOM:   'cosmos',
+  NEAR:   'near',         APT:    'aptos',           ARB:    'arbitrum',
   BTCTHB: 'bitcoin',      ETHTHB: 'ethereum',
 };
+
+// ── Supabase helpers ───────────────────────────────────────────────────────────
+
+function sbHeaders() {
+  return {
+    apikey: SUPABASE_KEY,
+    Authorization: `Bearer ${SUPABASE_KEY}`,
+    'Content-Type': 'application/json',
+  };
+}
+
+async function sbGet(table, qs) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${qs}`, { headers: sbHeaders() });
+  if (!r.ok) throw new Error(`sb-${table}-${r.status}`);
+  return r.json();
+}
+
+// ── Data loaders ───────────────────────────────────────────────────────────────
+
+async function loadHoldings(portfolioId) {
+  const uid = encodeURIComponent(portfolioId);
+  return sbGet('holdings', `user_id=eq.${uid}&select=class_key,name,qty`);
+}
+
+async function loadPortfolioMeta(portfolioId) {
+  const uid = encodeURIComponent(portfolioId);
+  try {
+    const [fxRows, alertRows, allocRows] = await Promise.all([
+      sbGet('fx_rates',          `user_id=eq.${uid}&select=pair,rate`),
+      sbGet('price_alerts',      `user_id=eq.${uid}&select=*`),
+      sbGet('target_allocation', `user_id=eq.${uid}&select=class_key,target_pct`),
+    ]);
+
+    const fx = { USDTHB: 34.5, JPYTHB: 0.23, KRWTHB: 0.026 };
+    for (const row of fxRows) {
+      if (row.pair === 'USDTHB')      fx.USDTHB = parseFloat(row.rate);
+      else if (row.pair === 'JPYTHB') fx.JPYTHB = parseFloat(row.rate);
+      else if (row.pair === 'KRWTHB') fx.KRWTHB = parseFloat(row.rate);
+    }
+
+    const priceAlerts = alertRows.map(r => ({
+      id:        r.id,
+      classKey:  r.class_key,
+      name:      r.name,
+      condition: r.condition,
+      price:     parseFloat(r.price),
+      note:      r.note || '',
+      triggered: r.triggered,
+    }));
+
+    const targetAllocation = {};
+    for (const a of allocRows) targetAllocation[a.class_key] = parseFloat(a.target_pct);
+
+    return { fx, priceAlerts, targetAllocation };
+  } catch (e) {
+    console.warn('[telegram] loadPortfolioMeta error:', e.message);
+    return { fx: { USDTHB: 34.5 }, priceAlerts: [], targetAllocation: {} };
+  }
+}
 
 // ── Price fetchers ─────────────────────────────────────────────────────────────
 
@@ -54,12 +122,44 @@ async function yahooPrice(symbol) {
       const j = await r.json();
       const meta = j?.chart?.result?.[0]?.meta;
       if (!meta) { lastErr = new Error('no meta'); continue; }
-      const price     = meta.regularMarketPrice;
-      const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? null;
-      return { price, prevClose };
+      return {
+        price:     meta.regularMarketPrice,
+        prevClose: meta.chartPreviousClose ?? meta.previousClose ?? null,
+      };
     } catch (e) { lastErr = e; }
   }
   throw lastErr || new Error('yahoo failed: ' + symbol);
+}
+
+async function yahooQuote(symbol) {
+  for (const host of ['query1.finance.yahoo.com', 'query2.finance.yahoo.com']) {
+    try {
+      const url = `https://${host}/v7/finance/quote?symbols=${encodeURIComponent(symbol)}`;
+      const r   = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' } });
+      if (!r.ok) continue;
+      const j = await r.json();
+      const q = j?.quoteResponse?.result?.[0];
+      if (q) return q;
+    } catch (_) {}
+  }
+  return null;
+}
+
+async function yahooChart(symbol, range = '1mo', interval = '1d') {
+  for (const host of ['query1.finance.yahoo.com', 'query2.finance.yahoo.com']) {
+    try {
+      const url = `https://${host}/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}`;
+      const r   = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' } });
+      if (!r.ok) continue;
+      const j   = await r.json();
+      const res = j?.chart?.result?.[0];
+      if (!res) continue;
+      const closes     = res.indicators?.quote?.[0]?.close || [];
+      const timestamps = res.timestamp || [];
+      return { closes: closes.filter(Boolean), timestamps };
+    } catch (_) {}
+  }
+  return { closes: [], timestamps: [] };
 }
 
 async function cryptoDayChanges(ids) {
@@ -70,111 +170,30 @@ async function cryptoDayChanges(ids) {
   return r.json();
 }
 
-// ── Supabase helpers ───────────────────────────────────────────────────────────
-
-function sbHeaders() {
-  return {
-    apikey: SUPABASE_KEY,
-    Authorization: `Bearer ${SUPABASE_KEY}`,
-    'Content-Type': 'application/json',
-  };
+async function geckoPrice(id) {
+  const url = `https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=thb,usd&include_24hr_change=true&include_market_cap=true&include_24hr_vol=true`;
+  const r   = await fetch(url, { headers: { Accept: 'application/json' } });
+  if (!r.ok) throw new Error('CoinGecko ' + r.status);
+  const j = await r.json();
+  return j[id] || null;
 }
 
-async function loadHoldings(portfolioId) {
-  const uid = encodeURIComponent(portfolioId);
-  const r   = await fetch(
-    `${SUPABASE_URL}/rest/v1/holdings?user_id=eq.${uid}&select=class_key,name`,
-    { headers: sbHeaders() },
-  );
-  if (!r.ok) throw new Error('Supabase holdings error: ' + r.status);
-  return r.json();
-}
-
-async function loadPortfolioData(portfolioId) {
-  const uid = encodeURIComponent(portfolioId);
-  const r   = await fetch(
-    `${SUPABASE_URL}/rest/v1/portfolio_data?user_id=eq.${uid}&select=data&limit=1`,
-    { headers: sbHeaders() },
-  );
-  if (!r.ok) return null;
-  const rows = await r.json();
-  if (!rows || !rows[0] || !rows[0].data) return null;
-  try { return JSON.parse(rows[0].data); } catch (_) { return null; }
-}
-
-// ── Price alert checker ────────────────────────────────────────────────────────
-
-function checkPriceAlerts(priceAlerts, assetData) {
-  if (!priceAlerts || !priceAlerts.length) return [];
-  const triggered = [];
-  for (const alert of priceAlerts) {
-    if (alert.triggered) continue;
-    const key  = `${alert.classKey}:${alert.name}`;
-    const data = assetData[key];
-    if (!data || data.price == null) continue;
-    const hit = alert.condition === 'above'
-      ? data.price >= alert.price
-      : data.price <= alert.price;
-    if (hit) {
-      triggered.push({ alert, price: data.price });
-    }
-  }
-  return triggered;
-}
-
-// ── Rebalancing drift checker ──────────────────────────────────────────────────
-
-function checkRebalancingDrift(portfolioData, assetData) {
-  if (!portfolioData) return [];
-  const targetAlloc = portfolioData.targetAllocation || {};
-  const holdings    = portfolioData.holdings || {};
-  if (!Object.keys(targetAlloc).some(k => (targetAlloc[k] || 0) > 0)) return [];
-
-  const ASSET_CLASSES = [
-    { key: 'thaiStock', ccy: 'THB' }, { key: 'usaStock', ccy: 'USD' },
-    { key: 'etf', ccy: 'USD' },       { key: 'fund', ccy: 'THB' },
-    { key: 'crypto', ccy: 'THB' },    { key: 'gold', ccy: 'USD' },
-    { key: 'other', ccy: 'THB' },
-  ];
-  const USDTHB = portfolioData.fx?.USDTHB || 34.5;
-
-  let totalValue = 0;
-  const classValues = {};
-  for (const cls of ASSET_CLASSES) {
-    let v = 0;
-    for (const lot of (holdings[cls.key] || [])) {
-      const cur   = lot.cur != null ? lot.cur : lot.price;
-      const val   = cur * lot.qty;
-      const inTHB = cls.ccy === 'USD' ? val * USDTHB : val;
-      v += inTHB;
-    }
-    classValues[cls.key] = v;
-    totalValue += v;
-  }
-
-  if (totalValue === 0) return [];
-  const alerts = [];
-  for (const [key, tgt] of Object.entries(targetAlloc)) {
-    if (!tgt) continue;
-    const curPct  = (classValues[key] || 0) / totalValue * 100;
-    const drift   = curPct - tgt;
-    if (Math.abs(drift) >= 5) {
-      alerts.push({ key, tgt, curPct, drift });
-    }
-  }
-  return alerts;
+async function geckoChart(id, days = 30) {
+  const url = `https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=thb&days=${days}&interval=daily`;
+  const r   = await fetch(url, { headers: { Accept: 'application/json' } });
+  if (!r.ok) return [];
+  const j = await r.json();
+  return (j.prices || []).map(([, price]) => price);
 }
 
 // ── Report builder ─────────────────────────────────────────────────────────────
 
 async function buildReport(holdings) {
-  // Group holdings by class
   const byClass = {};
   for (const h of holdings) {
     (byClass[h.class_key] ||= new Set()).add(h.name);
   }
 
-  // "classKey:name" → { pct, price, changeAbs, ccy, classShort }
   const assetData = {};
   const tasks = [];
 
@@ -183,10 +202,7 @@ async function buildReport(holdings) {
     if (!names.length) continue;
 
     if (rc.live === 'crypto') {
-      const mapped = names
-        .map(n => ({ name: n, id: CRYPTO_MAP[n] }))
-        .filter(x => x.id);
-
+      const mapped = names.map(n => ({ name: n, id: CRYPTO_MAP[n] })).filter(x => x.id);
       if (mapped.length) {
         tasks.push(
           cryptoDayChanges(mapped.map(x => x.id))
@@ -194,17 +210,16 @@ async function buildReport(holdings) {
               for (const { name, id } of mapped) {
                 const entry = data[id];
                 if (entry?.thb != null && entry?.thb_24h_change != null) {
-                  const price    = entry.thb;
-                  const pct      = entry.thb_24h_change;
+                  const price     = entry.thb;
+                  const pct       = entry.thb_24h_change;
                   const prevClose = price / (1 + pct / 100);
                   assetData[`${rc.key}:${name}`] = {
-                    pct, price, changeAbs: price - prevClose,
+                    price, prevClose, pct, changeAbs: price - prevClose,
                     ccy: rc.ccy, classShort: rc.short,
                   };
                 }
               }
-            })
-            .catch(() => {}),
+            }).catch(() => {}),
         );
       }
     } else {
@@ -215,13 +230,14 @@ async function buildReport(holdings) {
             .then(({ price, prevClose }) => {
               if (price != null && prevClose != null && prevClose > 0) {
                 assetData[`${rc.key}:${name}`] = {
-                  pct: ((price - prevClose) / prevClose) * 100,
-                  price, changeAbs: price - prevClose,
-                  ccy: rc.ccy, classShort: rc.short,
+                  price, prevClose,
+                  pct:       ((price - prevClose) / prevClose) * 100,
+                  changeAbs: price - prevClose,
+                  ccy:       rc.ccy,
+                  classShort: rc.short,
                 };
               }
-            })
-            .catch(() => {}),
+            }).catch(() => {}),
         );
       }
     }
@@ -229,12 +245,10 @@ async function buildReport(holdings) {
 
   await Promise.allSettled(tasks);
 
-  // Assemble report groups (still used for hasData check)
   const groups = [];
   for (const rc of REPORT_CLASSES) {
     const names = [...(byClass[rc.key] || [])];
     if (!names.length) continue;
-
     const assets = names
       .map(n => {
         const d = assetData[`${rc.key}:${n}`];
@@ -242,174 +256,585 @@ async function buildReport(holdings) {
       })
       .filter(Boolean)
       .sort((a, b) => b.pct - a.pct);
-
     if (!assets.length) continue;
-    groups.push({ label: rc.label, assets });
+    groups.push({ key: rc.key, label: rc.label, assets });
   }
 
-  return groups;
+  return { groups, assetData };
 }
 
-function todayTH() {
-  const now    = new Date();
-  const local  = new Date(now.getTime() + 7 * 60 * 60000);
-  const [y, m, d] = local.toISOString().slice(0, 10).split('-');
-  return `${d}-${m}-${y}`;
+function computePortfolioSummary(holdings, assetData, fx) {
+  const USDTHB = fx?.USDTHB || 34.5;
+  let totalTHB = 0, dayPnlTHB = 0, coveredCount = 0;
+
+  for (const h of holdings) {
+    const key = `${h.class_key}:${h.name}`;
+    const d   = assetData[key];
+    if (!d || d.price == null) continue;
+    const qty = parseFloat(h.qty) || 0;
+    const mul = d.ccy === 'USD' ? USDTHB : 1;
+    totalTHB += qty * d.price * mul;
+    if (d.changeAbs != null) dayPnlTHB += qty * d.changeAbs * mul;
+    coveredCount++;
+  }
+
+  const prevTotal = totalTHB - dayPnlTHB;
+  const dayPnlPct = prevTotal > 0 ? (dayPnlTHB / prevTotal) * 100 : 0;
+  return { totalTHB, dayPnlTHB, dayPnlPct, coveredCount };
 }
+
+// ── Alert checkers ─────────────────────────────────────────────────────────────
+
+function checkPriceAlerts(priceAlerts, assetData) {
+  if (!priceAlerts?.length) return [];
+  return priceAlerts
+    .filter(a => !a.triggered)
+    .flatMap(alert => {
+      const key = `${alert.classKey}:${alert.name}`;
+      const d   = assetData[key];
+      if (!d || d.price == null) return [];
+      const hit = alert.condition === 'above' ? d.price >= alert.price : d.price <= alert.price;
+      return hit ? [{ alert, price: d.price }] : [];
+    });
+}
+
+function checkRebalancingDrift(targetAllocation, holdings, assetData, fx) {
+  if (!targetAllocation || !Object.keys(targetAllocation).some(k => (targetAllocation[k] || 0) > 0)) return [];
+  const ASSET_CLASSES = [
+    { key: 'thaiStock', ccy: 'THB' }, { key: 'usaStock', ccy: 'USD' },
+    { key: 'etf',       ccy: 'USD' }, { key: 'fund',     ccy: 'THB' },
+    { key: 'crypto',    ccy: 'THB' }, { key: 'gold',     ccy: 'USD' },
+    { key: 'other',     ccy: 'THB' },
+  ];
+  const USDTHB = fx?.USDTHB || 34.5;
+
+  let totalValue = 0;
+  const classValues = {};
+  for (const cls of ASSET_CLASSES) {
+    let v = 0;
+    for (const h of holdings) {
+      if (h.class_key !== cls.key) continue;
+      const key   = `${cls.key}:${h.name}`;
+      const d     = assetData[key];
+      const price = d?.price ?? null;
+      if (price == null) continue;
+      const val = parseFloat(h.qty) * price;
+      v += cls.ccy === 'USD' ? val * USDTHB : val;
+    }
+    classValues[cls.key] = v;
+    totalValue += v;
+  }
+  if (totalValue === 0) return [];
+
+  return Object.entries(targetAllocation)
+    .filter(([, tgt]) => tgt)
+    .flatMap(([key, tgt]) => {
+      const curPct = (classValues[key] || 0) / totalValue * 100;
+      const drift  = curPct - tgt;
+      return Math.abs(drift) >= 5 ? [{ key, tgt, curPct, drift }] : [];
+    });
+}
+
+// ── Report formatters ──────────────────────────────────────────────────────────
 
 function escHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function fmtChangeAbs(v, ccy) {
-  const sym = ccy === 'USD' ? '$' : '฿'; // ฿
+function todayTH() {
+  const local = new Date(new Date().getTime() + 7 * 3600000);
+  const [y, m, d] = local.toISOString().slice(0, 10).split('-');
+  const h   = String(local.getUTCHours()).padStart(2, '0');
+  const min = String(local.getUTCMinutes()).padStart(2, '0');
+  return { date: `${d}-${m}-${y}`, time: `${h}:${min}` };
+}
+
+function fmtBig(v) {
+  if (v >= 1e9) return (v / 1e9).toFixed(2) + 'B';
+  if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M';
+  if (v >= 1e3) return (v / 1e3).toFixed(1) + 'K';
+  return v.toFixed(2);
+}
+
+function fmtPrice(v, ccy) {
+  const sym = ccy === 'USD' ? '$' : (ccy === 'THB' ? '฿' : (ccy + ' '));
+  if (v == null) return '—';
   const abs = Math.abs(v);
   let s;
-  if (abs >= 100000) s = Math.round(abs).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  else if (abs >= 1000) s = abs.toFixed(0);
+  if (abs >= 1e6)       s = (abs / 1e6).toFixed(2) + 'M';
+  else if (abs >= 1000) s = abs.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  else if (abs >= 10)   s = abs.toFixed(2);
+  else if (abs >= 0.01) s = abs.toFixed(4);
+  else                  s = abs.toFixed(6);
+  return (v < 0 ? '-' : '') + sym + s;
+}
+
+function fmtChange(v, ccy) {
+  const sym = ccy === 'USD' ? '$' : '฿';
+  const abs = Math.abs(v);
+  let s;
+  if (abs >= 1000)      s = abs.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   else if (abs >= 10)   s = abs.toFixed(2);
   else if (abs >= 0.01) s = abs.toFixed(4);
   else                  s = abs.toFixed(6);
   return (v >= 0 ? '+' : '-') + sym + s;
 }
 
-function formatMessage(groups) {
-  let msg = `Report [${todayTH()}]\n`;
-  for (const g of groups) {
-    msg += `${g.label} :\n`;
+function fmtNum(v, decimals = 2) {
+  if (v == null || isNaN(v)) return '—';
+  const abs = Math.abs(v);
+  if (abs >= 1e12) return (v / 1e12).toFixed(2) + 'T';
+  if (abs >= 1e9)  return (v / 1e9).toFixed(2) + 'B';
+  if (abs >= 1e6)  return (v / 1e6).toFixed(2) + 'M';
+  if (abs >= 1e3)  return abs < 1e4 ? v.toFixed(decimals) : v.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  if (abs >= 1)    return v.toFixed(decimals);
+  if (abs >= 0.01) return v.toFixed(4);
+  return v.toFixed(6);
+}
+
+function formatReportMessage(groups, assetData, summary) {
+  if (!groups.length) return null;
+
+  const { date, time } = todayTH();
+  const pnlSign  = summary.dayPnlTHB >= 0 ? '+' : '';
+  const pnlEmoji = summary.dayPnlTHB >= 0 ? '📈' : '📉';
+
+  let msg = `📊 <b>Portfolio Report</b> — ${date} ${time} TH\n`;
+
+  if (summary.totalTHB > 0) {
+    msg += `\n💰 <b>Total: ฿${fmtBig(summary.totalTHB)}</b>`;
+    if (summary.dayPnlTHB !== 0) {
+      msg += `   ${pnlEmoji} Day: <b>${pnlSign}฿${fmtBig(Math.abs(summary.dayPnlTHB))} (${pnlSign}${summary.dayPnlPct.toFixed(2)}%)</b>`;
+    }
+    msg += '\n';
+  }
+
+  msg += '\n';
+
+  const classLines = groups.map(g => {
     if (g.assets.length === 1) {
       const a    = g.assets[0];
       const sign = a.pct >= 0 ? '+' : '';
-      msg += `${a.name} (${sign}${a.pct.toFixed(2)}%)\n`;
-    } else {
-      const best  = g.assets[0];
-      const worst = g.assets[g.assets.length - 1];
-      msg += `Best : ${best.name} (${best.pct >= 0 ? '+' : ''}${best.pct.toFixed(2)}%)\n`;
-      msg += `Worst : ${worst.name} (${worst.pct >= 0 ? '+' : ''}${worst.pct.toFixed(2)}%)\n`;
+      return `${g.label.padEnd(7)} · ${a.name} ${sign}${a.pct.toFixed(2)}%`;
     }
-    msg += `——————————————————\n`;
-  }
+    const best  = g.assets[0];
+    const worst = g.assets[g.assets.length - 1];
+    const bs    = best.pct  >= 0 ? '+' : '';
+    const ws    = worst.pct >= 0 ? '+' : '';
+    return `${g.label.padEnd(7)} · 🏆 ${best.name} ${bs}${best.pct.toFixed(2)}%  /  💀 ${worst.name} ${ws}${worst.pct.toFixed(2)}%`;
+  });
+
+  msg += `<pre>${escHtml(classLines.join('\n'))}</pre>\n`;
 
   const rows = groups.flatMap(g =>
-    g.assets.map(a => ({ ...a, classShort: a.classShort || g.label }))
-  ).sort((a, b) => b.pct - a.pct);
+    g.assets.map(a => ({
+      name:  a.name,
+      cls:   a.classShort || g.label,
+      pct:   (a.pct >= 0 ? '+' : '') + a.pct.toFixed(2) + '%',
+      price: fmtPrice(a.price, a.ccy),
+      chg:   a.changeAbs != null ? fmtChange(a.changeAbs, a.ccy) : '—',
+    }))
+  ).sort((a, b) => parseFloat(b.pct) - parseFloat(a.pct));
 
-  if (!rows.length) return `Report [${todayTH()}]\nNo data.`;
+  if (rows.length) {
+    const pad  = (s, n) => String(s).padEnd(n);
+    const padR = (s, n) => String(s).padStart(n);
+    const nW   = Math.max(5, ...rows.map(r => r.name.length));
+    const cW   = Math.max(5, ...rows.map(r => r.cls.length));
+    const pW   = Math.max(4, ...rows.map(r => r.pct.length));
+    const prW  = Math.max(7, ...rows.map(r => r.price.length));
+    const gW   = Math.max(6, ...rows.map(r => r.chg.length));
 
-  const fmt = rows.map(r => ({
-    name: r.name,
-    cls:  r.classShort,
-    pct:  (r.pct >= 0 ? '+' : '') + r.pct.toFixed(2) + '%',
-    chg:  r.changeAbs != null ? fmtChangeAbs(r.changeAbs, r.ccy) : '—',
-  }));
+    const header = `${pad('Asset', nW)}  ${pad('Class', cW)}  ${padR('Day%', pW)}  ${padR('Price', prW)}  ${padR('Change', gW)}`;
+    const sep    = '─'.repeat(header.length);
+    const body   = rows.map(r =>
+      `${pad(r.name, nW)}  ${pad(r.cls, cW)}  ${padR(r.pct, pW)}  ${padR(r.price, prW)}  ${padR(r.chg, gW)}`
+    ).join('\n');
 
-  const pad  = (s, n) => String(s).padEnd(n);
-  const padR = (s, n) => String(s).padStart(n);
+    msg += `\n<pre>${escHtml(`${header}\n${sep}\n${body}`)}</pre>`;
+  }
 
-  const nW = Math.max(5, ...fmt.map(r => r.name.length));
-  const cW = Math.max(5, ...fmt.map(r => r.cls.length));
-  const pW = Math.max(4, ...fmt.map(r => r.pct.length));
-  const gW = Math.max(6, ...fmt.map(r => r.chg.length));
-
-  const header = `${pad('Asset', nW)}  ${pad('Class', cW)}  ${padR('Day%', pW)}  ${padR('Change', gW)}`;
-  const sep    = '─'.repeat(header.length);
-  const body   = fmt.map(r =>
-    `${pad(r.name, nW)}  ${pad(r.cls, cW)}  ${padR(r.pct, pW)}  ${padR(r.chg, gW)}`
-  ).join('\n');
-
-  const table = escHtml(`${header}\n${sep}\n${body}`);
-  return msg + `\n<pre>${table}</pre>`;
+  return msg;
 }
 
-async function sendTelegram(text) {
+// ── Telegram senders ───────────────────────────────────────────────────────────
+
+async function tgSend(chatId, text, opts = {}) {
   const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ chat_id: CHAT_ID, text, parse_mode: 'HTML' }),
+    body:    JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML', ...opts }),
   });
-  if (!r.ok) throw new Error('Telegram API error: ' + r.status);
   return r.json();
 }
 
-// ── Handler ────────────────────────────────────────────────────────────────────
+async function tgPhoto(chatId, photoUrl, caption) {
+  const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ chat_id: chatId, photo: photoUrl, caption, parse_mode: 'HTML' }),
+  });
+  return r.json();
+}
+
+// ── Core report sender (shared by cron/manual and /report command) ─────────────
+
+async function runReport(portfolioId) {
+  const [holdings, meta] = await Promise.all([
+    loadHoldings(portfolioId),
+    loadPortfolioMeta(portfolioId),
+  ]);
+
+  console.log(`[telegram] holdings: ${holdings.length}`);
+  if (!holdings.length) return { ok: true, note: 'no holdings' };
+
+  const { groups, assetData } = await buildReport(holdings);
+  const summary               = computePortfolioSummary(holdings, assetData, meta.fx);
+  const triggeredAlerts       = checkPriceAlerts(meta.priceAlerts, assetData);
+  const rebalAlerts           = checkRebalancingDrift(meta.targetAllocation, holdings, assetData, meta.fx);
+
+  if (!groups.length && !triggeredAlerts.length && !rebalAlerts.length) {
+    return { ok: true, note: 'no live price data' };
+  }
+
+  const { date, time } = todayTH();
+  let message = formatReportMessage(groups, assetData, summary)
+    || `📊 <b>Portfolio Report</b> — ${date} ${time} TH\nNo market data available.\n`;
+
+  if (triggeredAlerts.length > 0) {
+    message += '\n\n🚨 <b>Price Alerts Triggered</b>\n';
+    for (const { alert, price } of triggeredAlerts) {
+      const dir    = alert.condition === 'above' ? '▲ above' : '▼ below';
+      const target = alert.price.toLocaleString('en', { maximumFractionDigits: 4 });
+      message += `• <b>${escHtml(alert.name.replace(/THB$/, ''))}</b> — ${dir} ${escHtml(String(price.toLocaleString()))} (target: ${target})\n`;
+      if (alert.note) message += `  <i>${escHtml(alert.note)}</i>\n`;
+    }
+  }
+
+  if (rebalAlerts.length > 0) {
+    message += '\n\n⚖️ <b>Rebalancing Needed (&gt;5% drift)</b>\n';
+    const LABELS = { thaiStock: 'Thai Stock', usaStock: 'USA Stock', etf: 'ETF', fund: 'Fund', crypto: 'Crypto', gold: 'Gold', other: 'Other' };
+    for (const a of rebalAlerts) {
+      const dir = a.drift > 0 ? `overweight +${a.drift.toFixed(1)}%` : `underweight ${a.drift.toFixed(1)}%`;
+      message += `• ${escHtml(LABELS[a.key] || a.key)}: ${a.curPct.toFixed(1)}% vs target ${a.tgt}% (${dir})\n`;
+    }
+  }
+
+  const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ chat_id: CHAT_ID, text: message, parse_mode: 'HTML' }),
+  });
+  if (!r.ok) {
+    const body = await r.text().catch(() => '');
+    throw new Error('Telegram API error: ' + r.status + ' ' + body);
+  }
+
+  console.log('[telegram] sent ok');
+  return {
+    ok: true,
+    summary: {
+      totalTHB:   Math.round(summary.totalTHB),
+      dayPnlTHB:  Math.round(summary.dayPnlTHB),
+      dayPnlPct:  summary.dayPnlPct.toFixed(2),
+    },
+    triggeredAlerts: triggeredAlerts.length,
+    rebalAlerts:     rebalAlerts.length,
+  };
+}
+
+// ── Webhook command handlers ───────────────────────────────────────────────────
+
+function detectTicker(raw) {
+  const t        = raw.toUpperCase().trim().replace(/^\//, '');
+  const cryptoId = CRYPTO_MAP[t];
+  if (cryptoId)      return { type: 'crypto', symbol: t, id: cryptoId };
+  if (t.endsWith('.BK')) return { type: 'thai',   symbol: t };
+  return { type: 'stock', symbol: t };
+}
+
+function buildChartUrl(closes, isUp) {
+  if (!closes.length) return null;
+  const color = isUp ? '#1a9e5c' : '#d63b3b';
+  const fill  = isUp ? 'rgba(26,158,92,0.12)' : 'rgba(214,59,59,0.12)';
+
+  const cfg = JSON.stringify({
+    type: 'line',
+    data: {
+      labels:   closes.map((_, i) => i),
+      datasets: [{
+        data:            closes,
+        borderColor:     color,
+        backgroundColor: fill,
+        fill:            true,
+        pointRadius:     0,
+        borderWidth:     2,
+        tension:         0.3,
+      }],
+    },
+    options: {
+      scales: {
+        xAxes: [{ display: false }],
+        yAxes: [{ ticks: { maxTicksLimit: 4, fontColor: '#888' } }],
+      },
+      legend: { display: false },
+    },
+  });
+  return `https://quickchart.io/chart?w=700&h=280&bkg=%23ffffff&c=${encodeURIComponent(cfg)}`;
+}
+
+function buildStockCaption(symbol, q) {
+  const name      = escHtml(q.shortName || q.longName || symbol);
+  const ccy       = q.currency || 'USD';
+  const price     = q.regularMarketPrice;
+  const change    = q.regularMarketChange ?? 0;
+  const changePct = q.regularMarketChangePercent ?? 0;
+  const isUp      = change >= 0;
+  const arrow     = isUp ? '📈' : '📉';
+  const sign      = isUp ? '+' : '';
+
+  let msg = `${arrow} <b>${name}</b>  <code>${escHtml(symbol)}</code>\n\n`;
+  msg += `💵 <b>${fmtPrice(price, ccy)}</b>  `;
+  msg += `${sign}${fmtPrice(Math.abs(change), ccy)} (${sign}${changePct.toFixed(2)}%)\n`;
+
+  if (q.regularMarketDayLow != null && q.regularMarketDayHigh != null) {
+    msg += `📊 Day: ${fmtPrice(q.regularMarketDayLow, ccy)} – ${fmtPrice(q.regularMarketDayHigh, ccy)}\n`;
+  }
+  if (q.fiftyTwoWeekLow != null && q.fiftyTwoWeekHigh != null) {
+    const pos52 = ((price - q.fiftyTwoWeekLow) / (q.fiftyTwoWeekHigh - q.fiftyTwoWeekLow) * 100).toFixed(0);
+    msg += `📅 52W: ${fmtPrice(q.fiftyTwoWeekLow, ccy)} – ${fmtPrice(q.fiftyTwoWeekHigh, ccy)}  (at ${pos52}%)\n`;
+  }
+  if (q.regularMarketVolume != null) {
+    msg += `💹 Vol: ${fmtNum(q.regularMarketVolume, 0)}\n`;
+  }
+
+  const extras = [];
+  if (q.trailingPE != null)              extras.push(`P/E: ${q.trailingPE.toFixed(1)}×`);
+  if (q.marketCap != null)               extras.push(`Cap: ${fmtNum(q.marketCap)}`);
+  if (q.epsTrailingTwelveMonths != null) extras.push(`EPS: ${fmtPrice(q.epsTrailingTwelveMonths, ccy)}`);
+  if (extras.length) msg += `📐 ${extras.join('   ')}\n`;
+
+  const ma = [];
+  if (q.fiftyDayAverage != null)      ma.push(`MA50: ${fmtPrice(q.fiftyDayAverage, ccy)}`);
+  if (q.twoHundredDayAverage != null) ma.push(`MA200: ${fmtPrice(q.twoHundredDayAverage, ccy)}`);
+  if (ma.length) {
+    const above50  = q.fiftyDayAverage      && price > q.fiftyDayAverage      ? '▲' : '▼';
+    const above200 = q.twoHundredDayAverage && price > q.twoHundredDayAverage ? '▲' : '▼';
+    msg += `📉 ${ma[0]} ${above50}`;
+    if (ma[1]) msg += `   ${ma[1]} ${above200}`;
+    msg += '\n';
+  }
+
+  if (q.exchangeName) {
+    const status = q.marketState === 'REGULAR' ? '🟢 Market open'
+                 : q.marketState === 'PRE'     ? '🌅 Pre-market'
+                 : q.marketState === 'POST'    ? '🌙 After-hours'
+                 : '⚫ Market closed';
+    msg += `\n${status}  ·  ${escHtml(q.exchangeName)}`;
+  }
+
+  return msg;
+}
+
+function buildCryptoCaption(symbol, data) {
+  const thb       = data.thb;
+  const usd       = data.usd;
+  const change24h = data.thb_24h_change ?? 0;
+  const isUp      = change24h >= 0;
+  const arrow     = isUp ? '📈' : '📉';
+  const sign      = isUp ? '+' : '';
+  const prevThb   = thb / (1 + change24h / 100);
+
+  let msg = `${arrow} <b>${escHtml(symbol)}</b>  <code>Crypto</code>\n\n`;
+  msg += `💵 <b>฿${fmtNum(thb)}</b>`;
+  if (usd != null) msg += `  ($${fmtNum(usd)})`;
+  msg += `\n`;
+  msg += `24h: <b>${sign}${change24h.toFixed(2)}%</b>  (${sign}฿${fmtNum(thb - prevThb)})\n`;
+  if (data.thb_24h_vol     != null) msg += `💹 Vol 24h: ฿${fmtNum(data.thb_24h_vol)}\n`;
+  if (data.thb_market_cap  != null) msg += `📐 Cap: ฿${fmtNum(data.thb_market_cap)}\n`;
+
+  return msg;
+}
+
+async function handleTickerResult(chatId, symbol, quote, closes) {
+  const change   = quote.regularMarketChange ?? 0;
+  const isUp     = change >= 0;
+  const caption  = buildStockCaption(symbol, quote);
+  const chartUrl = buildChartUrl(closes, isUp);
+
+  if (chartUrl && closes.length >= 5) {
+    const r = await tgPhoto(chatId, chartUrl, caption);
+    if (!r.ok) await tgSend(chatId, caption);
+  } else {
+    await tgSend(chatId, caption);
+  }
+}
+
+async function handleTickerCommand(chatId, raw) {
+  const ticker               = raw.replace(/^\//, '').trim();
+  const { type, symbol, id } = detectTicker(ticker);
+
+  await tgSend(chatId, `⏳ Fetching <b>${escHtml(symbol.toUpperCase())}</b>…`);
+
+  try {
+    if (type === 'crypto') {
+      const [priceData, chartCloses] = await Promise.all([
+        geckoPrice(id),
+        geckoChart(id, 30),
+      ]);
+
+      if (!priceData) {
+        await tgSend(chatId, `❌ Could not find crypto: <code>${escHtml(symbol)}</code>`);
+        return;
+      }
+
+      const caption  = buildCryptoCaption(symbol.replace(/THB$/, ''), priceData);
+      const isUp     = (priceData.thb_24h_change ?? 0) >= 0;
+      const chartUrl = buildChartUrl(chartCloses, isUp);
+
+      if (chartUrl && chartCloses.length >= 5) {
+        await tgPhoto(chatId, chartUrl, caption);
+      } else {
+        await tgSend(chatId, caption);
+      }
+    } else {
+      let ySymbol = symbol.toUpperCase();
+
+      const [quote, chartData] = await Promise.all([
+        yahooQuote(ySymbol),
+        yahooChart(ySymbol, '1mo', '1d'),
+      ]);
+
+      if (!quote && !ySymbol.includes('.')) {
+        const bkSymbol   = ySymbol + '.BK';
+        const [q2, c2]   = await Promise.all([yahooQuote(bkSymbol), yahooChart(bkSymbol, '1mo', '1d')]);
+        if (q2) { await handleTickerResult(chatId, bkSymbol, q2, c2.closes); return; }
+      }
+
+      if (!quote) {
+        await tgSend(chatId, `❌ Ticker not found: <code>${escHtml(ySymbol)}</code>\n\nTips:\n• Thai stocks: <code>/SCB.BK</code>\n• Crypto: <code>/BTC</code>\n• US stocks/ETF: <code>/AAPL</code>`);
+        return;
+      }
+
+      await handleTickerResult(chatId, ySymbol, quote, chartData.closes);
+    }
+  } catch (e) {
+    console.error('[webhook] ticker error:', e.message);
+    await tgSend(chatId, `⚠️ Error fetching <code>${escHtml(symbol)}</code>: ${escHtml(e.message)}`);
+  }
+}
+
+async function handleHelp(chatId) {
+  const msg = `📊 <b>Portfolio Bot Commands</b>\n\n`
+    + `/AAPL — US stock analysis + chart\n`
+    + `/BTC — Crypto analysis + chart\n`
+    + `/QQQM — ETF analysis + chart\n`
+    + `/SCB.BK — Thai stock (add .BK suffix)\n`
+    + `/report — Send portfolio daily report now\n`
+    + `/help — Show this message\n\n`
+    + `<i>Tip: type any stock, ETF, or crypto ticker after /</i>`;
+  await tgSend(chatId, msg);
+}
+
+// ── Main handler ───────────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(204).end();
 
-  if (!BOT_TOKEN) return res.status(400).json({ error: 'TELEGRAM_BOT_TOKEN not set' });
-  if (!CHAT_ID)   return res.status(400).json({ error: 'TELEGRAM_CHAT_ID not set' });
-  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(400).json({ error: 'Supabase not configured' });
-
-  // Manual POST from browser sends portfolioId in body; cron GET uses env var.
-  let pid = PORTFOLIO_ID;
-  if (req.method === 'POST') {
-    try {
-      const body = await readBody(req);
-      if (body && body.portfolioId) pid = body.portfolioId;
-    } catch (_) {}
+  // ── Webhook registration: GET /api/telegram?setup=1 ───────────────────────
+  if (req.method === 'GET' && req.query?.setup === '1') {
+    if (!BOT_TOKEN) return res.status(400).json({ error: 'TELEGRAM_BOT_TOKEN not set' });
+    const host = req.headers.host || process.env.VERCEL_URL;
+    if (!host) return res.status(400).json({ error: 'Cannot determine host URL. Set VERCEL_URL.' });
+    const webhookUrl = `https://${host}/api/telegram`;
+    const body = { url: webhookUrl };
+    if (WEBHOOK_SECRET) body.secret_token = WEBHOOK_SECRET;
+    const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/setWebhook`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body),
+    });
+    const j = await r.json();
+    return res.status(r.ok ? 200 : 400).json({ webhookUrl, telegram: j });
   }
 
-  if (!pid) return res.status(400).json({ error: 'PORTFOLIO_ID not configured — set it in Vercel env vars or check your sync ID' });
+  if (req.method !== 'POST') return res.status(405).end();
+
+  // ── Incoming Telegram webhook (detected by secret-token header) ───────────
+  const incomingSecret = req.headers['x-telegram-bot-api-secret-token'];
+  if (incomingSecret !== undefined || (WEBHOOK_SECRET && incomingSecret === WEBHOOK_SECRET)) {
+    // Validate secret
+    if (WEBHOOK_SECRET && incomingSecret !== WEBHOOK_SECRET) {
+      return res.status(403).json({ error: 'invalid secret' });
+    }
+    if (!BOT_TOKEN) return res.status(400).end();
+
+    let update;
+    try {
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      update = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    } catch (_) {
+      return res.status(400).json({ error: 'invalid json' });
+    }
+
+    // Respond 200 immediately so Telegram doesn't retry
+    res.status(200).json({ ok: true });
+
+    const message = update?.message || update?.edited_message;
+    if (!message) return;
+
+    const chatId = String(message.chat?.id);
+    const text   = (message.text || '').trim();
+
+    if (CHAT_ID && chatId !== String(CHAT_ID)) {
+      await tgSend(chatId, '🔒 Unauthorized.');
+      return;
+    }
+
+    const lower = text.toLowerCase();
+
+    if (lower === '/help' || lower === '/start') {
+      await handleHelp(chatId);
+    } else if (lower === '/report') {
+      const pid = process.env.PORTFOLIO_ID;
+      if (!pid) { await tgSend(chatId, '⚠️ PORTFOLIO_ID env var is not set.'); return; }
+      await tgSend(chatId, '⏳ Building portfolio report…');
+      try {
+        await runReport(pid);
+      } catch (e) {
+        await tgSend(chatId, `⚠️ Report error: ${escHtml(e.message)}`);
+      }
+    } else if (text.startsWith('/') && text.length > 1) {
+      const raw = text.slice(1).split('@')[0];
+      if (/^[A-Za-z0-9._-]+$/.test(raw)) await handleTickerCommand(chatId, raw);
+    }
+
+    return;
+  }
+
+  // ── Scheduled / manual report ─────────────────────────────────────────────
+  if (!BOT_TOKEN)                     return res.status(400).json({ error: 'TELEGRAM_BOT_TOKEN not set' });
+  if (!CHAT_ID)                       return res.status(400).json({ error: 'TELEGRAM_CHAT_ID not set' });
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(400).json({ error: 'Supabase not configured' });
+
+  let pid = PORTFOLIO_ID;
+  try {
+    const body = await readBody(req);
+    if (body?.portfolioId) pid = body.portfolioId;
+  } catch (_) {}
+
+  if (!pid) return res.status(400).json({ error: 'PORTFOLIO_ID not configured' });
 
   console.log(`[telegram] method=${req.method} pid=${pid?.slice(0, 8)}…`);
 
   try {
-    const [holdings, portfolioData] = await Promise.all([
-      loadHoldings(pid),
-      loadPortfolioData(pid),
-    ]);
-    console.log(`[telegram] holdings found: ${holdings.length}`);
-    if (!holdings.length) return res.status(200).json({ ok: true, note: 'no holdings found for this portfolio ID' });
-
-    const groups = await buildReport(holdings);
-
-    // Rebuild assetData map for alert checking
-    const assetDataMap = {};
-    for (const g of groups) {
-      for (const a of g.assets) {
-        assetDataMap[`${g._key || ''}:${a.rawName || a.name}`] = { price: a.price, changeAbs: a.changeAbs, ccy: a.ccy };
-      }
-    }
-
-    // Check price alerts
-    const priceAlerts = portfolioData?.priceAlerts || [];
-    const triggeredAlerts = checkPriceAlerts(priceAlerts, assetDataMap);
-
-    // Check rebalancing drift
-    const rebalAlerts = checkRebalancingDrift(portfolioData, assetDataMap);
-
-    if (!groups.length && !triggeredAlerts.length && !rebalAlerts.length) {
-      return res.status(200).json({ ok: true, note: 'no live price data available yet' });
-    }
-
-    let message = groups.length ? formatMessage(groups) : `Report [${todayTH()}]\nNo market data available.\n`;
-
-    // Append price alert section
-    if (triggeredAlerts.length > 0) {
-      message += '\n🚨 <b>Price Alerts Triggered</b>\n';
-      for (const { alert, price } of triggeredAlerts) {
-        const dir = alert.condition === 'above' ? '▲ above' : '▼ below';
-        message += `• ${escHtml(alert.name.replace(/THB$/, ''))} — ${dir} ${price.toLocaleString()} (target: ${alert.price.toLocaleString()})\n`;
-        if (alert.note) message += `  ${escHtml(alert.note)}\n`;
-      }
-    }
-
-    // Append rebalancing drift section
-    if (rebalAlerts.length > 0) {
-      message += '\n⚖️ <b>Rebalancing Needed (&gt;5% drift)</b>\n';
-      const CLASS_LABELS = { thaiStock: 'Thai Stock', usaStock: 'USA Stock', etf: 'ETF', fund: 'Fund', crypto: 'Crypto', gold: 'Gold', other: 'Other' };
-      for (const a of rebalAlerts) {
-        const direction = a.drift > 0 ? `overweight +${a.drift.toFixed(1)}%` : `underweight ${a.drift.toFixed(1)}%`;
-        message += `• ${escHtml(CLASS_LABELS[a.key] || a.key)}: ${a.curPct.toFixed(1)}% vs target ${a.tgt}% (${direction})\n`;
-      }
-    }
-
-    await sendTelegram(message);
-    console.log('[telegram] sent ok');
-    return res.status(200).json({ ok: true, message, triggeredAlerts: triggeredAlerts.length, rebalAlerts: rebalAlerts.length });
+    const result = await runReport(pid);
+    return res.status(200).json(result);
   } catch (e) {
     console.error('[telegram] error:', e);
     return res.status(500).json({ error: e.message });

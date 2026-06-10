@@ -111,7 +111,7 @@
       tags: state.tags, holdingTags: state.holdingTags,
       holdingNotes: state.holdingNotes, goals: state.goals,
       dividends: state.dividends, targetAllocation: state.targetAllocation,
-      priceAlerts: state.priceAlerts,
+      priceAlerts: state.priceAlerts, ecoEvents: state.ecoEvents,
     });
   }
 
@@ -148,8 +148,8 @@
       priceErrors: [],
       snapshots: (saved.snapshots || []).slice(-window.MAX_SNAPSHOTS),
       sales: saved.sales || [],
-      tags: saved.tags || [],
-      holdingTags: saved.holdingTags || {},
+      tags: (saved.tags && saved.tags.length > 0) ? saved.tags : (window.SEED_TAGS || []),
+      holdingTags: (saved.holdingTags && Object.keys(saved.holdingTags).length > 0) ? saved.holdingTags : (window.SEED_HOLDING_TAGS || {}),
       holdingNotes: saved.holdingNotes || {},
       goals: saved.goals || [],
       dividends: saved.dividends || [],
@@ -221,9 +221,12 @@
         portfolioId = overrideId;
         try { localStorage.setItem(USER_ID_KEY, overrideId); } catch (_) {}
       }
+      const hadTags = saved.tags && saved.tags.length > 0;
       state = restoreFromSaved(saved);
       _initialized = true;
       _initialLoadOk = true;
+      // If DB had no tags and seed tags were applied, persist them to Supabase immediately
+      if (!hadTags && state.tags.length > 0) scheduleCloudSave();
       subs.forEach(fn => fn());
       return true;
     } catch (_) {

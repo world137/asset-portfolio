@@ -488,8 +488,18 @@ const MACRO_MATRIX_ROWS = [
     impacts: { Tech: -1, REIT: -1, Gold: 2, BTC: 0, EM: -1, Energy: 3, Bonds: -2, Cash: -1 },
   },
   {
-    key: 'liquidity', label: 'M2 Liquidity', direction: '↑ Expanding',
-    isActive: () => false,
+    key: 'gold', label: 'Gold', direction: '↑ High (≥ $2,500)',
+    isActive: v => v != null && v >= 2500,
+    impacts: { Tech: -1, REIT: 0, Gold: 3, BTC: 1, EM: 1, Energy: 1, Bonds: 1, Cash: -1 },
+  },
+  {
+    key: 'usdthb', label: 'USD/THB', direction: '↑ Weak THB (≥ 35)',
+    isActive: v => v != null && v >= 35,
+    impacts: { Tech: 1, REIT: -1, Gold: -1, BTC: -1, EM: -3, Energy: -1, Bonds: 0, Cash: 1 },
+  },
+  {
+    key: 'm2', label: 'M2 Liquidity', direction: '↑ Expanding (≥ 4% YoY)',
+    isActive: v => v != null && v >= 4,
     impacts: { Tech: 2, REIT: 1, Gold: 1, BTC: 3, EM: 2, Energy: 1, Bonds: 0, Cash: -1 },
   },
 ];
@@ -555,6 +565,46 @@ const MACRO_INFO = {
       { max: Infinity, label: 'High',     color: '#dc2626', note: 'High oil = stagflation risk. Fed cannot cut. Real income squeezed. Energy dominates. Gold benefits as inflation hedge. THB under pressure.' },
     ],
   },
+  sp500: {
+    title: 'S&P 500 — US Equity Index',
+    description: 'The benchmark index for 500 large-cap US companies. It represents ~80% of the US equity market by capitalization and is the most-watched global equity gauge. Its trend drives risk sentiment worldwide — Thai stocks and emerging markets closely correlate with S&P 500 direction.',
+    levels: [
+      { max: 3500,     label: 'Bear',     color: '#dc2626', note: 'Bear market territory. Risk-off globally. Expect pressure on Thai stocks, EM, and crypto. Consider raising cash or hedges.' },
+      { max: 4500,     label: 'Recovery', color: '#b45309', note: 'Below recent highs. Market in recovery or correction phase. Selectively adding quality positions may be rewarding.' },
+      { max: 5500,     label: 'Bull',     color: '#16a34a', note: 'Healthy bull market range. Risk appetite is positive. Growth stocks and EM tend to perform well in this environment.' },
+      { max: Infinity, label: 'Elevated', color: '#b45309', note: 'Stretched valuations historically. Not necessarily a top, but upside may be limited. Watch for catalyst-driven corrections.' },
+    ],
+  },
+  gold: {
+    title: 'Gold Price (USD/troy oz)',
+    description: 'Gold is the ultimate safe-haven asset and inflation hedge. Rising gold signals investors are seeking protection from inflation, currency debasement, or geopolitical risk. As a USD-denominated asset, gold in THB terms also benefits when THB weakens. Central banks globally have been accumulating gold as a reserve diversifier away from USD.',
+    levels: [
+      { max: 1800,     label: 'Low',      color: '#16a34a', note: 'Below long-run fair value range. Real yields may be high. Risk assets favored. Good entry opportunity for gold allocation.' },
+      { max: 2200,     label: 'Normal',   color: '#6b7280', note: 'Mid-range. Balanced risk sentiment. Gold holding its ground as a portfolio stabilizer.' },
+      { max: 2800,     label: 'Elevated', color: '#b45309', note: 'Elevated gold = inflation / geopolitical concerns rising. A positive signal for gold holdings. Watch for USD weakness.' },
+      { max: Infinity, label: 'High',     color: '#dc2626', note: 'Very high gold. Flight-to-safety in full force. Inflation fears, currency risk, or crisis conditions may be driving the move.' },
+    ],
+  },
+  usdthb: {
+    title: 'USD/THB Exchange Rate',
+    description: 'The Thai Baht per US Dollar exchange rate. A higher number means a weaker Baht. As a Thai investor holding USD-denominated assets (US stocks, ETFs, crypto), a weaker Baht directly boosts the THB value of those holdings. However, it also means higher import costs, which feeds into domestic inflation. The Bank of Thailand targets moderate Baht stability.',
+    levels: [
+      { max: 32,       label: 'Strong THB', color: '#b45309', note: 'Very strong Baht. Your USD-denominated assets are worth less in THB. Import costs are cheap. Conversion back to THB yields less.' },
+      { max: 35,       label: 'Normal',     color: '#16a34a', note: 'Normal range. Balanced for Thai investors. THB not under stress. Hedging USD assets is less critical.' },
+      { max: 38,       label: 'Weak THB',   color: '#b45309', note: 'Weak Baht. Your US stocks/ETFs are worth more in THB terms. But import inflation rises. Bank of Thailand may intervene.' },
+      { max: Infinity, label: 'Very Weak',  color: '#dc2626', note: 'Very weak Baht. Significant boost to your USD asset values in THB, but economic stress is rising. Monitor BoT policy closely.' },
+    ],
+  },
+  m2: {
+    title: 'M2 Money Supply Growth (YoY)',
+    description: 'Year-over-year growth rate of US M2 money supply — cash, checking, savings, and money market accounts. M2 growth is a leading indicator of future inflation and asset price inflation. Rapid M2 expansion (quantitative easing, fiscal stimulus) historically correlates with bull markets in equities, real estate, and crypto. Contraction signals tightening liquidity.',
+    levels: [
+      { max: -2,       label: 'Contracting', color: '#dc2626', note: 'M2 is shrinking — a rare and significant event. Liquidity is being actively drained. Historically precedes economic stress and asset deflation.' },
+      { max: 2,        label: 'Tight',       color: '#b45309', note: 'Slow or near-zero M2 growth. Restrictive monetary environment. Risk assets may face headwinds as liquidity remains constrained.' },
+      { max: 6,        label: 'Normal',      color: '#16a34a', note: 'Healthy M2 growth. Adequate liquidity to support economic activity and moderate asset appreciation. Neutral macro backdrop.' },
+      { max: Infinity, label: 'Expanding',   color: '#16a34a', note: 'Rapid M2 expansion. High liquidity typically drives strong performance in equities, crypto, and real assets. Watch for inflation follow-through.' },
+    ],
+  },
 };
 
 function getMacroLevel(key, value) {
@@ -578,7 +628,7 @@ function macroImpactStyle(level) {
   }
 }
 
-function MacroCard({ indKey, label, value, unit, prefix, change, active, onClick }) {
+function MacroCard({ indKey, label, value, unit, prefix, change, note, active, onClick }) {
   const isUp = change > 0, isDown = change < 0;
   const level = getMacroLevel(indKey, value);
   return (
@@ -600,7 +650,7 @@ function MacroCard({ indKey, label, value, unit, prefix, change, active, onClick
         ? <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--fg-3)' }}>—</div>
         : <React.Fragment>
             <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--fg-1)', fontVariantNumeric: 'tabular-nums' }}>
-              {prefix || ''}{typeof value === 'number' ? value.toFixed(2) : value}{unit}
+              {prefix || ''}{typeof value === 'number' ? value.toFixed(2) : value}{unit ? <span style={{ fontSize: 12, fontWeight: 500, marginLeft: 2 }}>{unit}</span> : null}
             </div>
             {change != null && (
               <div style={{ fontSize: 11, marginTop: 2, fontWeight: 500,
@@ -617,6 +667,11 @@ function MacroCard({ indKey, label, value, unit, prefix, change, active, onClick
                 }}>
                   {level.label}
                 </span>
+              </div>
+            )}
+            {note && (
+              <div style={{ fontSize: 9, color: 'var(--fg-4)', marginTop: 4, lineHeight: 1.3 }}>
+                {note}
               </div>
             )}
           </React.Fragment>
@@ -711,13 +766,25 @@ function MacroDashboard() {
   }, []);
 
   const ind = data?.indicators || {};
+
+  function fredDate(dateStr) {
+    if (!dateStr) return null;
+    const [y, m, d] = dateStr.split('-');
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `as of ${months[parseInt(m, 10) - 1]} ${y}`;
+  }
+
   const cards = [
-    { key: 'fedRate', label: 'Fed Rate', unit: '%', value: ind.fedRate?.value, change: ind.fedRate?.change },
-    { key: 'us10y',   label: 'US 10Y',  unit: '%', value: ind.us10y?.value,   change: ind.us10y?.change   },
-    { key: 'cpi',     label: 'CPI YoY', unit: '%', value: ind.cpi?.value,     change: ind.cpi?.change     },
-    { key: 'vix',     label: 'VIX',     unit: '',  value: ind.vix?.value,     change: ind.vix?.change     },
-    { key: 'dxy',     label: 'DXY',     unit: '',  value: ind.dxy?.value,     change: ind.dxy?.change     },
-    { key: 'oil',     label: 'WTI Oil', unit: '',  prefix: '$', value: ind.oil?.value, change: ind.oil?.change },
+    { key: 'sp500',   label: 'S&P 500',  unit: '',   prefix: '',  value: ind.sp500?.value,   change: ind.sp500?.change   },
+    { key: 'us10y',   label: 'US 10Y',   unit: '%',  prefix: '',  value: ind.us10y?.value,   change: ind.us10y?.change   },
+    { key: 'fedRate', label: 'Fed Rate', unit: '%',  prefix: '',  value: ind.fedRate?.value, change: ind.fedRate?.change, note: fredDate(ind.fedRate?.date) },
+    { key: 'cpi',     label: 'CPI YoY', unit: '%',  prefix: '',  value: ind.cpi?.value,     change: ind.cpi?.change,     note: fredDate(ind.cpi?.date) },
+    { key: 'vix',     label: 'VIX',     unit: '',   prefix: '',  value: ind.vix?.value,     change: ind.vix?.change     },
+    { key: 'dxy',     label: 'DXY',     unit: '',   prefix: '',  value: ind.dxy?.value,     change: ind.dxy?.change     },
+    { key: 'usdthb',  label: 'USD/THB', unit: '',   prefix: '฿', value: ind.usdthb?.value,  change: ind.usdthb?.change  },
+    { key: 'oil',     label: 'WTI Oil', unit: '',   prefix: '$', value: ind.oil?.value,     change: ind.oil?.change     },
+    { key: 'gold',    label: 'Gold',    unit: '',   prefix: '$', value: ind.gold?.value,    change: ind.gold?.change    },
+    { key: 'm2',      label: 'M2 YoY',  unit: '%',  prefix: '',  value: ind.m2?.value,      change: ind.m2?.change,      note: fredDate(ind.m2?.date) },
   ];
 
   const toggleCard = (key) => setActiveCard(v => v === key ? null : key);
@@ -752,14 +819,15 @@ function MacroDashboard() {
 
       {/* ── Indicator cards ── */}
       {loading
-        ? <div className="analysis-grid">
-            {[1,2,3,4,5].map(i => (
-              <div key={i} style={{ flex: '1 1 80px', height: 72, borderRadius: 10, background: 'var(--bg-sunken)', animation: 'pulse 1s infinite' }} />
+        ? <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
+            {[1,2,3,4,5,6,7,8,9,10].map(i => (
+              <div key={i} style={{ height: 80, borderRadius: 10, background: 'var(--bg-sunken)', animation: 'pulse 1s infinite' }} />
             ))}
           </div>
-        : <div style={{ display: 'grid', gap: 8, flexWrap: 'wrap', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))'}}>
+        : <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))'}}>
             {cards.map(c => (
-              <MacroCard key={c.key} indKey={c.key} label={c.label} value={c.value} unit={c.unit} change={c.change}
+              <MacroCard key={c.key} indKey={c.key} label={c.label} value={c.value} unit={c.unit}
+                prefix={c.prefix} change={c.change} note={c.note}
                 active={activeCard === c.key} onClick={() => toggleCard(c.key)} />
             ))}
           </div>
@@ -809,12 +877,12 @@ function MacroDashboard() {
                 {MACRO_MATRIX_ROWS.map((row, i) => {
                   const val    = ind[row.key]?.value;
                   const active = row.isActive(val);
-                  const level  = row.key !== 'liquidity' ? getMacroLevel(row.key, val) : null;
+                  const level  = getMacroLevel(row.key, val);
                   const rowBg  = active
                     ? 'rgba(255,69,58,0.07)'
                     : (i % 2 === 0 ? 'transparent' : 'var(--bg-sunken)');
-                  const valPrefix = row.key === 'oil' ? '$' : '';
-                  const unit      = (row.key === 'fedRate' || row.key === 'us10y' || row.key === 'cpi') ? '%' : '';
+                  const valPrefix = (row.key === 'oil' || row.key === 'gold') ? '$' : (row.key === 'usdthb' ? '฿' : '');
+                  const unit      = (row.key === 'fedRate' || row.key === 'us10y' || row.key === 'cpi' || row.key === 'm2') ? '%' : '';
 
                   return (
                     <tr key={row.key} style={{ background: rowBg }}>

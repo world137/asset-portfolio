@@ -92,7 +92,7 @@ async function sbInsert(table, rows) {
 
 // Reconstruct the JS state object (same shape store.js expects) from DB rows.
 function buildState(settingsRows, holdingRows, sectorRows, snapshotRows, saleRows, fxRows, marketPriceRows, tagRows, holdingTagRows,
-                    goalRows, dividendRows, allocationRows, alertRows, noteRows) {
+                    goalRows, dividendRows, allocationRows, alertRows, noteRows, ecoEventRows) {
   // Build lookup: "classKey:name" → current market price
   const mpMap = {};
   for (const mp of (marketPriceRows || [])) {
@@ -210,6 +210,14 @@ function buildState(settingsRows, holdingRows, sectorRows, snapshotRows, saleRow
       triggered: r.triggered,
     })),
     holdingNotes,
+    ecoEvents: (ecoEventRows || []).map(r => ({
+      id:         r.id,
+      date:       r.date,
+      type:       r.type,
+      label:      r.label,
+      importance: r.importance || 'medium',
+      note:       r.note || undefined,
+    })),
     lastPriceSync: null,
     priceMode:     null,
   };
@@ -235,7 +243,7 @@ export default async function handler(req, res) {
     try {
       const SNAPSHOT_COLS = 'date,value,thai_stock,usa_stock,etf,fund,crypto,gold,other';
       const [settingsRows, holdingRows, sectorRows, snapshotRows, saleRows, fxRows, marketPriceRows, tagRows, holdingTagRows,
-             goalRows, dividendRows, allocationRows, alertRows, noteRows] =
+             goalRows, dividendRows, allocationRows, alertRows, noteRows, ecoEventRows] =
         await Promise.all([
           sbGet('settings',          `user_id=eq.${uid}&select=*`),
           sbGet('holdings',          `user_id=eq.${uid}&select=*&order=created_at.asc`),
@@ -251,6 +259,7 @@ export default async function handler(req, res) {
           sbGet('target_allocation', `user_id=eq.${uid}&select=*`),
           sbGet('price_alerts',      `user_id=eq.${uid}&select=*`),
           sbGet('holding_notes',     `user_id=eq.${uid}&select=*`),
+          sbGet('eco_events',        `user_id=eq.${uid}&select=*&order=date.asc`),
         ]);
 
       // No data at all → new user
@@ -259,7 +268,7 @@ export default async function handler(req, res) {
       if (empty) return res.status(200).json({ data: null });
 
       const state = buildState(settingsRows, holdingRows, sectorRows, snapshotRows, saleRows, fxRows, marketPriceRows, tagRows, holdingTagRows,
-                               goalRows, dividendRows, allocationRows, alertRows, noteRows);
+                               goalRows, dividendRows, allocationRows, alertRows, noteRows, ecoEventRows);
       return res.status(200).json({ data: JSON.stringify(state) });
     } catch (e) {
       console.error('[portfolio] get error:', e.message);
@@ -470,6 +479,19 @@ export default async function handler(req, res) {
         noteRows.push({ user_id: id, class_key: key.slice(0, ci), name: key.slice(ci + 1), note });
       }
       if (noteRows.length) await sbUpsert('holding_notes', noteRows);
+
+      // 15. Eco events — full replace
+      await sbDelete('eco_events', `user_id=eq.${uid}`);
+      const ecoRows = (p.ecoEvents || []).map(e => ({
+        id:         e.id,
+        user_id:    id,
+        date:       e.date,
+        type:       e.type || 'other',
+        label:      e.label,
+        importance: e.importance || 'medium',
+        note:       e.note || null,
+      }));
+      if (ecoRows.length) await sbUpsert('eco_events', ecoRows);
 
       return res.status(200).json({ ok: true });
     } catch (e) {
