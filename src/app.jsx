@@ -13,7 +13,7 @@ function Nav({ route, setRoute, totals, open, onClose }) {
   const settings = Store.settings();
   const sym      = window.ccySymbol(settings.displayCcy);
 
-  const NO_VAL_ROUTES = new Set(['dashboard','summary','networth','wallet','transactions','debts','walletsummary','walletcalendar','bills','savingsgoals','reconcile','pixelworld','watchlist','sectors','selllog','technical','dayreport','rebalancing','dividends','goals','benchmark','risk','alerts','planning']);
+  const NO_VAL_ROUTES = new Set(['dashboard','summary','networth','wallet','transactions','debts','walletsummary','walletcalendar','bills','savingsgoals','reconcile','pixelworld','watchlist','sectors','selllog','technical','dayreport','rebalancing','dividends','goals','benchmark','risk','alerts','planning','analysis']);
 
   const billsDue = Store.getBillsDueSoon ? Store.getBillsDueSoon(3) : [];
 
@@ -49,12 +49,8 @@ function Nav({ route, setRoute, totals, open, onClose }) {
         <div className="grp-h">Analysis</div>
         {item('sectors',    'By Sector',    'pie-chart')}
         {item('summary',    'Cost vs Price','bar-chart-2')}
-        {item('rebalancing','Rebalancing',  'sliders')}
-        {item('benchmark',  'Benchmark',    'trending-up')}
-        {item('risk',       'Risk Analysis','shield')}
-        {item('goals',      'Goals',        'star')}
-        {item('dividends',  'Dividends',    'trending-up')}
-        {item('planning',   'Planning',     'calendar')}
+        {item('analysis',   'Analysis Hub', 'layers')}
+        {item('dividends',  'Portfolio Cal', 'calendar')}
         {item('alerts',     'Alerts',       'bell')}
         {item('selllog',    'Sell Log',     'trending-down')}
         {item('dayreport',  'Day Report',   'send')}
@@ -851,12 +847,13 @@ function App() {
     : route === 'networth'       ? 'Net Worth'
     : route === 'sectors'        ? 'Analysis'
     : route === 'summary'        ? 'Cost & Price Summary'
-    : route === 'rebalancing'    ? 'Rebalancing'
-    : route === 'benchmark'      ? 'Benchmark Comparison'
-    : route === 'risk'           ? 'Risk Analysis'
-    : route === 'goals'          ? 'Financial Goals'
-    : route === 'dividends'      ? 'Dividend Calendar'
-    : route === 'planning'       ? 'Planning & Projections'
+    : route === 'analysis'       ? 'Portfolio Analysis'
+    : route === 'rebalancing'    ? 'Portfolio Analysis'
+    : route === 'benchmark'      ? 'Portfolio Analysis'
+    : route === 'risk'           ? 'Portfolio Analysis'
+    : route === 'goals'          ? 'Portfolio Analysis'
+    : route === 'dividends'      ? 'Portfolio Calendar'
+    : route === 'planning'       ? 'Portfolio Analysis'
     : route === 'alerts'         ? 'Price Alerts'
     : route === 'selllog'        ? 'Sell Log'
     : route === 'wallet'         ? 'Accounts'
@@ -934,12 +931,13 @@ function App() {
           {route === 'networth'     && <NetWorthView />}
           {route === 'sectors'      && <SectorView />}
           {route === 'summary'      && <SummaryView />}
-          {route === 'rebalancing'  && <RebalancingView />}
-          {route === 'benchmark'    && <BenchmarkView />}
-          {route === 'risk'         && <RiskView />}
-          {route === 'goals'        && <GoalsView />}
+          {route === 'analysis'     && <PortfolioAnalysisView />}
+          {route === 'rebalancing'  && <PortfolioAnalysisView defaultTab="rebalancing" />}
+          {route === 'benchmark'    && <PortfolioAnalysisView defaultTab="benchmark" />}
+          {route === 'risk'         && <PortfolioAnalysisView defaultTab="risk" />}
+          {route === 'goals'        && <PortfolioAnalysisView defaultTab="goals" />}
+          {route === 'planning'     && <PortfolioAnalysisView defaultTab="planning" />}
           {route === 'dividends'    && <DividendCalendar />}
-          {route === 'planning'     && <PlanningView />}
           {route === 'alerts'       && <AlertsView />}
           {route === 'selllog'      && <SellLogView />}
           {['wallet','transactions','debts','walletsummary','walletcalendar','bills','savingsgoals','reconcile'].includes(route) && (

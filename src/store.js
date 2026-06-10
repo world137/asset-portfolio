@@ -56,12 +56,14 @@
       holdingNotes: {},  // { "classKey:name": "note text" }
       goals: [],         // [{ id, name, targetAmount, targetDate, note, emoji }]
       dividends: [],     // [{ id, classKey, name, exDate, payDate, amountPerShare, totalAmount, currency, note }] — manual entries (persisted)
+      ecoEvents: [],     // [{ id, date, type, label, importance, note }] — user-added economic events (persisted)
       autoDividends: [], // same shape, auto:true — fetched from /api/dividends for holdings; NOT persisted
       autoDividendsAt: null, // epoch ms of last successful fetch (not persisted)
       targetAllocation: {}, // { thaiStock: 30, usaStock: 20, ... } — target % per class
       priceAlerts: [],   // [{ id, classKey, name, condition: 'above'|'below', price, note, triggered }]
       prePostPrices: {}, // { "classKey:name": { price, pct, type: 'pre'|'post' } } — not persisted
       dayChangePrices: {}, // { "classKey:name": prevClose } — not persisted, used for %day column
+      peRatios: {},      // { "classKey:name": trailingPE } — not persisted, populated by refreshPrices
     };
   }
 
@@ -151,10 +153,12 @@
       holdingNotes: saved.holdingNotes || {},
       goals: saved.goals || [],
       dividends: saved.dividends || [],
+      ecoEvents: saved.ecoEvents || [],
       targetAllocation: saved.targetAllocation || {},
       priceAlerts: saved.priceAlerts || [],
       prePostPrices: {},   // not persisted — reset on every load
       dayChangePrices: {}, // not persisted — populated by refreshPrices
+      peRatios: {},        // not persisted — populated by refreshPrices
     };
   }
 
@@ -649,6 +653,7 @@
     get() { return state; },
     settings() { return state.settings; },
     prePostPrice(classKey, name) { return state.prePostPrices[`${classKey}:${name}`] || null; },
+    getPERatio(classKey, name) { return (state.peRatios || {})[`${classKey}:${name}`] ?? null; },
     dayChangePct(classKey, name) {
       const prevClose = (state.dayChangePrices || {})[`${classKey}:${name}`];
       if (prevClose == null || prevClose === 0) return null;
@@ -1183,6 +1188,7 @@
         applyPrices(data.prices);
         state.prePostPrices   = (data.prePost    && typeof data.prePost    === 'object') ? data.prePost    : {};
         state.dayChangePrices = (data.prevCloses && typeof data.prevCloses === 'object') ? data.prevCloses : {};
+        state.peRatios        = (data.peRatios   && typeof data.peRatios   === 'object') ? data.peRatios   : {};
         if (data.fx && data.fx.USDTHB) {
           state.fx = {
             USDTHB: data.fx.USDTHB,
@@ -1254,6 +1260,18 @@
     },
     deleteDividend(id) { state.dividends = (state.dividends || []).filter(d => d.id !== id); emit(); },
     getDividends() { return state.dividends || []; },
+
+    // ── Economic events (user-added custom events) ─────────────────────────────
+    getEcoEvents() { return state.ecoEvents || []; },
+    addEcoEvent(data) {
+      state.ecoEvents = [...(state.ecoEvents || []), { ...data, id: uid() }];
+      emit();
+    },
+    updateEcoEvent(id, patch) {
+      state.ecoEvents = (state.ecoEvents || []).map(e => e.id === id ? { ...e, ...patch } : e);
+      emit();
+    },
+    deleteEcoEvent(id) { state.ecoEvents = (state.ecoEvents || []).filter(e => e.id !== id); emit(); },
 
     // ── Auto-fetched dividends (from /api/dividends, holdings only) ─────────────
     // These are read-only and NOT persisted — re-fetched per session/load.
