@@ -15,9 +15,6 @@
     },
     "api/bonds.js": {
       "maxDuration": 20
-    },
-    "api/telegram-webhook.js": {
-      "maxDuration": 30
     }
   },
   "crons": [
