@@ -980,7 +980,9 @@
     updateTransaction(id, patch) {
       const i = wallet.transactions.findIndex(t => t.id === id);
       if (i < 0) return;
-      wallet.transactions[i] = { ...wallet.transactions[i], ...patch };
+      // Create a new array reference so useMemo dependencies detect the change
+      const updated = { ...wallet.transactions[i], ...patch };
+      wallet.transactions = [...wallet.transactions.slice(0, i), updated, ...wallet.transactions.slice(i + 1)];
       subs.forEach(fn => fn()); scheduleWalletSave();
     },
     deleteTransaction(id) {

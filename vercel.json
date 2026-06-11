@@ -2,19 +2,28 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
     "api/prices.js": {
-      "maxDuration": 30
+      "maxDuration": 30,
+      "runtime": "nodejs20.x"
     },
     "api/portfolio.js": {
-      "maxDuration": 10
+      "maxDuration": 10,
+      "runtime": "nodejs20.x"
+    },
+    "api/wallet.js": {
+      "maxDuration": 10,
+      "runtime": "nodejs20.x"
     },
     "api/chart.js": {
-      "maxDuration": 15
+      "maxDuration": 15,
+      "runtime": "nodejs20.x"
     },
     "api/telegram.js": {
-      "maxDuration": 30
+      "maxDuration": 30,
+      "runtime": "nodejs20.x"
     },
     "api/bonds.js": {
-      "maxDuration": 20
+      "maxDuration": 20,
+      "runtime": "nodejs20.x"
     }
   },
   "crons": [
