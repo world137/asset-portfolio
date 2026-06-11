@@ -18,7 +18,6 @@
      TELEGRAM_WEBHOOK_SECRET — random string ≥ 32 chars for webhook validation
    ============================================================================ */
 
-import { readBody } from './_lib.js';
 
 const SUPABASE_URL   = process.env.SUPABASE_URL;
 const SUPABASE_KEY   = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
@@ -764,28 +763,35 @@ export default async function handler(req, res) {
 
   if (req.method !== 'POST') return res.status(405).end();
 
-  // ── Incoming Telegram webhook (detected by secret-token header) ───────────
+  // Read body once — needed for both paths
+  let rawBody;
+  try {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    rawBody = Buffer.concat(chunks);
+  } catch (_) {
+    rawBody = Buffer.alloc(0);
+  }
+
+  let body;
+  try { body = JSON.parse(rawBody.toString('utf8')); } catch (_) { body = {}; }
+
   const incomingSecret = req.headers['x-telegram-bot-api-secret-token'];
-  if (incomingSecret !== undefined || (WEBHOOK_SECRET && incomingSecret === WEBHOOK_SECRET)) {
-    // Validate secret
+
+  // Telegram updates always contain update_id. Cron/manual calls never do.
+  const isTelegramUpdate = body?.update_id != null || incomingSecret !== undefined;
+
+  // ── Incoming Telegram webhook ─────────────────────────────────────────────
+  if (isTelegramUpdate) {
     if (WEBHOOK_SECRET && incomingSecret !== WEBHOOK_SECRET) {
       return res.status(403).json({ error: 'invalid secret' });
     }
     if (!BOT_TOKEN) return res.status(400).end();
 
-    let update;
-    try {
-      const chunks = [];
-      for await (const chunk of req) chunks.push(chunk);
-      update = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-    } catch (_) {
-      return res.status(400).json({ error: 'invalid json' });
-    }
-
     // Respond 200 immediately so Telegram doesn't retry
     res.status(200).json({ ok: true });
 
-    const message = update?.message || update?.edited_message;
+    const message = body?.message || body?.edited_message;
     if (!message) return;
 
     const chatId = String(message.chat?.id);
@@ -822,15 +828,10 @@ export default async function handler(req, res) {
   if (!CHAT_ID)                       return res.status(400).json({ error: 'TELEGRAM_CHAT_ID not set' });
   if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(400).json({ error: 'Supabase not configured' });
 
-  let pid = PORTFOLIO_ID;
-  try {
-    const body = await readBody(req);
-    if (body?.portfolioId) pid = body.portfolioId;
-  } catch (_) {}
-
+  let pid = body?.portfolioId || PORTFOLIO_ID;
   if (!pid) return res.status(400).json({ error: 'PORTFOLIO_ID not configured' });
 
-  console.log(`[telegram] method=${req.method} pid=${pid?.slice(0, 8)}…`);
+  console.log(`[telegram] cron/manual pid=${pid?.slice(0, 8)}…`);
 
   try {
     const result = await runReport(pid);
