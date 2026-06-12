@@ -72,6 +72,25 @@ async function yahooPrice(symbol) {
   throw lastErr || new Error('yahoo failed');
 }
 
+// ---- Yahoo Finance timeseries API — per-symbol P/E fallback -------------------------
+async function yahooTimeseriesPE(symbol) {
+  const now = Math.floor(Date.now() / 1000);
+  const period1 = now - 30 * 24 * 3600;
+  for (const host of ['query1.finance.yahoo.com', 'query2.finance.yahoo.com']) {
+    try {
+      const url = `https://${host}/ws/fundamentals-timeseries/v1/finance/timeseries/${encodeURIComponent(symbol)}?symbol=${encodeURIComponent(symbol)}&type=trailingPeRatio&period1=${period1}&period2=${now}`;
+      const r = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' } });
+      if (!r.ok) continue;
+      const j = await r.json();
+      const series = j?.timeseries?.result?.[0]?.trailingPeRatio;
+      if (!series?.length) continue;
+      const last = series[series.length - 1]?.reportedValue?.raw;
+      if (last != null && isFinite(last) && last > 0) return +last.toFixed(2);
+    } catch (_) {}
+  }
+  return null;
+}
+
 // ---- Yahoo Finance quote API — batch P/E fetch (more reliable than chart meta) -----
 async function yahooQuotePE(symbols) {
   const hosts = ['query1.finance.yahoo.com', 'query2.finance.yahoo.com'];
@@ -239,6 +258,16 @@ export default async function handler(req, res) {
   }
 
   await Promise.allSettled(tasks);
+
+  // Timeseries P/E fallback for symbols still missing P/E after chart + quote
+  const missingPE = yahooItems.filter(it => peRatios[`${it.key}:${it.name}`] == null);
+  if (missingPE.length) {
+    await Promise.allSettled(missingPE.map(it =>
+      yahooTimeseriesPE(it.symbol)
+        .then(pe => { if (pe != null) peRatios[`${it.key}:${it.name}`] = pe; })
+        .catch(() => {})
+    ));
+  }
 
   // light caching at the edge (30s)
   res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=120');
