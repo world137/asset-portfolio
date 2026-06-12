@@ -818,6 +818,8 @@ export default async function handler(req, res) {
     } else if (text.startsWith('/') && text.length > 1) {
       const raw = text.slice(1).split('@')[0];
       if (/^[A-Za-z0-9._-]+$/.test(raw)) await handleTickerCommand(chatId, raw);
+    } else if (/^[A-Za-z][A-Za-z0-9]{0,8}(\.[A-Za-z]{1,4})?$/.test(text.trim())) {
+      await handleTickerCommand(chatId, text.trim());
     }
 
     return;

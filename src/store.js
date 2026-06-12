@@ -501,7 +501,7 @@
           b += (to && fr && to.currency !== fr.currency && t.fxRate) ? t.amount * t.fxRate : t.amount;
         }
       } else if (t.accountId === accountId) {
-        b += t.flow === 'income' ? t.amount : -t.amount;
+        b += (t.flow === 'income' || t.flow === 'neutral') ? t.amount : -t.amount;
       }
     }
     return b;
@@ -728,16 +728,18 @@
       state.sales.push({ id: uid(), date, classKey, name, ccy,
         buyPrice: +buyPrice, sellPrice: +sellPrice, qty: +qty,
         cost, proceeds, realizedPnl, pnlPct });
-      // Optionally credit sale proceeds to a wallet account
+      // Optionally credit sale proceeds to a wallet account — split into principal + profit/loss
       if (walletCredit && walletCredit.accountId) {
-        _linkWalletTxn({
-          accountId: walletCredit.accountId,
-          assetCcy:  ccy || 'THB',
-          amount:    proceeds,
-          flow:      'income',
-          fxRate:    walletCredit.exchangeRate || null,
-          note:      `Sell ${window.fmtQty ? window.fmtQty(+qty) : qty} ${name}`,
-        });
+        const fxRate = walletCredit.exchangeRate || null;
+        if (realizedPnl === 0) {
+          _linkWalletTxn({ accountId: walletCredit.accountId, assetCcy: ccy || 'THB', amount: proceeds, flow: 'neutral', fxRate, note: `Principal — ${name}` });
+        } else if (realizedPnl > 0) {
+          _linkWalletTxn({ accountId: walletCredit.accountId, assetCcy: ccy || 'THB', amount: cost, flow: 'neutral', fxRate, note: `Principal — ${name}` });
+          _linkWalletTxn({ accountId: walletCredit.accountId, assetCcy: ccy || 'THB', amount: realizedPnl, flow: 'income', fxRate, note: `Profit — ${name}` });
+        } else {
+          _linkWalletTxn({ accountId: walletCredit.accountId, assetCcy: ccy || 'THB', amount: proceeds, flow: 'neutral', fxRate, note: `Principal — ${name}` });
+          _linkWalletTxn({ accountId: walletCredit.accountId, assetCcy: ccy || 'THB', amount: Math.abs(realizedPnl), flow: 'expense', fxRate, note: `Loss — ${name}` });
+        }
       }
       // FIFO lot reduction: deduct sold qty from oldest lots first
       let toDeduct = +qty;
@@ -980,7 +982,9 @@
     updateTransaction(id, patch) {
       const i = wallet.transactions.findIndex(t => t.id === id);
       if (i < 0) return;
-      wallet.transactions[i] = { ...wallet.transactions[i], ...patch };
+      // Create a new array reference so useMemo dependencies detect the change
+      const updated = { ...wallet.transactions[i], ...patch };
+      wallet.transactions = [...wallet.transactions.slice(0, i), updated, ...wallet.transactions.slice(i + 1)];
       subs.forEach(fn => fn()); scheduleWalletSave();
     },
     deleteTransaction(id) {

@@ -7,6 +7,9 @@
     "api/portfolio.js": {
       "maxDuration": 10
     },
+    "api/wallet.js": {
+      "maxDuration": 10
+    },
     "api/chart.js": {
       "maxDuration": 15
     },

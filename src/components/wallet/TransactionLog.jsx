@@ -68,8 +68,8 @@ function TransactionLog() {
 
   const net = summary.income - summary.expense;
 
-  const FLOW_COLORS = { income: 'var(--green-600)', expense: 'var(--red-600)', transfer: 'var(--fg-2)' };
-  const FLOW_SIGN   = { income: '+', expense: '−', transfer: '→' };
+  const FLOW_COLORS = { income: 'var(--green-600)', expense: 'var(--red-600)', transfer: 'var(--fg-2)', neutral: 'var(--fg-3)' };
+  const FLOW_SIGN   = { income: '+', expense: '−', transfer: '→', neutral: '+' };
 
   return (
     <div className="page">
@@ -112,7 +112,7 @@ function TransactionLog() {
       <div className="filter-row" style={{ display: 'flex', gap: 10, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', flexShrink: 0, maxWidth: '100%' }}>
           <div className="layoutseg" style={{ whiteSpace: 'nowrap' }}>
-            {['all', 'income', 'expense', 'transfer'].map(fl => (
+            {['all', 'income', 'expense', 'transfer', 'neutral'].map(fl => (
               <button key={fl} className={filterFlow === fl ? 'on' : ''} onClick={() => setFilterFlow(fl)}>
                 {fl.charAt(0).toUpperCase() + fl.slice(1)}
               </button>
