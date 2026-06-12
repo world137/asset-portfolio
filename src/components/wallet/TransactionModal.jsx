@@ -158,7 +158,7 @@ function TransactionModal({ open, transaction, defaultAccountId, onClose }) {
         <div>
           <label className="flabel">Type</label>
           <div className="layoutseg" style={{ marginTop: 2 }}>
-            {['income', 'expense', 'transfer'].map(fl => (
+            {['income', 'expense', 'transfer', 'neutral'].map(fl => (
               <button key={fl} className={f.flow === fl ? 'on' : ''} onClick={() => setF(s => ({ ...s, flow: fl, categoryId: '' }))}>
                 {fl.charAt(0).toUpperCase() + fl.slice(1)}
               </button>
@@ -220,7 +220,7 @@ function TransactionModal({ open, transaction, defaultAccountId, onClose }) {
           </div>
         )}
 
-        {f.flow !== 'transfer' && (
+        {f.flow !== 'transfer' && f.flow !== 'neutral' && (
           <div>
             <label className="flabel">Category</label>
             <select className="input" value={f.categoryId} onChange={set('categoryId')}>
@@ -237,8 +237,8 @@ function TransactionModal({ open, transaction, defaultAccountId, onClose }) {
           <input className="input" placeholder="e.g. Lunch at Siam Paragon" value={f.note} onChange={set('note')} />
         </div>
 
-        {/* Split toggle — only for new non-transfer transactions */}
-        {!editing && f.flow !== 'transfer' && +f.amount > 0 && (
+        {/* Split toggle — only for new non-transfer, non-neutral transactions */}
+        {!editing && f.flow !== 'transfer' && f.flow !== 'neutral' && +f.amount > 0 && (
           <div className="full" style={{ borderTop: '1px solid var(--border)', paddingTop: 14, marginTop: 2 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
               <input type="checkbox" checked={splitMode}

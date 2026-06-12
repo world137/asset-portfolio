@@ -627,6 +627,7 @@ function DividendCalendar() {
                 })}
                 {selEco.map((e, i) => {
                   const tc = ECO_TYPE_COLORS[e.type] || ECO_TYPE_COLORS.other;
+                  const isCustom = !e._hardcoded && e.id;
                   return (
                     <div key={e.id || e.label + i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, fontSize: 13 }}>
                       <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 99,
@@ -639,6 +640,12 @@ function DividendCalendar() {
                         color: e.importance === 'high' ? 'var(--red-600)' : e.importance === 'medium' ? '#d97706' : 'var(--fg-3)' }}>
                         {e.importance || 'low'}
                       </span>
+                      {isCustom && (
+                        <button className="icon-toggle" style={{ color: 'var(--red-600)', flexShrink: 0 }}
+                                onClick={() => Store.deleteEcoEvent && Store.deleteEcoEvent(e.id)}>
+                          <Icon name="trash-2" size={13} />
+                        </button>
+                      )}
                     </div>
                   );
                 })}
