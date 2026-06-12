@@ -825,6 +825,16 @@ export default async function handler(req, res) {
     return;
   }
 
+  // ── Login notification ────────────────────────────────────────────────────
+  if (body?.type === 'login') {
+    if (BOT_TOKEN && CHAT_ID) {
+      const { date, time } = todayTH();
+      const msg = `🔐 <b>Login</b> — ${escHtml(body.username || 'Unknown')} signed in\n${date} ${time} TH`;
+      await tgSend(CHAT_ID, msg).catch(() => {});
+    }
+    return res.status(200).json({ ok: true });
+  }
+
   // ── Scheduled / manual report ─────────────────────────────────────────────
   if (!BOT_TOKEN)                     return res.status(400).json({ error: 'TELEGRAM_BOT_TOKEN not set' });
   if (!CHAT_ID)                       return res.status(400).json({ error: 'TELEGRAM_CHAT_ID not set' });

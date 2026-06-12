@@ -64,6 +64,11 @@ function LoginPage({ onSuccess }) {
       const data = await res.json();
       if (data.ok && data.portfolioId) {
         setAuth(data.portfolioId, username);
+        fetch('/api/telegram', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'login', username: username.trim() }),
+        }).catch(() => {});
         onSuccess();
       } else {
         setError('Wrong username or password.');

@@ -529,12 +529,15 @@ function DividendCalendar() {
                 const isToday = dayStr === new Date().toISOString().slice(0, 10);
                 const hasEvents = dayDivs.length > 0 || dayEco.length > 0;
                 return (
-                  <div key={day} style={{
+                  <div key={day}
+                    onClick={() => hasEvents && setSelectedDay(s => s === dayStr ? null : dayStr)}
+                    style={{
                     minHeight: isMobile ? 52 : 80,
                     padding: isMobile ? '4px 2px' : '6px 4px',
                     borderRight: '1px solid var(--border-1)', borderBottom: '1px solid var(--border-1)',
-                    background: isToday ? 'var(--accent-bg, rgba(59,130,246,0.07))' : 'transparent',
+                    background: selectedDay === dayStr ? 'var(--accent-bg, rgba(59,130,246,0.10))' : isToday ? 'var(--accent-bg, rgba(59,130,246,0.07))' : 'transparent',
                     overflow: 'hidden', minWidth: 0,
+                    cursor: hasEvents ? 'pointer' : 'default',
                   }}>
                     <div style={{ fontSize: isMobile ? 10 : 11, fontWeight: isToday ? 700 : 400, color: isToday ? 'var(--accent)' : 'var(--fg-3)', marginBottom: isMobile ? 2 : 3, textAlign: isMobile ? 'center' : 'left' }}>{day}</div>
                     {isMobile ? (
@@ -567,10 +570,10 @@ function DividendCalendar() {
                           <div key={d.id} title={payLabel(d)}
                                style={{ fontSize: 10, padding: '1px 4px', borderRadius: 3, marginBottom: 2,
                                  background: d.payDate === dayStr ? 'var(--green-600)' : 'var(--fg-4)',
-                                 color: '#fff', cursor: d.auto ? 'default' : 'pointer',
+                                 color: '#fff', cursor: 'pointer',
                                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                                  opacity: d.auto ? 0.85 : 1 }}
-                               onClick={() => { if (!d.auto) { setEditItem(d); setDivModalOpen(true); } }}>
+                               onClick={ev => { ev.stopPropagation(); setSelectedDay(s => s === dayStr ? null : dayStr); }}>
                             <span style={{ fontSize: 9, fontWeight: 700, marginRight: 3, opacity: 0.9 }}>
                               {d.payDate === dayStr ? 'PAY' : 'EX'}
                             </span>{d.name.replace(/THB$/, '')}
@@ -584,10 +587,10 @@ function DividendCalendar() {
                                  style={{ fontSize: 10, padding: '1px 4px', borderRadius: 3, marginBottom: 2,
                                    background: tc.bg + 'dd', color: tc.text,
                                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                                   cursor: isCustom ? 'pointer' : 'default',
+                                   cursor: 'pointer',
                                    opacity: e.importance === 'low' ? 0.7 : 1,
                                  }}
-                                 onClick={() => { if (isCustom) { setEditEcoItem(e); setEcoModalOpen(true); } }}>
+                                 onClick={ev => { ev.stopPropagation(); setSelectedDay(s => s === dayStr ? null : dayStr); }}>
                               <span style={{ fontWeight: 700, marginRight: 2 }}>{tc.label}</span>{e.label.replace(new RegExp('^' + tc.label + '\\s*', 'i'), '')}
                             </div>
                           );
@@ -600,7 +603,7 @@ function DividendCalendar() {
             </div>
           </div>
 
-          {isMobile && selectedDay && (() => {
+          {selectedDay && (() => {
             const selDivs = sorted.filter(d => d.payDate === selectedDay || d.exDate === selectedDay);
             const selEco  = allEcoEvents.filter(e => e.date === selectedDay && showEcoTypes[e.type]);
             if (selDivs.length === 0 && selEco.length === 0) return null;
@@ -622,6 +625,12 @@ function DividendCalendar() {
                       <span style={{ fontWeight: 600 }}>{d.name.replace(/THB$/, '')}</span>
                       {d.note && <span style={{ fontSize: 11, color: 'var(--fg-3)', marginLeft: 2 }}>{d.note}</span>}
                       {amt > 0 && <span style={{ color: 'var(--green-600)', marginLeft: 'auto', fontWeight: 600 }}>{sym}{window.fmtBig(amt)}</span>}
+                      {!d.auto && (
+                        <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                          <button className="icon-toggle" onClick={() => { setEditItem(d); setDivModalOpen(true); }}><Icon name="edit-2" size={13} /></button>
+                          <button className="icon-toggle" style={{ color: 'var(--red-600)' }} onClick={() => Store.deleteDividend(d.id)}><Icon name="trash-2" size={13} /></button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
