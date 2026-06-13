@@ -1,6 +1,13 @@
 /* eslint-disable */
 /* AlertsView.jsx — Feature #11: Price Alerts management UI */
 
+// Types available for non-holding alerts (must match REPORT_CLASSES keys in telegram.js)
+const NON_HOLDING_TYPES = [
+  { classKey: 'thaiStock', label: 'Thai Stock', hint: 'e.g. SCB (auto adds .BK)', yahooSuffix: '.BK', ccy: 'THB' },
+  { classKey: 'usaStock',  label: 'USA Stock',  hint: 'e.g. AAPL',               ccy: 'USD' },
+  { classKey: 'etf',       label: 'ETF',        hint: 'e.g. QQQM',               ccy: 'USD' },
+];
+
 function PriceAlertModal({ alert, onClose }) {
   const isEdit = !!alert;
   const allPos = [];
@@ -15,17 +22,54 @@ function PriceAlertModal({ alert, onClose }) {
   const [condition,  setCondition]  = React.useState(alert ? alert.condition : 'above');
   const [price,      setPrice]      = React.useState(alert ? String(alert.price) : '');
   const [note,       setNote]       = React.useState(alert ? (alert.note || '') : '');
+  const [ticker,     setTicker]     = React.useState(''); // raw input for non-holding ticker
+  const [nonHoldingType, setNonHoldingType] = React.useState(
+    alert && !allPos.find(p => p.classKey === alert.classKey && p.name === alert.name)
+      ? (alert.classKey || 'thaiStock')
+      : ''
+  );
 
   const selectedPos = allPos.find(p => p.classKey === classKey && p.name === name);
+  // isNonHolding is true when user typed a ticker not matching any holding
+  const isNonHolding = nonHoldingType !== '';
 
   function handleSelectPos(val) {
     const p = allPos.find(p => p.label === val);
-    if (p) { setClassKey(p.classKey); setName(p.name); }
+    if (p) {
+      // Matched a real holding — clear non-holding mode
+      setClassKey(p.classKey);
+      setName(p.name);
+      setNonHoldingType('');
+      setTicker('');
+    } else {
+      // Free-text — enter non-holding mode, keep ticker as the raw name
+      setTicker(val);
+      setName(val.trim());
+      setClassKey('');
+      // Default to thaiStock type when they start typing
+      if (!nonHoldingType) setNonHoldingType('thaiStock');
+    }
+  }
+
+  function handleTypeSelect(ck) {
+    setNonHoldingType(ck);
+    setClassKey(ck);
   }
 
   function save() {
     if (!name || !price) return;
-    const data = { classKey, name, condition, price, note };
+    let finalName = name;
+    let finalClassKey = classKey;
+    if (isNonHolding) {
+      finalClassKey = nonHoldingType;
+      // For Thai stocks, ensure .BK suffix for Yahoo Finance lookup in telegram
+      if (nonHoldingType === 'thaiStock' && !finalName.toUpperCase().endsWith('.BK')) {
+        finalName = finalName.toUpperCase() + '.BK';
+      } else {
+        finalName = finalName.toUpperCase();
+      }
+    }
+    const data = { classKey: finalClassKey, name: finalName, condition, price, note };
     if (isEdit) {
       Store.deletePriceAlert(alert.id);
       Store.addPriceAlert(data);
@@ -35,23 +79,52 @@ function PriceAlertModal({ alert, onClose }) {
     onClose();
   }
 
+  const selectedType = NON_HOLDING_TYPES.find(t => t.classKey === nonHoldingType);
+  const canSave = isNonHolding ? (name.trim() && price && nonHoldingType) : (name && price);
+
   return (
-    <Modal open onClose={onClose} title={isEdit ? 'Edit alert' : 'Add price alert'} width={400}>
+    <Modal open onClose={onClose} title={isEdit ? 'Edit alert' : 'Add price alert'} width={420}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div>
-          <label className="form-label">Holding</label>
-          <input list="alert-pos-list" placeholder="Search holding…"
-                 defaultValue={name ? (allPos.find(p => p.classKey === classKey && p.name === name) || {}).label || name : ''}
+          <label className="form-label">Holding or asset ticker</label>
+          <input list="alert-pos-list" placeholder="Search holding or type any ticker…"
+                 value={isNonHolding ? ticker : (name ? (allPos.find(p => p.classKey === classKey && p.name === name) || {}).label || name : '')}
                  onChange={e => handleSelectPos(e.target.value)} />
           <datalist id="alert-pos-list">
             {allPos.map(p => <option key={p.classKey + ':' + p.name} value={p.label} />)}
           </datalist>
-          {selectedPos && (
+          {selectedPos && !isNonHolding && (
             <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 4 }}>
               Current price: {window.fmtPrice(selectedPos.cur, selectedPos.ccy)}
             </div>
           )}
         </div>
+
+        {/* Type selector — only shown for non-holding tickers */}
+        {isNonHolding && (
+          <div>
+            <label className="form-label">Asset type <span style={{ color: 'var(--red-600)' }}>*</span></label>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {NON_HOLDING_TYPES.map(t => (
+                <button key={t.classKey} type="button" onClick={() => handleTypeSelect(t.classKey)}
+                        style={{
+                          flex: 1, padding: '7px 4px', borderRadius: 6, border: '2px solid',
+                          borderColor: nonHoldingType === t.classKey ? 'var(--accent)' : 'var(--border-1)',
+                          background: nonHoldingType === t.classKey ? 'var(--accent-bg, rgba(59,130,246,0.1))' : 'transparent',
+                          color: nonHoldingType === t.classKey ? 'var(--accent)' : 'var(--fg-2)',
+                          cursor: 'pointer', fontSize: 12, fontWeight: nonHoldingType === t.classKey ? 700 : 400,
+                        }}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            {selectedType && (
+              <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 4 }}>
+                {selectedType.hint} · price in {selectedType.ccy}
+              </div>
+            )}
+          </div>
+        )}
 
         <div>
           <label className="form-label">Condition</label>
@@ -83,7 +156,7 @@ function PriceAlertModal({ alert, onClose }) {
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <Button variant="secondary" size="sm" onClick={onClose}>Cancel</Button>
-          <Button size="sm" onClick={save} disabled={!name || !price}>{isEdit ? 'Save' : 'Add alert'}</Button>
+          <Button size="sm" onClick={save} disabled={!canSave}>{isEdit ? 'Save' : 'Add alert'}</Button>
         </div>
       </div>
     </Modal>
@@ -94,8 +167,10 @@ function AlertsView() {
   const store   = useStore();
   const alerts  = Store.getPriceAlerts();
 
-  const [modalOpen, setModalOpen] = React.useState(false);
-  const [editAlert, setEditAlert] = React.useState(null);
+  const [modalOpen,    setModalOpen]    = React.useState(false);
+  const [editAlert,    setEditAlert]    = React.useState(null);
+  const [nhPrices,     setNhPrices]     = React.useState({}); // { "classKey:name": price }
+  const [nhLoading,    setNhLoading]    = React.useState(false);
 
   const active    = alerts.filter(a => !a.triggered);
   const triggered = alerts.filter(a => a.triggered);
@@ -104,21 +179,58 @@ function AlertsView() {
     return Store.positions(classKey).find(p => p.name === name);
   }
 
+  // Fetch live prices for non-holding alerts (no position in store)
+  React.useEffect(() => {
+    const nonHolding = alerts.filter(a => {
+      if (a.triggered) return false;
+      if (!a.classKey) return false;
+      const pos = Store.positions(a.classKey).find(p => p.name === a.name);
+      return !pos; // only fetch if not already in holdings
+    });
+    if (!nonHolding.length) return;
+
+    setNhLoading(true);
+    const yahooItems = nonHolding
+      .filter(a => a.classKey === 'thaiStock' || a.classKey === 'usaStock' || a.classKey === 'etf')
+      .map(a => ({ key: a.classKey, name: a.name, symbol: a.name }));
+
+    if (!yahooItems.length) { setNhLoading(false); return; }
+
+    fetch('/api/prices', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ yahoo: yahooItems }),
+    })
+      .then(r => r.json())
+      .then(j => {
+        if (j.prices) setNhPrices(prev => ({ ...prev, ...j.prices }));
+      })
+      .catch(() => {})
+      .finally(() => setNhLoading(false));
+  }, [alerts.map(a => a.id + a.triggered).join(',')]);
+
+
   function AlertRow({ a }) {
-    const cls = window.ASSET_CLASSES.find(c => c.key === a.classKey);
-    const pos = getPosition(a.classKey, a.name);
-    const cur = pos ? pos.cur : null;
-    const distPct = cur && a.price ? ((a.price - cur) / cur) * 100 : null;
-    const hitNow = cur !== null && (a.condition === 'above' ? cur >= a.price : cur <= a.price);
+    const cls        = a.classKey ? window.ASSET_CLASSES.find(c => c.key === a.classKey) : null;
+    const pos        = a.classKey ? getPosition(a.classKey, a.name) : null;
+    // Use live position price, or fall back to fetched non-holding price
+    const cur        = pos ? pos.cur : (nhPrices[`${a.classKey}:${a.name}`] ?? null);
+    const distPct    = cur != null && a.price ? ((a.price - cur) / cur) * 100 : null;
+    const hitNow     = cur !== null && (a.condition === 'above' ? cur >= a.price : cur <= a.price);
+    // For non-holding alerts, fall back to NON_HOLDING_TYPES for badge label/color
+    const nhType     = !cls ? NON_HOLDING_TYPES.find(t => t.classKey === a.classKey) : null;
+    const badgeLabel = cls ? cls.short : (nhType ? nhType.label.replace(' Stock', '').replace('Thai', 'TH').replace('USA', 'US') : '?');
+    const badgeBg    = cls ? window.CLASS_COLORS[cls.key] : (nhType ? '#6b7280' : '#888');
+    const displayName = a.name.replace(/\.BK$/i, '').replace(/THB$/, '');
 
     return (
       <tr className="pos" style={{ opacity: a.triggered ? 0.6 : 1 }}>
         <td>
           <span className="tk">
-            <span className="av" style={{ background: cls ? window.CLASS_COLORS[cls.key] : '#888', borderRadius: 7, fontSize: 9 }}>
-              {(cls ? cls.short : '?').slice(0, 3)}
+            <span className="av" style={{ background: badgeBg, borderRadius: 7, fontSize: 9 }}>
+              {badgeLabel.slice(0, 3)}
             </span>
-            <span style={{ fontWeight: 600 }}>{a.name.replace(/THB$/, '')}</span>
+            <span style={{ fontWeight: 600 }}>{displayName}</span>
           </span>
         </td>
         <td>
@@ -132,7 +244,9 @@ function AlertsView() {
         </td>
         <td className="num" style={{ fontWeight: 700 }}>{a.price.toLocaleString()}</td>
         <td className="num" style={{ color: hitNow ? 'var(--green-600)' : 'var(--fg-3)' }}>
-          {cur !== null ? cur.toLocaleString() : '—'}
+          {cur !== null
+            ? cur.toLocaleString()
+            : nhLoading && !pos ? <span style={{ color: 'var(--fg-4)', fontSize: 11 }}>…</span> : '—'}
         </td>
         <td className="num" style={{ fontSize: 12, color: distPct !== null ? (Math.abs(distPct) < 2 ? '#f59e0b' : 'var(--fg-3)') : 'var(--fg-4)' }}>
           {distPct !== null ? (distPct >= 0 ? '+' : '') + distPct.toFixed(1) + '%' : '—'}

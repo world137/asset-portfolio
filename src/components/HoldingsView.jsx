@@ -561,6 +561,62 @@ function BentoView({ classKey }) {
   );
 }
 
+// ── Par Value Reduction modal ──────────────────────────────────────────────────
+
+function ParValueModal({ classKey, positionName, onClose }) {
+  const [oldPar, setOldPar] = React.useState('10');
+  const [newPar, setNewPar] = React.useState('');
+  const [error,  setError]  = React.useState('');
+
+  function apply() {
+    const o = parseFloat(oldPar), n = parseFloat(newPar);
+    if (!o || !n || o <= 0 || n <= 0) { setError('Enter valid positive numbers.'); return; }
+    if (n >= o) { setError('New par must be less than old par.'); return; }
+    const ratio = n / o;
+    const pos   = Store.positions(classKey).find(p => p.name === positionName);
+    const preview = pos ? `${window.fmtQty(pos.qty)} → ${window.fmtQty(+(pos.qty * ratio).toFixed(8))} shares` : '';
+    if (!confirm(`Apply par value reduction ${o} → ${n} for ${positionName}?\n${preview}\n\nThis adjusts all lot quantities and buy prices. Cannot be undone.`)) return;
+    Store.applyParValueReduction(classKey, positionName, o, n);
+    onClose();
+  }
+
+  return (
+    <Modal open onClose={onClose} title={`Par Value Reduction — ${positionName}`} width={360}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ fontSize: 13, color: 'var(--fg-3)', lineHeight: 1.5 }}>
+          Adjusts all lot quantities by <b>newPar/oldPar</b> and buy prices inversely, so total cost is preserved.
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ flex: 1 }}>
+            <label className="form-label">Old par value</label>
+            <input type="number" min="0.001" step="any" value={oldPar} onChange={e => { setOldPar(e.target.value); setError(''); }} autoFocus />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label className="form-label">New par value</label>
+            <input type="number" min="0.001" step="any" value={newPar} onChange={e => { setNewPar(e.target.value); setError(''); }} placeholder="e.g. 1" />
+          </div>
+        </div>
+        {newPar && !error && parseFloat(newPar) > 0 && parseFloat(oldPar) > 0 && parseFloat(newPar) < parseFloat(oldPar) && (() => {
+          const ratio = parseFloat(newPar) / parseFloat(oldPar);
+          const pos   = Store.positions(classKey).find(p => p.name === positionName);
+          if (!pos) return null;
+          return (
+            <div style={{ fontSize: 12, color: 'var(--fg-2)', background: 'var(--bg-sunken)', borderRadius: 6, padding: '8px 10px' }}>
+              Qty: <b>{window.fmtQty(pos.qty)}</b> → <b>{window.fmtQty(+(pos.qty * ratio).toFixed(8))}</b><br />
+              Avg cost: <b>{window.fmtPrice(pos.avgPrice, Store.classByKey(classKey).ccy)}</b> → <b>{window.fmtPrice(+(pos.avgPrice / ratio).toFixed(8), Store.classByKey(classKey).ccy)}</b>
+            </div>
+          );
+        })()}
+        {error && <div style={{ color: 'var(--red-600)', fontSize: 12 }}>{error}</div>}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <Button variant="secondary" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" onClick={apply} disabled={!newPar}>Apply</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 // ── Holdings table + view ─────────────────────────────────────────────────────
 
 function HoldingsView({ classKey, onAdd, onEditLot }) {
@@ -572,6 +628,7 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
   const [q, setQ] = React.useState('');
   const [chartName, setChartName] = React.useState(null);
   const [techSymbol, setTechSymbol] = React.useState(null);
+  const [parValuePos, setParValuePos] = React.useState(null); // name of position for par value modal
   const [viewMode, setViewMode] = React.useState('table'); // 'table' | 'bento'
   const { sortBy, sortDir, handleSort } = useSortState();
 
@@ -752,6 +809,13 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
                                 <Icon name="activity" size={12} />
                               </button>
                             )}
+                            {(classKey === 'thaiStock' || classKey === 'usaStock' || classKey === 'etf') && (
+                              <button className="chart-open-btn" title="Par value reduction"
+                                      style={{ color: 'var(--fg-3)' }}
+                                      onClick={e => { e.stopPropagation(); setParValuePos(p.name); }}>
+                                <Icon name="scissors" size={12} />
+                              </button>
+                            )}
                           </span>
                         </td>
                         <td onClick={e => e.stopPropagation()}>
@@ -819,6 +883,9 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
     )}
     {techSymbol && (
       <TechnicalModal symbol={techSymbol} onClose={() => setTechSymbol(null)} />
+    )}
+    {parValuePos && (
+      <ParValueModal classKey={classKey} positionName={parValuePos} onClose={() => setParValuePos(null)} />
     )}
     </React.Fragment>
   );

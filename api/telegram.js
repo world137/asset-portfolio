@@ -284,16 +284,49 @@ function computePortfolioSummary(holdings, assetData, fx) {
 
 // ── Alert checkers ─────────────────────────────────────────────────────────────
 
-function checkPriceAlerts(priceAlerts, assetData) {
+// Fetch prices for alerts on assets not in the holdings list.
+// classKey is always set (thaiStock | usaStock | etf) — determines which API to use.
+async function fetchNonHoldingPrices(priceAlerts, assetData) {
+  // Find active alerts whose key is not already in assetData
+  const missing = priceAlerts.filter(a =>
+    !a.triggered && a.classKey && a.name && assetData[`${a.classKey}:${a.name}`] == null
+  );
+  if (!missing.length) return {};
+
+  const result = {};
+  await Promise.allSettled(missing.map(async a => {
+    const key = `${a.classKey}:${a.name}`;
+    try {
+      if (a.classKey === 'thaiStock' || a.classKey === 'usaStock' || a.classKey === 'etf') {
+        const sym = a.name.toUpperCase();
+        const { price, prevClose } = await yahooPrice(sym);
+        if (price != null) {
+          const ccy = a.classKey === 'thaiStock' ? 'THB' : 'USD';
+          const pct = prevClose && prevClose > 0 ? ((price - prevClose) / prevClose) * 100 : null;
+          result[key] = { price, prevClose, pct, changeAbs: prevClose ? price - prevClose : null, ccy, classShort: a.classKey };
+        }
+      }
+    } catch (e) {
+      console.warn(`[telegram] fetchNonHoldingPrices ${key}: ${e.message}`);
+    }
+  }));
+  return result;
+}
+
+async function checkPriceAlerts(priceAlerts, assetData) {
   if (!priceAlerts?.length) return [];
+
+  const nonHoldingPrices = await fetchNonHoldingPrices(priceAlerts, assetData);
+  const combined = { ...assetData, ...nonHoldingPrices };
+
   return priceAlerts
     .filter(a => !a.triggered)
     .flatMap(alert => {
       const key = `${alert.classKey}:${alert.name}`;
-      const d   = assetData[key];
+      const d   = combined[key];
       if (!d || d.price == null) return [];
       const hit = alert.condition === 'above' ? d.price >= alert.price : d.price <= alert.price;
-      return hit ? [{ alert, price: d.price }] : [];
+      return hit ? [{ alert, price: d.price, ccy: d.ccy }] : [];
     });
 }
 
@@ -458,13 +491,31 @@ function formatReportMessage(groups, assetData, summary) {
 
 // ── Telegram senders ───────────────────────────────────────────────────────────
 
-async function tgSend(chatId, text, opts = {}) {
-  const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML', ...opts }),
-  });
-  return r.json();
+async function tgSend(chatId, text, opts = {}, retries = 3) {
+  let lastErr;
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML', ...opts }),
+        signal:  AbortSignal.timeout(10000),
+      });
+      const j = await r.json();
+      if (j.ok) return j;
+      // Telegram returned ok:false — don't retry on permanent errors (e.g. chat not found)
+      if (j.error_code && j.error_code !== 429) {
+        console.error(`[tgSend] Telegram error ${j.error_code}: ${j.description}`);
+        return j;
+      }
+      lastErr = new Error(`Telegram ${j.error_code}: ${j.description}`);
+    } catch (e) {
+      lastErr = e;
+      console.warn(`[tgSend] attempt ${attempt + 1} failed: ${e.message}`);
+    }
+    if (attempt < retries - 1) await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+  }
+  throw lastErr;
 }
 
 async function tgPhoto(chatId, photoUrl, caption) {
@@ -489,7 +540,7 @@ async function runReport(portfolioId) {
 
   const { groups, assetData } = await buildReport(holdings);
   const summary               = computePortfolioSummary(holdings, assetData, meta.fx);
-  const triggeredAlerts       = checkPriceAlerts(meta.priceAlerts, assetData);
+  const triggeredAlerts       = await checkPriceAlerts(meta.priceAlerts, assetData);
   const rebalAlerts           = checkRebalancingDrift(meta.targetAllocation, holdings, assetData, meta.fx);
 
   if (!groups.length && !triggeredAlerts.length && !rebalAlerts.length) {
@@ -502,10 +553,12 @@ async function runReport(portfolioId) {
 
   if (triggeredAlerts.length > 0) {
     message += '\n\n🚨 <b>Price Alerts Triggered</b>\n';
-    for (const { alert, price } of triggeredAlerts) {
+    for (const { alert, price, ccy } of triggeredAlerts) {
       const dir    = alert.condition === 'above' ? '▲ above' : '▼ below';
-      const target = alert.price.toLocaleString('en', { maximumFractionDigits: 4 });
-      message += `• <b>${escHtml(alert.name.replace(/THB$/, ''))}</b> — ${dir} ${escHtml(String(price.toLocaleString()))} (target: ${target})\n`;
+      const sym    = (ccy || 'THB') === 'USD' ? '$' : '฿';
+      const target = sym + alert.price.toLocaleString('en', { maximumFractionDigits: 4 });
+      const actual = sym + price.toLocaleString('en', { maximumFractionDigits: 4 });
+      message += `• <b>${escHtml(alert.name.replace(/\.BK$/, '').replace(/THB$/, ''))}</b> — ${dir} ${escHtml(actual)} (target: ${target})\n`;
       if (alert.note) message += `  <i>${escHtml(alert.note)}</i>\n`;
     }
   }
@@ -519,15 +572,8 @@ async function runReport(portfolioId) {
     }
   }
 
-  const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ chat_id: CHAT_ID, text: message, parse_mode: 'HTML' }),
-  });
-  if (!r.ok) {
-    const body = await r.text().catch(() => '');
-    throw new Error('Telegram API error: ' + r.status + ' ' + body);
-  }
+  const result = await tgSend(CHAT_ID, message);
+  if (!result.ok) throw new Error('Telegram API error: ' + JSON.stringify(result));
 
   console.log('[telegram] sent ok');
   return {
@@ -827,10 +873,19 @@ export default async function handler(req, res) {
 
   // ── Login notification ────────────────────────────────────────────────────
   if (body?.type === 'login') {
-    if (BOT_TOKEN && CHAT_ID) {
+    if (!BOT_TOKEN || !CHAT_ID) {
+      console.warn('[telegram] login noti skipped: BOT_TOKEN or CHAT_ID not set');
+      return res.status(200).json({ ok: true, note: 'not configured' });
+    }
+    try {
       const { date, time } = todayTH();
-      const msg = `🔐 <b>Login</b> — ${escHtml(body.username || 'Unknown')} signed in\n${date} ${time} TH`;
-      await tgSend(CHAT_ID, msg).catch(() => {});
+      const ip  = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || '';
+      const msg = `🔐 <b>Login</b> — ${escHtml(body.username || 'Unknown')} signed in\n${date} ${time} TH${ip ? `\n<code>${escHtml(ip)}</code>` : ''}`;
+      await tgSend(CHAT_ID, msg);
+      console.log('[telegram] login noti sent');
+    } catch (e) {
+      console.error('[telegram] login noti error:', e.message);
+      return res.status(200).json({ ok: false, error: e.message });
     }
     return res.status(200).json({ ok: true });
   }

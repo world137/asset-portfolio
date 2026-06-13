@@ -711,6 +711,19 @@
       state.holdings[classKey] = (state.holdings[classKey] || []).filter(l => l.id !== id);
       emit();
     },
+    // Par Value Reduction: multiply all lot quantities of `name` by (newParShares / oldParShares).
+    // Avg cost per share adjusts inversely. Current price adjusts inversely too.
+    applyParValueReduction(classKey, name, oldPar, newPar) {
+      if (!oldPar || !newPar || oldPar <= 0 || newPar <= 0) return;
+      const ratio = newPar / oldPar;
+      (state.holdings[classKey] || []).forEach(l => {
+        if (l.name !== name) return;
+        l.qty   = +(l.qty   * ratio).toFixed(8);
+        l.price = +(l.price / ratio).toFixed(8);
+        if (l.cur != null) l.cur = +(l.cur / ratio).toFixed(8);
+      });
+      emit();
+    },
     setCurrentPrice(classKey, name, cur) {
       (state.holdings[classKey] || []).forEach(l => { if (l.name === name) l.cur = +cur; });
       emit();
