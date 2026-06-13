@@ -185,26 +185,12 @@ function AlertsView() {
       if (a.triggered) return false;
       if (!a.classKey) return false;
       const pos = Store.positions(a.classKey).find(p => p.name === a.name);
-      return !pos; // only fetch if not already in holdings
+      return !pos;
     });
     if (!nonHolding.length) return;
-
     setNhLoading(true);
-    const yahooItems = nonHolding
-      .filter(a => a.classKey === 'thaiStock' || a.classKey === 'usaStock' || a.classKey === 'etf')
-      .map(a => ({ key: a.classKey, name: a.name, symbol: a.name }));
-
-    if (!yahooItems.length) { setNhLoading(false); return; }
-
-    fetch('/api/prices', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ yahoo: yahooItems }),
-    })
-      .then(r => r.json())
-      .then(j => {
-        if (j.prices) setNhPrices(prev => ({ ...prev, ...j.prices }));
-      })
+    fetchNonHoldingPrices(nonHolding)
+      .then(prices => setNhPrices(prev => ({ ...prev, ...prices })))
       .catch(() => {})
       .finally(() => setNhLoading(false));
   }, [alerts.map(a => a.id + a.triggered).join(',')]);

@@ -25,8 +25,19 @@
   <script src="src/constants.js"></script>
   <script src="src/seed.js"></script>
   <script src="src/fmt.js"></script>
+  <!-- store domain modules (loaded before store.js orchestrator) -->
+  <script src="src/store/calculations.js"></script>
+  <script src="src/store/portfolio-mutations.js"></script>
+  <script src="src/store/wallet-mutations.js"></script>
+  <script src="src/store/cloud-sync.js"></script>
+  <!-- store orchestrator + shared React hook -->
   <script src="src/store.js"></script>
+  <script src="src/shared.js"></script>
   <script src="src/export.js"></script>
+  <!-- controllers (plain JS, after store, before UI components) -->
+  <script src="src/controllers/holdings-controller.js"></script>
+  <script src="src/controllers/wallet-controller.js"></script>
+  <script src="src/controllers/alerts-controller.js"></script>
 
   <!-- UI components (JSX) -->
   <script type="text/babel" src="src/components/Primitives.jsx?v=3"></script>
@@ -64,8 +75,10 @@
   <script type="text/babel" src="src/components/wallet/BillsView.jsx"></script>
   <script type="text/babel" src="src/components/wallet/SavingsGoalsView.jsx"></script>
   <script type="text/babel" src="src/components/wallet/ReconcileView.jsx"></script>
+  <!-- extracted views (before app.jsx) -->
+  <script type="text/babel" src="src/views/SummaryView.jsx"></script>
   <script type="text/babel" src="src/Login.jsx"></script>
-  <script type="text/babel" src="src/app.jsx?v=2"></script>
+  <script type="text/babel" src="src/app.jsx?v=3"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
