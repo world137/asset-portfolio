@@ -369,6 +369,16 @@ function checkRebalancingDrift(targetAllocation, holdings, assetData, fx) {
 
 // ── Report formatters ──────────────────────────────────────────────────────────
 
+const REPORT_DIVIDER = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
+
+const CLASS_EMOJI = {
+  crypto:    '🪙',
+  usaStock:  '🇺🇸',
+  etf:       '📦',
+  thaiStock: '🇹🇭',
+  gold:      '🥇',
+};
+
 function escHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
@@ -428,62 +438,85 @@ function formatReportMessage(groups, assetData, summary) {
   if (!groups.length) return null;
 
   const { date, time } = todayTH();
-  const pnlSign  = summary.dayPnlTHB >= 0 ? '+' : '';
-  const pnlEmoji = summary.dayPnlTHB >= 0 ? '📈' : '📉';
+  const D = REPORT_DIVIDER;
 
-  let msg = `📊 <b>Portfolio Report</b> — ${date} ${time} TH\n`;
+  // Section 1: Header
+  const moodEmoji = summary.dayPnlPct >= 1 ? '🟢' : summary.dayPnlPct <= -1 ? '🔴' : '🟡';
+  let msg = `${moodEmoji} <b>Daily Portfolio Report</b>\n`;
+  msg    += `<code>${date} · ${time} ICT</code>\n`;
+  msg    += `${D}\n`;
 
+  // Section 2: Portfolio summary
   if (summary.totalTHB > 0) {
-    msg += `\n💰 <b>Total: ฿${fmtBig(summary.totalTHB)}</b>`;
-    if (summary.dayPnlTHB !== 0) {
-      msg += `   ${pnlEmoji} Day: <b>${pnlSign}฿${fmtBig(Math.abs(summary.dayPnlTHB))} (${pnlSign}${summary.dayPnlPct.toFixed(2)}%)</b>`;
-    }
-    msg += '\n';
+    const pnlSign  = summary.dayPnlTHB >= 0 ? '+' : '';
+    const pnlArrow = summary.dayPnlTHB >= 0 ? '▲' : '▼';
+    const allAssets = groups.flatMap(g => g.assets);
+    const gainers   = allAssets.filter(a => a.pct > 0).length;
+    const losers    = allAssets.filter(a => a.pct < 0).length;
+
+    msg += `💼 <b>฿${fmtBig(summary.totalTHB)}</b>   `;
+    msg += `${pnlArrow} <b>${pnlSign}฿${fmtBig(Math.abs(summary.dayPnlTHB))}</b> `;
+    msg += `<i>(${pnlSign}${summary.dayPnlPct.toFixed(2)}%)</i>\n`;
+    msg += `<code>${gainers} up  ${losers} down  ${summary.coveredCount} tracked</code>\n`;
   }
+  msg += `${D}\n`;
 
-  msg += '\n';
-
-  const classLines = groups.map(g => {
-    if (g.assets.length === 1) {
-      const a    = g.assets[0];
-      const sign = a.pct >= 0 ? '+' : '';
-      return `${g.label.padEnd(7)} · ${a.name} ${sign}${a.pct.toFixed(2)}%`;
-    }
+  // Section 3: Per-class breakdown
+  for (const g of groups) {
+    const em    = CLASS_EMOJI[g.key] || '📁';
+    const n     = g.assets.length;
     const best  = g.assets[0];
-    const worst = g.assets[g.assets.length - 1];
-    const bs    = best.pct  >= 0 ? '+' : '';
-    const ws    = worst.pct >= 0 ? '+' : '';
-    return `${g.label.padEnd(7)} · 🏆 ${best.name} ${bs}${best.pct.toFixed(2)}%  /  💀 ${worst.name} ${ws}${worst.pct.toFixed(2)}%`;
-  });
+    const worst = g.assets[n - 1];
+    const bSign = best.pct  >= 0 ? '+' : '';
+    const wSign = worst.pct >= 0 ? '+' : '';
 
-  msg += `<pre>${escHtml(classLines.join('\n'))}</pre>\n`;
+    if (n === 1) {
+      const arrow = best.pct >= 0 ? '▲' : '▼';
+      msg += `${em} <b>${escHtml(g.label)}</b>  ${arrow} ${escHtml(best.name)} <code>${bSign}${best.pct.toFixed(2)}%</code>\n`;
+    } else {
+      msg += `${em} <b>${escHtml(g.label)}</b> <i>(${n})</i>  `;
+      msg += `▲ ${escHtml(best.name)} <code>${bSign}${best.pct.toFixed(2)}%</code>  `;
+      msg += `▼ ${escHtml(worst.name)} <code>${wSign}${worst.pct.toFixed(2)}%</code>\n`;
+    }
+  }
+  msg += `${D}\n`;
 
-  const rows = groups.flatMap(g =>
+  // Section 4: Ranked all-holdings table (class column removed, rank added)
+  const allRows = groups.flatMap(g =>
     g.assets.map(a => ({
       name:  a.name,
-      cls:   a.classShort || g.label,
-      pct:   (a.pct >= 0 ? '+' : '') + a.pct.toFixed(2) + '%',
+      pct:   a.pct,
       price: fmtPrice(a.price, a.ccy),
       chg:   a.changeAbs != null ? fmtChange(a.changeAbs, a.ccy) : '—',
     }))
-  ).sort((a, b) => parseFloat(b.pct) - parseFloat(a.pct));
+  ).sort((a, b) => b.pct - a.pct);
 
-  if (rows.length) {
-    const pad  = (s, n) => String(s).padEnd(n);
-    const padR = (s, n) => String(s).padStart(n);
-    const nW   = Math.max(5, ...rows.map(r => r.name.length));
-    const cW   = Math.max(5, ...rows.map(r => r.cls.length));
-    const pW   = Math.max(4, ...rows.map(r => r.pct.length));
-    const prW  = Math.max(7, ...rows.map(r => r.price.length));
-    const gW   = Math.max(6, ...rows.map(r => r.chg.length));
+  if (allRows.length) {
+    const pad    = (s, n) => String(s).padEnd(n);
+    const padR   = (s, n) => String(s).padStart(n);
+    const pctStr = r => (r.pct >= 0 ? '▲+' : '▼') + r.pct.toFixed(2) + '%';
 
-    const header = `${pad('Asset', nW)}  ${pad('Class', cW)}  ${padR('Day%', pW)}  ${padR('Price', prW)}  ${padR('Change', gW)}`;
-    const sep    = '─'.repeat(header.length);
-    const body   = rows.map(r =>
-      `${pad(r.name, nW)}  ${pad(r.cls, cW)}  ${padR(r.pct, pW)}  ${padR(r.price, prW)}  ${padR(r.chg, gW)}`
+    const formattedRows = allRows.map((r, i) => ({
+      rank:  String(i + 1) + '.',
+      name:  r.name,
+      pct:   pctStr(r),
+      price: r.price,
+      chg:   r.chg,
+    }));
+
+    const rkW = Math.max(2, ...formattedRows.map(r => r.rank.length));
+    const nW  = Math.max(4, ...formattedRows.map(r => r.name.length));
+    const pW  = Math.max(5, ...formattedRows.map(r => r.pct.length));
+    const prW = Math.max(5, ...formattedRows.map(r => r.price.length));
+    const gW  = Math.max(3, ...formattedRows.map(r => r.chg.length));
+
+    const hdr  = pad('#', rkW) + ' ' + pad('Name', nW) + '  ' + padR('Day%', pW) + '  ' + padR('Price', prW) + '  ' + padR('Chg', gW);
+    const sep  = '─'.repeat(hdr.length);
+    const body = formattedRows.map(r =>
+      pad(r.rank, rkW) + ' ' + pad(r.name, nW) + '  ' + padR(r.pct, pW) + '  ' + padR(r.price, prW) + '  ' + padR(r.chg, gW)
     ).join('\n');
 
-    msg += `\n<pre>${escHtml(`${header}\n${sep}\n${body}`)}</pre>`;
+    msg += `<pre>${escHtml(`${hdr}\n${sep}\n${body}`)}</pre>\n`;
   }
 
   return msg;
@@ -552,23 +585,32 @@ async function runReport(portfolioId) {
     || `📊 <b>Portfolio Report</b> — ${date} ${time} TH\nNo market data available.\n`;
 
   if (triggeredAlerts.length > 0) {
-    message += '\n\n🚨 <b>Price Alerts Triggered</b>\n';
+    message += `\n${REPORT_DIVIDER}\n`;
+    message += `🔔 <b>Price Alerts</b>\n`;
     for (const { alert, price, ccy } of triggeredAlerts) {
-      const dir    = alert.condition === 'above' ? '▲ above' : '▼ below';
-      const sym    = (ccy || 'THB') === 'USD' ? '$' : '฿';
-      const target = sym + alert.price.toLocaleString('en', { maximumFractionDigits: 4 });
-      const actual = sym + price.toLocaleString('en', { maximumFractionDigits: 4 });
-      message += `• <b>${escHtml(alert.name.replace(/\.BK$/, '').replace(/THB$/, ''))}</b> — ${dir} ${escHtml(actual)} (target: ${target})\n`;
+      const dir  = alert.condition === 'above' ? '▲ above' : '▼ below';
+      const sym  = (ccy || 'THB') === 'USD' ? '$' : '฿';
+      const tgt  = sym + alert.price.toLocaleString('en', { maximumFractionDigits: 4 });
+      const now  = sym + price.toLocaleString('en',        { maximumFractionDigits: 4 });
+      const name = escHtml(alert.name.replace(/\.BK$/, '').replace(/THB$/, ''));
+      message += `• <b>${name}</b> ${dir} <code>${escHtml(tgt)}</code> → now <code>${escHtml(now)}</code>\n`;
       if (alert.note) message += `  <i>${escHtml(alert.note)}</i>\n`;
     }
   }
 
   if (rebalAlerts.length > 0) {
-    message += '\n\n⚖️ <b>Rebalancing Needed (&gt;5% drift)</b>\n';
-    const LABELS = { thaiStock: 'Thai Stock', usaStock: 'USA Stock', etf: 'ETF', fund: 'Fund', crypto: 'Crypto', gold: 'Gold', other: 'Other' };
+    message += `\n${REPORT_DIVIDER}\n`;
+    message += `⚖️ <b>Rebalancing</b>\n`;
+    const LABELS = {
+      thaiStock: 'Thai', usaStock: 'USA', etf: 'ETF',
+      fund: 'Fund', crypto: 'Crypto', gold: 'Gold', other: 'Other',
+    };
+    const padLbl = (s, n) => String(s).padEnd(n);
+    const maxLabelLen = Math.max(...rebalAlerts.map(a => (LABELS[a.key] || a.key).length));
     for (const a of rebalAlerts) {
-      const dir = a.drift > 0 ? `overweight +${a.drift.toFixed(1)}%` : `underweight ${a.drift.toFixed(1)}%`;
-      message += `• ${escHtml(LABELS[a.key] || a.key)}: ${a.curPct.toFixed(1)}% vs target ${a.tgt}% (${dir})\n`;
+      const lbl = padLbl(LABELS[a.key] || a.key, maxLabelLen);
+      const dir = a.drift > 0 ? `+${a.drift.toFixed(1)}% overweight` : `${a.drift.toFixed(1)}% underweight`;
+      message += `• ${escHtml(lbl)}  ${a.curPct.toFixed(1)}% / tgt ${a.tgt}%  ${dir}\n`;
     }
   }
 

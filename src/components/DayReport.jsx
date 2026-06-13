@@ -37,27 +37,43 @@ function buildReportGroups() {
 }
 
 function formatTelegramText(groups) {
-  const now = new Date();
-  const offset = 7 * 60;
-  const local = new Date(now.getTime() + offset * 60000);
-  const d = local.toISOString().slice(0, 10).split('-');
-  const dateStr = `${d[2]}-${d[1]}-${d[0]}`;
+  const now   = new Date();
+  const local = new Date(now.getTime() + 7 * 60 * 60000);
+  const d     = local.toISOString().slice(0, 10).split('-');
+  const date  = `${d[2]}-${d[1]}-${d[0]}`;
+  const hh    = String(local.getUTCHours()).padStart(2, '0');
+  const mm    = String(local.getUTCMinutes()).padStart(2, '0');
+  const time  = `${hh}:${mm}`;
+  const DIV   = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
+  const CLASS_EMOJI_LOCAL = { crypto: '🪙', usaStock: '🇺🇸', etf: '📦', thaiStock: '🇹🇭', gold: '🥇' };
 
-  let msg = `Report [${dateStr}]\n`;
+  const allAssets = groups.flatMap(g => g.assets);
+  const gainers   = allAssets.filter(a => a.dayPct > 0).length;
+  const losers    = allAssets.filter(a => a.dayPct < 0).length;
+  const avgPct    = allAssets.length
+    ? allAssets.reduce((s, a) => s + (a.dayPct || 0), 0) / allAssets.length
+    : 0;
+  const moodEmoji = avgPct >= 1 ? '🟢' : avgPct <= -1 ? '🔴' : '🟡';
+
+  let msg = `${moodEmoji} Daily Portfolio Report\n`;
+  msg    += `${date} · ${time} ICT\n`;
+  msg    += `${DIV}\n`;
+  msg    += `${gainers} up  ${losers} down  ${allAssets.length} tracked\n`;
+  msg    += `${DIV}\n`;
+
   for (const g of groups) {
-    msg += `${g.label} :\n`;
+    const em    = CLASS_EMOJI_LOCAL[g.key] || '📁';
+    const n     = g.assets.length;
+    const bSign = g.best.dayPct >= 0 ? '+' : '';
+    const wSign = g.worst ? (g.worst.dayPct >= 0 ? '+' : '') : '';
     if (g.single) {
-      const a = g.best;
-      const sign = a.dayPct >= 0 ? '+' : '';
-      msg += `${a.name} (${sign}${a.dayPct.toFixed(2)}%)\n`;
+      const arrow = g.best.dayPct >= 0 ? '▲' : '▼';
+      msg += `${em} ${g.label}  ${arrow} ${g.best.name} ${bSign}${g.best.dayPct.toFixed(2)}%\n`;
     } else {
-      const bs = g.best.dayPct >= 0 ? '+' : '';
-      const ws = g.worst.dayPct >= 0 ? '+' : '';
-      msg += `Best : ${g.best.name} (${bs}${g.best.dayPct.toFixed(2)}%)\n`;
-      msg += `Worst : ${g.worst.name} (${ws}${g.worst.dayPct.toFixed(2)}%)\n`;
+      msg += `${em} ${g.label} (${n})  ▲ ${g.best.name} ${bSign}${g.best.dayPct.toFixed(2)}%  ▼ ${g.worst.name} ${wSign}${g.worst.dayPct.toFixed(2)}%\n`;
     }
-    msg += `——————————————————\n`;
   }
+  msg += `${DIV}\n`;
 
   const rows = buildDayRows();
   if (!rows.length) return msg;
@@ -65,37 +81,53 @@ function formatTelegramText(groups) {
   const sorted = [...rows].sort((a, b) => b.dayPct - a.dayPct);
   const ccySym = ccy => ccy === 'USD' ? '$' : '฿';
 
-  function fmtChange(v, ccy) {
+  function fmtChg(v, ccy) {
     const abs = Math.abs(v);
     let s;
-    if (abs >= 10000) s = Math.round(abs).toLocaleString('en');
+    if (abs >= 10000)    s = Math.round(abs).toLocaleString('en');
     else if (abs >= 100) s = abs.toFixed(2);
     else if (abs >= 1)   s = abs.toFixed(3);
     else                 s = abs.toFixed(5);
     return (v >= 0 ? '+' : '-') + ccySym(ccy) + s;
   }
+  function fmtPx(v, ccy) {
+    if (v == null) return '—';
+    const abs = Math.abs(v);
+    let s;
+    if (abs >= 1e6)       s = (abs / 1e6).toFixed(2) + 'M';
+    else if (abs >= 1000) s = abs.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    else if (abs >= 10)   s = abs.toFixed(2);
+    else if (abs >= 0.01) s = abs.toFixed(4);
+    else                  s = abs.toFixed(6);
+    return (v < 0 ? '-' : '') + ccySym(ccy) + s;
+  }
 
-  const fmt = sorted.map(r => ({
-    name: r.name,
-    cls:  r.classLabel,
-    pct:  (r.dayPct >= 0 ? '+' : '') + r.dayPct.toFixed(2) + '%',
-    chg:  fmtChange(r.changeAbs, r.ccy),
+  const pctStr = pct => (pct >= 0 ? '▲+' : '▼') + pct.toFixed(2) + '%';
+
+  const fmt = sorted.map((r, i) => ({
+    rank:  String(i + 1) + '.',
+    name:  r.name,
+    pct:   pctStr(r.dayPct),
+    price: fmtPx(r.cur, r.ccy),
+    chg:   fmtChg(r.changeAbs, r.ccy),
   }));
-
-  const nW = Math.max(5, ...fmt.map(r => r.name.length));
-  const cW = Math.max(5, ...fmt.map(r => r.cls.length));
-  const pW = Math.max(4, ...fmt.map(r => r.pct.length));
-  const gW = Math.max(6, ...fmt.map(r => r.chg.length));
 
   const pad  = (s, n) => String(s).padEnd(n);
   const padR = (s, n) => String(s).padStart(n);
 
-  const header = `${pad('Asset', nW)}  ${pad('Class', cW)}  ${padR('Day%', pW)}  ${padR('Change', gW)}`;
+  const rkW = Math.max(2, ...fmt.map(r => r.rank.length));
+  const nW  = Math.max(4, ...fmt.map(r => r.name.length));
+  const pW  = Math.max(5, ...fmt.map(r => r.pct.length));
+  const prW = Math.max(5, ...fmt.map(r => r.price.length));
+  const gW  = Math.max(3, ...fmt.map(r => r.chg.length));
+
+  const header = pad('#', rkW) + ' ' + pad('Name', nW) + '  ' + padR('Day%', pW) + '  ' + padR('Price', prW) + '  ' + padR('Chg', gW);
   const sep    = '─'.repeat(header.length);
   const body   = fmt.map(r =>
-    `${pad(r.name, nW)}  ${pad(r.cls, cW)}  ${padR(r.pct, pW)}  ${padR(r.chg, gW)}`
+    pad(r.rank, rkW) + ' ' + pad(r.name, nW) + '  ' + padR(r.pct, pW) + '  ' + padR(r.price, prW) + '  ' + padR(r.chg, gW)
   ).join('\n');
-  msg += `\n${header}\n${sep}\n${body}`;
+
+  msg += `${header}\n${sep}\n${body}`;
   return msg;
 }
 
