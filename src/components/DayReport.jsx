@@ -79,7 +79,6 @@ function formatTelegramText(groups) {
   const rows = buildDayRows();
   if (!rows.length) return msg;
 
-  const sorted = [...rows].sort((a, b) => b.dayPct - a.dayPct);
   const ccySym = ccy => ccy === 'USD' ? '$' : '฿';
 
   function fmtChg(v, ccy) {
@@ -104,32 +103,49 @@ function formatTelegramText(groups) {
   }
 
   const pctStr = pct => (pct >= 0 ? '▲+' : '▼') + pct.toFixed(2) + '%';
+  const pad    = (s, n) => String(s).padEnd(n);
+  const padR   = (s, n) => String(s).padStart(n);
 
-  const fmt = sorted.map((r, i) => ({
-    rank:  String(i + 1) + '.',
-    name:  r.name,
-    pct:   pctStr(r.dayPct),
-    price: fmtPx(r.cur, r.ccy),
-    chg:   fmtChg(r.changeAbs, r.ccy),
-  }));
+  // group rows by class, preserving REPORT_CLASSES order
+  const byClass = {};
+  for (const r of rows) {
+    if (!byClass[r.classKey]) byClass[r.classKey] = [];
+    byClass[r.classKey].push(r);
+  }
+  const classOrder = REPORT_CLASSES.map(rc => rc.key);
 
-  const pad  = (s, n) => String(s).padEnd(n);
-  const padR = (s, n) => String(s).padStart(n);
+  for (const key of classOrder) {
+    const group = byClass[key];
+    if (!group || !group.length) continue;
 
-  const rkW = Math.max(2, ...fmt.map(r => r.rank.length));
-  const nW  = Math.max(4, ...fmt.map(r => r.name.length));
-  const pW  = Math.max(5, ...fmt.map(r => r.pct.length));
-  const prW = Math.max(5, ...fmt.map(r => r.price.length));
-  const gW  = Math.max(3, ...fmt.map(r => r.chg.length));
+    const rc      = REPORT_CLASSES.find(r => r.key === key);
+    const em      = CLASS_EMOJI_LOCAL[key] || '📁';
+    const sorted  = [...group].sort((a, b) => b.dayPct - a.dayPct);
 
-  const header = pad('#', rkW) + ' ' + pad('Name', nW) + '  ' + padR('Day%', pW) + '  ' + padR('Price', prW) + '  ' + padR('Chg', gW);
-  const sep    = '─'.repeat(header.length);
-  const body   = fmt.map(r =>
-    pad(r.rank, rkW) + ' ' + pad(r.name, nW) + '  ' + padR(r.pct, pW) + '  ' + padR(r.price, prW) + '  ' + padR(r.chg, gW)
-  ).join('\n');
+    const fmt = sorted.map((r, i) => ({
+      rank:  String(i + 1) + '.',
+      name:  r.name,
+      pct:   pctStr(r.dayPct),
+      price: fmtPx(r.cur, r.ccy),
+      chg:   fmtChg(r.changeAbs, r.ccy),
+    }));
 
-  msg += `${header}\n${sep}\n${body}`;
-  return msg;
+    const rkW = Math.max(2, ...fmt.map(r => r.rank.length));
+    const nW  = Math.max(4, ...fmt.map(r => r.name.length));
+    const pW  = Math.max(5, ...fmt.map(r => r.pct.length));
+    const prW = Math.max(5, ...fmt.map(r => r.price.length));
+    const gW  = Math.max(3, ...fmt.map(r => r.chg.length));
+
+    const header = pad('#', rkW) + ' ' + pad('Name', nW) + '  ' + padR('Day%', pW) + '  ' + padR('Price', prW) + '  ' + padR('Chg', gW);
+    const sep    = '─'.repeat(header.length);
+    const body   = fmt.map(r =>
+      pad(r.rank, rkW) + ' ' + pad(r.name, nW) + '  ' + padR(r.pct, pW) + '  ' + padR(r.price, prW) + '  ' + padR(r.chg, gW)
+    ).join('\n');
+
+    msg += `${em} ${rc.label}\n${header}\n${sep}\n${body}\n${DIV}\n`;
+  }
+
+  return msg.trimEnd();
 }
 
 function DayReportCard({ group }) {
