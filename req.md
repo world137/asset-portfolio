@@ -1,1 +1,1 @@
-- in analysis I want to show P/E
+- fix bug that in Portfolio Calendar can't click date in calendar and show detail of event in phone (desktop and Ipad it can)
