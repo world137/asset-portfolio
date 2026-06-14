@@ -137,6 +137,17 @@ export default function DashboardScreen() {
               </Pressable>
             );
           })}
+          <Pressable
+            onPress={() => nav.navigate('Summary')}
+            style={({ pressed }) => [s.classRow, { borderBottomWidth: 0 }, pressed && { opacity: 0.7 }]}
+          >
+            <View style={[s.classDot, { backgroundColor: theme.fg3 }]} />
+            <View style={s.classInfo}>
+              <Text style={[s.className, { color: theme.fg1 }]}>All Holdings</Text>
+              <Text style={[s.classCount, { color: theme.fg3 }]}>Full summary table</Text>
+            </View>
+            <Text style={[s.classValue, { color: theme.accent, fontSize: 13 }]}>View →</Text>
+          </Pressable>
         </Card>
       </ScrollView>
     </SafeAreaView>

@@ -284,16 +284,49 @@ function computePortfolioSummary(holdings, assetData, fx) {
 
 // ── Alert checkers ─────────────────────────────────────────────────────────────
 
-function checkPriceAlerts(priceAlerts, assetData) {
+// Fetch prices for alerts on assets not in the holdings list.
+// classKey is always set (thaiStock | usaStock | etf) — determines which API to use.
+async function fetchNonHoldingPrices(priceAlerts, assetData) {
+  // Find active alerts whose key is not already in assetData
+  const missing = priceAlerts.filter(a =>
+    !a.triggered && a.classKey && a.name && assetData[`${a.classKey}:${a.name}`] == null
+  );
+  if (!missing.length) return {};
+
+  const result = {};
+  await Promise.allSettled(missing.map(async a => {
+    const key = `${a.classKey}:${a.name}`;
+    try {
+      if (a.classKey === 'thaiStock' || a.classKey === 'usaStock' || a.classKey === 'etf') {
+        const sym = a.name.toUpperCase();
+        const { price, prevClose } = await yahooPrice(sym);
+        if (price != null) {
+          const ccy = a.classKey === 'thaiStock' ? 'THB' : 'USD';
+          const pct = prevClose && prevClose > 0 ? ((price - prevClose) / prevClose) * 100 : null;
+          result[key] = { price, prevClose, pct, changeAbs: prevClose ? price - prevClose : null, ccy, classShort: a.classKey };
+        }
+      }
+    } catch (e) {
+      console.warn(`[telegram] fetchNonHoldingPrices ${key}: ${e.message}`);
+    }
+  }));
+  return result;
+}
+
+async function checkPriceAlerts(priceAlerts, assetData) {
   if (!priceAlerts?.length) return [];
+
+  const nonHoldingPrices = await fetchNonHoldingPrices(priceAlerts, assetData);
+  const combined = { ...assetData, ...nonHoldingPrices };
+
   return priceAlerts
     .filter(a => !a.triggered)
     .flatMap(alert => {
       const key = `${alert.classKey}:${alert.name}`;
-      const d   = assetData[key];
+      const d   = combined[key];
       if (!d || d.price == null) return [];
       const hit = alert.condition === 'above' ? d.price >= alert.price : d.price <= alert.price;
-      return hit ? [{ alert, price: d.price }] : [];
+      return hit ? [{ alert, price: d.price, ccy: d.ccy }] : [];
     });
 }
 
@@ -335,6 +368,16 @@ function checkRebalancingDrift(targetAllocation, holdings, assetData, fx) {
 }
 
 // ── Report formatters ──────────────────────────────────────────────────────────
+
+const REPORT_DIVIDER = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
+
+const CLASS_EMOJI = {
+  crypto:    '🪙',
+  usaStock:  '🇺🇸',
+  etf:       '📦',
+  thaiStock: '🇹🇭',
+  gold:      '🥇',
+};
 
 function escHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -395,62 +438,85 @@ function formatReportMessage(groups, assetData, summary) {
   if (!groups.length) return null;
 
   const { date, time } = todayTH();
-  const pnlSign  = summary.dayPnlTHB >= 0 ? '+' : '';
-  const pnlEmoji = summary.dayPnlTHB >= 0 ? '📈' : '📉';
+  const D = REPORT_DIVIDER;
 
-  let msg = `📊 <b>Portfolio Report</b> — ${date} ${time} TH\n`;
+  // Section 1: Header
+  const moodEmoji = summary.dayPnlPct >= 1 ? '🟢' : summary.dayPnlPct <= -1 ? '🔴' : '🟡';
+  let msg = `${moodEmoji} <b>Daily Portfolio Report</b>\n`;
+  msg    += `<code>${date} · ${time} ICT</code>\n`;
+  msg    += `${D}\n`;
 
+  // Section 2: Portfolio summary
   if (summary.totalTHB > 0) {
-    msg += `\n💰 <b>Total: ฿${fmtBig(summary.totalTHB)}</b>`;
-    if (summary.dayPnlTHB !== 0) {
-      msg += `   ${pnlEmoji} Day: <b>${pnlSign}฿${fmtBig(Math.abs(summary.dayPnlTHB))} (${pnlSign}${summary.dayPnlPct.toFixed(2)}%)</b>`;
-    }
-    msg += '\n';
+    const pnlSign  = summary.dayPnlTHB >= 0 ? '+' : '';
+    const pnlArrow = summary.dayPnlTHB >= 0 ? '▲' : '▼';
+    const allAssets = groups.flatMap(g => g.assets);
+    const gainers   = allAssets.filter(a => a.pct > 0).length;
+    const losers    = allAssets.filter(a => a.pct < 0).length;
+
+    msg += `💼 <b>฿${fmtBig(summary.totalTHB)}</b>   `;
+    msg += `${pnlArrow} <b>${pnlSign}฿${fmtBig(Math.abs(summary.dayPnlTHB))}</b> `;
+    msg += `<i>(${pnlSign}${summary.dayPnlPct.toFixed(2)}%)</i>\n`;
+    msg += `<code>${gainers} up  ${losers} down  ${summary.coveredCount} tracked</code>\n`;
   }
+  msg += `${D}\n`;
 
-  msg += '\n';
-
-  const classLines = groups.map(g => {
-    if (g.assets.length === 1) {
-      const a    = g.assets[0];
-      const sign = a.pct >= 0 ? '+' : '';
-      return `${g.label.padEnd(7)} · ${a.name} ${sign}${a.pct.toFixed(2)}%`;
-    }
+  // Section 3: Per-class breakdown
+  for (const g of groups) {
+    const em    = CLASS_EMOJI[g.key] || '📁';
+    const n     = g.assets.length;
     const best  = g.assets[0];
-    const worst = g.assets[g.assets.length - 1];
-    const bs    = best.pct  >= 0 ? '+' : '';
-    const ws    = worst.pct >= 0 ? '+' : '';
-    return `${g.label.padEnd(7)} · 🏆 ${best.name} ${bs}${best.pct.toFixed(2)}%  /  💀 ${worst.name} ${ws}${worst.pct.toFixed(2)}%`;
-  });
+    const worst = g.assets[n - 1];
+    const bSign = best.pct  >= 0 ? '+' : '';
+    const wSign = worst.pct >= 0 ? '+' : '';
 
-  msg += `<pre>${escHtml(classLines.join('\n'))}</pre>\n`;
+    if (n === 1) {
+      const arrow = best.pct >= 0 ? '▲' : '▼';
+      msg += `${em} <b>${escHtml(g.label)}</b>  ${arrow} ${escHtml(best.name)} <code>${bSign}${best.pct.toFixed(2)}%</code>\n`;
+    } else {
+      msg += `${em} <b>${escHtml(g.label)}</b> <i>(${n})</i>  `;
+      msg += `▲ ${escHtml(best.name)} <code>${bSign}${best.pct.toFixed(2)}%</code>  `;
+      msg += `▼ ${escHtml(worst.name)} <code>${wSign}${worst.pct.toFixed(2)}%</code>\n`;
+    }
+  }
+  msg += `${D}\n`;
 
-  const rows = groups.flatMap(g =>
+  // Section 4: Ranked all-holdings table (class column removed, rank added)
+  const allRows = groups.flatMap(g =>
     g.assets.map(a => ({
       name:  a.name,
-      cls:   a.classShort || g.label,
-      pct:   (a.pct >= 0 ? '+' : '') + a.pct.toFixed(2) + '%',
+      pct:   a.pct,
       price: fmtPrice(a.price, a.ccy),
       chg:   a.changeAbs != null ? fmtChange(a.changeAbs, a.ccy) : '—',
     }))
-  ).sort((a, b) => parseFloat(b.pct) - parseFloat(a.pct));
+  ).sort((a, b) => b.pct - a.pct);
 
-  if (rows.length) {
-    const pad  = (s, n) => String(s).padEnd(n);
-    const padR = (s, n) => String(s).padStart(n);
-    const nW   = Math.max(5, ...rows.map(r => r.name.length));
-    const cW   = Math.max(5, ...rows.map(r => r.cls.length));
-    const pW   = Math.max(4, ...rows.map(r => r.pct.length));
-    const prW  = Math.max(7, ...rows.map(r => r.price.length));
-    const gW   = Math.max(6, ...rows.map(r => r.chg.length));
+  if (allRows.length) {
+    const pad    = (s, n) => String(s).padEnd(n);
+    const padR   = (s, n) => String(s).padStart(n);
+    const pctStr = r => (r.pct >= 0 ? '▲+' : '▼') + r.pct.toFixed(2) + '%';
 
-    const header = `${pad('Asset', nW)}  ${pad('Class', cW)}  ${padR('Day%', pW)}  ${padR('Price', prW)}  ${padR('Change', gW)}`;
-    const sep    = '─'.repeat(header.length);
-    const body   = rows.map(r =>
-      `${pad(r.name, nW)}  ${pad(r.cls, cW)}  ${padR(r.pct, pW)}  ${padR(r.price, prW)}  ${padR(r.chg, gW)}`
+    const formattedRows = allRows.map((r, i) => ({
+      rank:  String(i + 1) + '.',
+      name:  r.name,
+      pct:   pctStr(r),
+      price: r.price,
+      chg:   r.chg,
+    }));
+
+    const rkW = Math.max(2, ...formattedRows.map(r => r.rank.length));
+    const nW  = Math.max(4, ...formattedRows.map(r => r.name.length));
+    const pW  = Math.max(5, ...formattedRows.map(r => r.pct.length));
+    const prW = Math.max(5, ...formattedRows.map(r => r.price.length));
+    const gW  = Math.max(3, ...formattedRows.map(r => r.chg.length));
+
+    const hdr  = pad('#', rkW) + ' ' + pad('Name', nW) + '  ' + padR('Day%', pW) + '  ' + padR('Price', prW) + '  ' + padR('Chg', gW);
+    const sep  = '─'.repeat(hdr.length);
+    const body = formattedRows.map(r =>
+      pad(r.rank, rkW) + ' ' + pad(r.name, nW) + '  ' + padR(r.pct, pW) + '  ' + padR(r.price, prW) + '  ' + padR(r.chg, gW)
     ).join('\n');
 
-    msg += `\n<pre>${escHtml(`${header}\n${sep}\n${body}`)}</pre>`;
+    msg += `<pre>${escHtml(`${hdr}\n${sep}\n${body}`)}</pre>\n`;
   }
 
   return msg;
@@ -458,13 +524,31 @@ function formatReportMessage(groups, assetData, summary) {
 
 // ── Telegram senders ───────────────────────────────────────────────────────────
 
-async function tgSend(chatId, text, opts = {}) {
-  const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML', ...opts }),
-  });
-  return r.json();
+async function tgSend(chatId, text, opts = {}, retries = 3) {
+  let lastErr;
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML', ...opts }),
+        signal:  AbortSignal.timeout(10000),
+      });
+      const j = await r.json();
+      if (j.ok) return j;
+      // Telegram returned ok:false — don't retry on permanent errors (e.g. chat not found)
+      if (j.error_code && j.error_code !== 429) {
+        console.error(`[tgSend] Telegram error ${j.error_code}: ${j.description}`);
+        return j;
+      }
+      lastErr = new Error(`Telegram ${j.error_code}: ${j.description}`);
+    } catch (e) {
+      lastErr = e;
+      console.warn(`[tgSend] attempt ${attempt + 1} failed: ${e.message}`);
+    }
+    if (attempt < retries - 1) await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+  }
+  throw lastErr;
 }
 
 async function tgPhoto(chatId, photoUrl, caption) {
@@ -489,7 +573,7 @@ async function runReport(portfolioId) {
 
   const { groups, assetData } = await buildReport(holdings);
   const summary               = computePortfolioSummary(holdings, assetData, meta.fx);
-  const triggeredAlerts       = checkPriceAlerts(meta.priceAlerts, assetData);
+  const triggeredAlerts       = await checkPriceAlerts(meta.priceAlerts, assetData);
   const rebalAlerts           = checkRebalancingDrift(meta.targetAllocation, holdings, assetData, meta.fx);
 
   if (!groups.length && !triggeredAlerts.length && !rebalAlerts.length) {
@@ -501,33 +585,37 @@ async function runReport(portfolioId) {
     || `📊 <b>Portfolio Report</b> — ${date} ${time} TH\nNo market data available.\n`;
 
   if (triggeredAlerts.length > 0) {
-    message += '\n\n🚨 <b>Price Alerts Triggered</b>\n';
-    for (const { alert, price } of triggeredAlerts) {
-      const dir    = alert.condition === 'above' ? '▲ above' : '▼ below';
-      const target = alert.price.toLocaleString('en', { maximumFractionDigits: 4 });
-      message += `• <b>${escHtml(alert.name.replace(/THB$/, ''))}</b> — ${dir} ${escHtml(String(price.toLocaleString()))} (target: ${target})\n`;
+    message += `\n${REPORT_DIVIDER}\n`;
+    message += `🔔 <b>Price Alerts</b>\n`;
+    for (const { alert, price, ccy } of triggeredAlerts) {
+      const dir  = alert.condition === 'above' ? '▲ above' : '▼ below';
+      const sym  = (ccy || 'THB') === 'USD' ? '$' : '฿';
+      const tgt  = sym + alert.price.toLocaleString('en', { maximumFractionDigits: 4 });
+      const now  = sym + price.toLocaleString('en',        { maximumFractionDigits: 4 });
+      const name = escHtml(alert.name.replace(/\.BK$/, '').replace(/THB$/, ''));
+      message += `• <b>${name}</b> ${dir} <code>${escHtml(tgt)}</code> → now <code>${escHtml(now)}</code>\n`;
       if (alert.note) message += `  <i>${escHtml(alert.note)}</i>\n`;
     }
   }
 
   if (rebalAlerts.length > 0) {
-    message += '\n\n⚖️ <b>Rebalancing Needed (&gt;5% drift)</b>\n';
-    const LABELS = { thaiStock: 'Thai Stock', usaStock: 'USA Stock', etf: 'ETF', fund: 'Fund', crypto: 'Crypto', gold: 'Gold', other: 'Other' };
+    message += `\n${REPORT_DIVIDER}\n`;
+    message += `⚖️ <b>Rebalancing</b>\n`;
+    const LABELS = {
+      thaiStock: 'Thai', usaStock: 'USA', etf: 'ETF',
+      fund: 'Fund', crypto: 'Crypto', gold: 'Gold', other: 'Other',
+    };
+    const padLbl = (s, n) => String(s).padEnd(n);
+    const maxLabelLen = Math.max(...rebalAlerts.map(a => (LABELS[a.key] || a.key).length));
     for (const a of rebalAlerts) {
-      const dir = a.drift > 0 ? `overweight +${a.drift.toFixed(1)}%` : `underweight ${a.drift.toFixed(1)}%`;
-      message += `• ${escHtml(LABELS[a.key] || a.key)}: ${a.curPct.toFixed(1)}% vs target ${a.tgt}% (${dir})\n`;
+      const lbl = padLbl(LABELS[a.key] || a.key, maxLabelLen);
+      const dir = a.drift > 0 ? `+${a.drift.toFixed(1)}% overweight` : `${a.drift.toFixed(1)}% underweight`;
+      message += `• ${escHtml(lbl)}  ${a.curPct.toFixed(1)}% / tgt ${a.tgt}%  ${dir}\n`;
     }
   }
 
-  const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ chat_id: CHAT_ID, text: message, parse_mode: 'HTML' }),
-  });
-  if (!r.ok) {
-    const body = await r.text().catch(() => '');
-    throw new Error('Telegram API error: ' + r.status + ' ' + body);
-  }
+  const result = await tgSend(CHAT_ID, message);
+  if (!result.ok) throw new Error('Telegram API error: ' + JSON.stringify(result));
 
   console.log('[telegram] sent ok');
   return {
@@ -827,10 +915,19 @@ export default async function handler(req, res) {
 
   // ── Login notification ────────────────────────────────────────────────────
   if (body?.type === 'login') {
-    if (BOT_TOKEN && CHAT_ID) {
+    if (!BOT_TOKEN || !CHAT_ID) {
+      console.warn('[telegram] login noti skipped: BOT_TOKEN or CHAT_ID not set');
+      return res.status(200).json({ ok: true, note: 'not configured' });
+    }
+    try {
       const { date, time } = todayTH();
-      const msg = `🔐 <b>Login</b> — ${escHtml(body.username || 'Unknown')} signed in\n${date} ${time} TH`;
-      await tgSend(CHAT_ID, msg).catch(() => {});
+      const ip  = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || '';
+      const msg = `🔐 <b>Login</b> — ${escHtml(body.username || 'Unknown')} signed in\n${date} ${time} TH${ip ? `\n<code>${escHtml(ip)}</code>` : ''}`;
+      await tgSend(CHAT_ID, msg);
+      console.log('[telegram] login noti sent');
+    } catch (e) {
+      console.error('[telegram] login noti error:', e.message);
+      return res.status(200).json({ ok: false, error: e.message });
     }
     return res.status(200).json({ ok: true });
   }

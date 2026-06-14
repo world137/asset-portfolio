@@ -1,7 +1,14 @@
 const { getDefaultConfig } = require('expo/metro-config');
 const path = require('path');
 
-const config = getDefaultConfig(__dirname);
+const projectRoot = __dirname;
+const config = getDefaultConfig(projectRoot);
+
+// Prevent Metro from hoisting into the parent directory's node_modules,
+// which contains incompatible react/react-native versions.
+config.watchFolders = [projectRoot];
+config.resolver = config.resolver ?? {};
+config.resolver.nodeModulesPaths = [path.join(projectRoot, 'node_modules')];
 
 // Inject DOMException before React Native's own init (undici needs it)
 config.serializer = config.serializer ?? {};

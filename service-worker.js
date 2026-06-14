@@ -1,16 +1,11 @@
 /* Portfolio Tracker — Service Worker (PWA offline cache) */
 
-const CACHE_NAME = 'ptf-v1';
+const CACHE_NAME = 'ptf-v3';
 
-// Static assets to cache on install
+// Only pre-cache stable assets that rarely change
 const PRECACHE = [
-  '/',
   '/kit.css',
   '/app.css',
-  '/src/constants.js',
-  '/src/seed.js',
-  '/src/fmt.js',
-  '/src/store.js',
 ];
 
 self.addEventListener('install', event => {
@@ -30,7 +25,7 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
-  // Always go network-first for API calls
+  // Always network-first for API calls
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(
       fetch(event.request).catch(() =>
@@ -40,7 +35,20 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Cache-first for static assets (JS/CSS from same origin)
+  // Network-first for JS/JSX files so code changes are always picked up
+  if (url.pathname.endsWith('.js') || url.pathname.endsWith('.jsx') || url.pathname === '/') {
+    event.respondWith(
+      fetch(event.request).then(res => {
+        if (!res || res.status !== 200 || res.type === 'opaque') return res;
+        const clone = res.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+        return res;
+      }).catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // Cache-first for CSS and other static assets
   if (url.origin === self.location.origin) {
     event.respondWith(
       caches.match(event.request).then(cached => {

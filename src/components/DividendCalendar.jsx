@@ -548,17 +548,16 @@ function DividendCalendar() {
                             <div key={d.id} title={payLabel(d)}
                                  style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
                                    background: d.payDate === dayStr ? 'var(--green-600)' : 'var(--fg-4)',
-                                   opacity: d.auto ? 0.8 : 1, cursor: 'pointer' }}
-                                 onClick={() => setSelectedDay(s => s === dayStr ? null : dayStr)} />
+                                   opacity: d.auto ? 0.8 : 1 }}
+                                 onClick={ev => ev.stopPropagation()} />
                           ))}
                           {dayEco.map((e, ei) => {
                             const tc = ECO_TYPE_COLORS[e.type] || ECO_TYPE_COLORS.other;
                             return (
                               <div key={e.id || e.label + ei} title={e.label + (e.note ? ' · ' + e.note : '')}
                                    style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
-                                     background: tc.bg, opacity: e.importance === 'low' ? 0.6 : 1,
-                                     cursor: 'pointer' }}
-                                   onClick={() => setSelectedDay(s => s === dayStr ? null : dayStr)} />
+                                     background: tc.bg, opacity: e.importance === 'low' ? 0.6 : 1 }}
+                                   onClick={ev => ev.stopPropagation()} />
                             );
                           })}
                         </div>

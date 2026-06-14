@@ -1,4 +1,1 @@
-refactor project
-   - remove unused code
-   - group function
-   - organize package (make it to MVC model-view-controller)
+- fix bug that in Portfolio Calendar can't click date in calendar and show detail of event in phone (desktop and Ipad it can)

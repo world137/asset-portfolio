@@ -68,7 +68,10 @@ function LoginPage({ onSuccess }) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ type: 'login', username: username.trim() }),
-        }).catch(() => {});
+          signal: AbortSignal.timeout(12000),
+        }).then(r => r.json()).then(j => {
+          if (!j.ok) console.warn('[login] telegram noti returned not-ok:', j);
+        }).catch(e => console.warn('[login] telegram noti failed:', e.message));
         onSuccess();
       } else {
         setError('Wrong username or password.');
