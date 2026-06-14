@@ -53,10 +53,13 @@ export default function WalletOverviewScreen() {
         {/* Quick nav */}
         <View style={s.navRow}>
           {[
-            { label: 'Transactions', screen: 'Transactions' },
-            { label: 'Debts',        screen: 'Debts' },
-            { label: 'Calendar',     screen: 'WalletCalendar' },
-            { label: 'Net Worth',    screen: 'NetWorth' },
+            { label: 'Transactions',  screen: 'Transactions' },
+            { label: 'Debts',         screen: 'Debts' },
+            { label: 'Calendar',      screen: 'WalletCalendar' },
+            { label: 'Net Worth',     screen: 'NetWorth' },
+            { label: 'Bills',         screen: 'Bills' },
+            { label: 'Savings Goals', screen: 'SavingsGoals' },
+            { label: 'Reconcile',     screen: 'Reconcile' },
           ].map(n => (
             <Pressable
               key={n.label}
