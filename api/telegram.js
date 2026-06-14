@@ -31,11 +31,12 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 // ── Report constants ───────────────────────────────────────────────────────────
 
 const REPORT_CLASSES = [
-  { key: 'crypto',    label: 'Crypto', short: 'Crypto', live: 'crypto', ccy: 'THB' },
-  { key: 'usaStock',  label: 'USA',    short: 'USA',    live: 'yahoo',  ccy: 'USD' },
-  { key: 'etf',       label: 'ETF',    short: 'ETF',    live: 'yahoo',  ccy: 'USD' },
-  { key: 'thaiStock', label: 'Thai',   short: 'Thai',   live: 'yahoo',  ccy: 'THB', yahooSuffix: '.BK' },
-  { key: 'gold',      label: 'Gold',   short: 'Gold',   live: 'yahoo',  ccy: 'USD', yahooSymbol: 'GC=F' },
+  { key: 'crypto',    label: 'Crypto', short: 'Crypto', live: 'crypto',    ccy: 'THB' },
+  { key: 'usaStock',  label: 'USA',    short: 'USA',    live: 'yahoo',     ccy: 'USD' },
+  { key: 'etf',       label: 'ETF',    short: 'ETF',    live: 'yahoo',     ccy: 'USD' },
+  { key: 'thaiStock', label: 'Thai',   short: 'Thai',   live: 'yahoo',     ccy: 'THB', yahooSuffix: '.BK' },
+  { key: 'fund',      label: 'Fund',   short: 'Fund',   live: 'settrade',  ccy: 'THB' },
+  { key: 'gold',      label: 'Gold',   short: 'Gold',   live: 'yahoo',     ccy: 'USD', yahooSymbol: 'GC=F' },
 ];
 
 const CRYPTO_MAP = {
@@ -376,6 +377,7 @@ const CLASS_EMOJI = {
   usaStock:  '🇺🇸',
   etf:       '📦',
   thaiStock: '🇹🇭',
+  fund:      '🏦',
   gold:      '🥇',
 };
 

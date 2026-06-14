@@ -6,6 +6,7 @@ const REPORT_CLASSES = [
   { key: 'usaStock',  label: 'USA' },
   { key: 'etf',       label: 'ETF' },
   { key: 'thaiStock', label: 'Thai' },
+  { key: 'fund',      label: 'Fund' },
   { key: 'gold',      label: 'Gold' },
 ];
 
@@ -45,7 +46,7 @@ function formatTelegramText(groups) {
   const mm    = String(local.getUTCMinutes()).padStart(2, '0');
   const time  = `${hh}:${mm}`;
   const DIV   = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
-  const CLASS_EMOJI_LOCAL = { crypto: '🪙', usaStock: '🇺🇸', etf: '📦', thaiStock: '🇹🇭', gold: '🥇' };
+  const CLASS_EMOJI_LOCAL = { crypto: '🪙', usaStock: '🇺🇸', etf: '📦', thaiStock: '🇹🇭', fund: '🏦', gold: '🥇' };
 
   const allAssets = groups.flatMap(g => g.assets);
   const gainers   = allAssets.filter(a => a.dayPct > 0).length;
@@ -315,13 +316,22 @@ function buildDayRows() {
   return rows;
 }
 
-function DayChangeTable() {
+function DayChangeClassTable({ classKey, classLabel, rows }) {
   const { sortBy, sortDir, handleSort } = useSortState('dayPct');
   const settings = Store.settings();
   const sym      = window.ccySymbol(settings.displayCcy);
 
-  const rows = buildDayRows();
-  if (!rows.length) return null;
+  const ccy = rows[0]?.ccy ?? 'THB';
+  const ccySym = c => c === 'USD' ? '$' : '฿';
+  const fmtPrice = (v, c) => {
+    if (v == null) return '—';
+    const abs = Math.abs(v);
+    const s   = abs >= 1000 ? abs.toLocaleString('en', { maximumFractionDigits: 2 })
+              : abs >= 10   ? abs.toFixed(2)
+              : abs >= 0.1  ? abs.toFixed(4)
+              : abs.toFixed(6);
+    return (v < 0 ? '-' : '') + ccySym(c) + s;
+  };
 
   const sorted = [...rows].sort((a, b) => {
     let av = a[sortBy], bv = b[sortBy];
@@ -329,53 +339,36 @@ function DayChangeTable() {
     return sortDir * ((bv ?? -Infinity) - (av ?? -Infinity));
   });
 
-  const ccySym = ccy => ccy === 'USD' ? '$' : '฿';
-  const fmtPrice = (v, ccy) => {
-    if (v == null) return '—';
-    const abs = Math.abs(v);
-    const s   = abs >= 1000 ? abs.toLocaleString('en', { maximumFractionDigits: 2 })
-              : abs >= 10   ? abs.toFixed(2)
-              : abs >= 0.1  ? abs.toFixed(4)
-              : abs.toFixed(6);
-    return (v < 0 ? '-' : '') + ccySym(ccy) + s;
-  };
+  const color = window.CLASS_COLORS[classKey] || '#888';
 
   return (
-    <div className="card" style={{ marginTop: 20 }}>
+    <div className="card" style={{ marginTop: 16 }}>
       <div className="card-h">
-        <div className="t">All Holdings — Day Change</div>
-        <div className="s">{sorted.length} assets with live price data</div>
+        <div className="t" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ width: 10, height: 10, borderRadius: '50%', background: color, display: 'inline-block', flexShrink: 0 }} />
+          {classLabel} — Day Change
+        </div>
+        <div className="s">{sorted.length} asset{sorted.length !== 1 ? 's' : ''} with live price data</div>
       </div>
       <div className="card-b" style={{ padding: 0, overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border-1)' }}>
-              <SortTh col="name"      label="Asset"      sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
-              <SortTh col="classLabel" label="Class"     sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
-              <SortTh col="cur"       label="Price"      right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
-              <SortTh col="changeAbs" label="Change"     right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
-              <SortTh col="dayPct"    label="Day %"      right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
-              <SortTh col="value"     label="Value"      right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+              <SortTh col="name"      label="Asset"   sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+              <SortTh col="cur"       label="Price"   right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+              <SortTh col="changeAbs" label="Change"  right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+              <SortTh col="dayPct"    label="Day %"   right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+              <SortTh col="value"     label="Value"   right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
             </tr>
           </thead>
           <tbody>
             {sorted.map(r => {
-              const pctColor  = r.dayPct >= 0 ? 'var(--green-600,#1a9e5c)' : 'var(--red-600,#d63b3b)';
-              const absSign   = r.changeAbs >= 0 ? '+' : '';
-              const pctSign   = r.dayPct   >= 0 ? '+' : '';
+              const pctColor = r.dayPct >= 0 ? 'var(--green-600,#1a9e5c)' : 'var(--red-600,#d63b3b)';
+              const absSign  = r.changeAbs >= 0 ? '+' : '';
+              const pctSign  = r.dayPct   >= 0 ? '+' : '';
               return (
-                <tr key={r.classKey + ':' + r.name}
-                    style={{ borderBottom: '1px solid var(--border-1)' }}>
+                <tr key={r.name} style={{ borderBottom: '1px solid var(--border-1)' }}>
                   <td style={{ padding: '8px 12px', fontWeight: 600 }}>{r.name}</td>
-                  <td style={{ padding: '8px 12px' }}>
-                    <span style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 5,
-                      fontSize: 11, fontWeight: 600, color: 'var(--fg-2)',
-                    }}>
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: window.CLASS_COLORS[r.classKey], display: 'inline-block', flexShrink: 0 }} />
-                      {r.classLabel}
-                    </span>
-                  </td>
                   <td className="num" style={{ padding: '8px 12px', fontVariantNumeric: 'tabular-nums' }}>
                     {fmtPrice(r.cur, r.ccy)}
                   </td>
@@ -395,6 +388,28 @@ function DayChangeTable() {
         </table>
       </div>
     </div>
+  );
+}
+
+function DayChangeTable() {
+  const rows = buildDayRows();
+  if (!rows.length) return null;
+
+  const byClass = {};
+  for (const r of rows) {
+    if (!byClass[r.classKey]) byClass[r.classKey] = { classKey: r.classKey, classLabel: r.classLabel, rows: [] };
+    byClass[r.classKey].rows.push(r);
+  }
+
+  const order = window.ASSET_CLASSES.map(c => c.key);
+  const groups = order.map(k => byClass[k]).filter(Boolean);
+
+  return (
+    <React.Fragment>
+      {groups.map(g => (
+        <DayChangeClassTable key={g.classKey} classKey={g.classKey} classLabel={g.classLabel} rows={g.rows} />
+      ))}
+    </React.Fragment>
   );
 }
 
