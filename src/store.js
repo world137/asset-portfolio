@@ -88,6 +88,8 @@
   // ── Init all domain modules ───────────────────────────────────────────────────
   const moduleCtx = {
     // State accessors
+    get state()  { return state; },
+    get wallet() { return wallet; },
     getState:       () => state,
     setState:       (s) => { state = s; },
     freshState,

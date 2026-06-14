@@ -294,18 +294,22 @@ function App() {
           <h2>{title}</h2>
           <div className="grow" />
           <div className={'tb-actions' + (mobileMenu ? ' open' : '')}>
-            <DbStatusBadge />
-            <span className="sync">
-              {syncing
-                ? 'Syncing…'
-                : <React.Fragment>{Store.get().priceMode === 'api' ? 'Live' : 'Crypto+FX'} · <b>{window.timeAgo(Store.get().lastPriceSync)}</b></React.Fragment>}
-            </span>
-            <Button variant="secondary" size="sm" icon="history" onClick={refresh} disabled={syncing}>
-              <span className="tb-refresh-text">{syncing ? 'Syncing' : 'Refresh'}</span>
-            </Button>
-            <div className="pill-toggle">
-              <button className={settings.displayCcy === 'THB' ? 'on' : ''} onClick={() => Store.setSetting('displayCcy', 'THB')}>฿ THB</button>
-              <button className={settings.displayCcy === 'USD' ? 'on' : ''} onClick={() => Store.setSetting('displayCcy', 'USD')}>$ USD</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10}}>
+              <DbStatusBadge />
+              <span className="sync">
+                {syncing
+                  ? 'Syncing…'
+                  : <React.Fragment>{Store.get().priceMode === 'api' ? 'Live' : 'Crypto+FX'} · <b>{window.timeAgo(Store.get().lastPriceSync)}</b></React.Fragment>}
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <Button variant="secondary" size="sm" icon="history" onClick={refresh} disabled={syncing}>
+                <span className="tb-refresh-text">{syncing ? 'Syncing' : 'Refresh'}</span>
+              </Button>
+              <div className="pill-toggle">
+                <button className={settings.displayCcy === 'THB' ? 'on' : ''} onClick={() => Store.setSetting('displayCcy', 'THB')}>฿ THB</button>
+                <button className={settings.displayCcy === 'USD' ? 'on' : ''} onClick={() => Store.setSetting('displayCcy', 'USD')}>$ USD</button>
+              </div>
             </div>
             <div className="group-buttons">
               <button className="icon-toggle" title={settings.hideAmounts ? 'Show amounts' : 'Hide amounts'}
