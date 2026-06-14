@@ -487,47 +487,58 @@ function BentoView({ classKey }) {
   );
 }
 
-// ── Par Value Reduction modal ──────────────────────────────────────────────────
+// ── Stock Split / Par Value Change modal ──────────────────────────────────────
 
 function ParValueModal({ classKey, positionName, onClose }) {
-  const [oldPar, setOldPar] = React.useState('10');
-  const [newPar, setNewPar] = React.useState('');
-  const [error,  setError]  = React.useState('');
+  const [fromUnits, setFromUnits] = React.useState('1');
+  const [toUnits,   setToUnits]   = React.useState('');
+  const [error,     setError]     = React.useState('');
+
+  const fromN = parseFloat(fromUnits);
+  const toN   = parseFloat(toUnits);
+  const valid = fromN > 0 && toN > 0 && fromN !== toN;
 
   function apply() {
-    const o = parseFloat(oldPar), n = parseFloat(newPar);
-    if (!o || !n || o <= 0 || n <= 0) { setError('Enter valid positive numbers.'); return; }
-    if (n >= o) { setError('New par must be less than old par.'); return; }
-    const ratio = n / o;
+    if (!valid) { setError('Enter valid positive numbers that are not equal.'); return; }
+    const ratio = toN / fromN;
     const pos   = Store.positions(classKey).find(p => p.name === positionName);
     const preview = pos ? `${window.fmtQty(pos.qty)} → ${window.fmtQty(+(pos.qty * ratio).toFixed(8))} shares` : '';
-    if (!confirm(`Apply par value reduction ${o} → ${n} for ${positionName}?\n${preview}\n\nThis adjusts all lot quantities and buy prices. Cannot be undone.`)) return;
-    Store.applyParValueReduction(classKey, positionName, o, n);
+    const isSplit = toN > fromN;
+    const label   = isSplit ? `Stock split ${fromN} → ${toN}` : `Par value reduction ${fromN} → ${toN}`;
+    if (!confirm(`Apply ${label} for ${positionName}?\n${preview}\n\nThis adjusts all lot quantities and buy prices. Cannot be undone.`)) return;
+    Store.applyParValueReduction(classKey, positionName, fromN, toN);
     onClose();
   }
 
   return (
-    <Modal open onClose={onClose} title={`Par Value Reduction — ${positionName}`} width={360}>
+    <Modal open onClose={onClose} title={`Stock Split / Par Change — ${positionName}`} width={380}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={{ fontSize: 13, color: 'var(--fg-3)', lineHeight: 1.5 }}>
-          Adjusts all lot quantities by <b>newPar/oldPar</b> and buy prices inversely, so total cost is preserved.
+          Enter the split ratio. For a <b>1→3 split</b>, type From&nbsp;=&nbsp;1 and To&nbsp;=&nbsp;3. Quantities and buy prices are adjusted so total cost stays the same.
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ flex: 1 }}>
-            <label className="form-label">Old par value</label>
-            <input type="number" min="0.001" step="any" value={oldPar} onChange={e => { setOldPar(e.target.value); setError(''); }} autoFocus />
+            <label className="form-label">From (units)</label>
+            <input type="number" min="0.001" step="any" value={fromUnits}
+                   onChange={e => { setFromUnits(e.target.value); setError(''); }} autoFocus />
           </div>
+          <div style={{ paddingTop: 20, color: 'var(--fg-3)', fontSize: 18, fontWeight: 300 }}>→</div>
           <div style={{ flex: 1 }}>
-            <label className="form-label">New par value</label>
-            <input type="number" min="0.001" step="any" value={newPar} onChange={e => { setNewPar(e.target.value); setError(''); }} placeholder="e.g. 1" />
+            <label className="form-label">To (units)</label>
+            <input type="number" min="0.001" step="any" value={toUnits}
+                   onChange={e => { setToUnits(e.target.value); setError(''); }} placeholder="e.g. 3" />
           </div>
         </div>
-        {newPar && !error && parseFloat(newPar) > 0 && parseFloat(oldPar) > 0 && parseFloat(newPar) < parseFloat(oldPar) && (() => {
-          const ratio = parseFloat(newPar) / parseFloat(oldPar);
+        {toUnits && valid && (() => {
+          const ratio = toN / fromN;
           const pos   = Store.positions(classKey).find(p => p.name === positionName);
           if (!pos) return null;
+          const isSplit = toN > fromN;
           return (
             <div style={{ fontSize: 12, color: 'var(--fg-2)', background: 'var(--bg-sunken)', borderRadius: 6, padding: '8px 10px' }}>
+              <div style={{ fontWeight: 600, marginBottom: 4, color: isSplit ? 'var(--up,#1a9e5c)' : 'var(--down,#d63b3b)' }}>
+                {isSplit ? `Split ×${ratio.toFixed(4).replace(/\.?0+$/, '')}` : `Reduction ×${ratio.toFixed(4).replace(/\.?0+$/, '')}`}
+              </div>
               Qty: <b>{window.fmtQty(pos.qty)}</b> → <b>{window.fmtQty(+(pos.qty * ratio).toFixed(8))}</b><br />
               Avg cost: <b>{window.fmtPrice(pos.avgPrice, Store.classByKey(classKey).ccy)}</b> → <b>{window.fmtPrice(+(pos.avgPrice / ratio).toFixed(8), Store.classByKey(classKey).ccy)}</b>
             </div>
@@ -536,7 +547,7 @@ function ParValueModal({ classKey, positionName, onClose }) {
         {error && <div style={{ color: 'var(--red-600)', fontSize: 12 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <Button variant="secondary" size="sm" onClick={onClose}>Cancel</Button>
-          <Button size="sm" onClick={apply} disabled={!newPar}>Apply</Button>
+          <Button size="sm" onClick={apply} disabled={!toUnits || !valid}>Apply</Button>
         </div>
       </div>
     </Modal>
@@ -736,7 +747,7 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
                               </button>
                             )}
                             {(classKey === 'thaiStock' || classKey === 'usaStock' || classKey === 'etf') && (
-                              <button className="chart-open-btn" title="Par value reduction"
+                              <button className="chart-open-btn" title="Stock split / par change"
                                       style={{ color: 'var(--fg-3)' }}
                                       onClick={e => { e.stopPropagation(); setParValuePos(p.name); }}>
                                 <Icon name="scissors" size={12} />

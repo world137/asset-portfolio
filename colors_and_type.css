@@ -6,56 +6,56 @@
 /* System fonts — SF Pro on Apple, Segoe UI on Windows, Inter on Linux */
 
 :root {
-  /* ---------- COLOR — Ink (cool neutral / primary) -------------------- */
-  --ink-950: #070d18;
-  --ink-900: #0e1726;   /* primary brand ink — headings, primary buttons */
-  --ink-800: #1b2638;
-  --ink-700: #2c3a52;
-  --ink-600: #44516a;
-  --ink-500: #5a6677;   /* secondary text */
-  --ink-400: #7a869a;   /* tertiary text, icons */
-  --ink-300: #a6b0bf;   /* disabled, placeholder */
-  --ink-200: #d5dae3;   /* dividers, strong borders */
-  --ink-150: #e3e7ee;
-  --ink-100: #e8ebf1;   /* default borders, table rules */
-  --ink-75:  #eef0f5;
-  --ink-50:  #f3f5f8;   /* subtle row hover / striping */
+  /* ---------- COLOR — Ink (warm-soft indigo neutral / primary) -------- */
+  --ink-950: #1a1528;
+  --ink-900: #2d2650;   /* primary brand ink — headings, primary buttons */
+  --ink-800: #3d3566;
+  --ink-700: #5c5483;
+  --ink-600: #7a72a0;
+  --ink-500: #9990b8;   /* secondary text */
+  --ink-400: #b8b0d0;   /* tertiary text, icons */
+  --ink-300: #d4cfea;   /* disabled, placeholder */
+  --ink-200: #e8e4f4;   /* dividers, strong borders */
+  --ink-150: #eeebf7;
+  --ink-100: #f2eff9;   /* default borders, table rules */
+  --ink-75:  #f5f3fb;
+  --ink-50:  #f8f6fd;   /* subtle row hover / striping */
 
-  /* ---------- COLOR — Paper (warm surface) ---------------------------- */
-  --paper:   #faf9f6;   /* app background — slightly warm off-white */
+  /* ---------- COLOR — Paper (pale lavender surface) ------------------- */
+  --paper:   #f8f6fd;   /* app background — pale lavender */
   --paper-2: #ffffff;   /* card / panel surface */
-  --paper-3: #f5f3ee;   /* sunken / inset surface */
+  --paper-3: #f0ecf9;   /* sunken / inset surface */
 
-  /* ---------- COLOR — Copper (accent) --------------------------------- */
-  --copper-900: #4f3208;
-  --copper-700: #7a5012;
-  --copper-600: #9a6b1f;  /* PRIMARY accent — links, focus, key actions */
-  --copper-500: #b6862f;
-  --copper-300: #d9b677;
-  --copper-100: #f0e1bf;
-  --copper-50:  #f7eed7;
-  --copper-25:  #faf3e3;
+  /* ---------- COLOR — Copper (pastel periwinkle accent) --------------- */
+  --copper-900: #2e3a8c;
+  --copper-700: #4a5cbf;
+  --copper-600: #6272d4;  /* PRIMARY accent — links, focus, key actions */
+  --copper-500: #7b8fdc;
+  --copper-300: #a5b4f0;
+  --copper-100: #dde3fc;
+  --copper-50:  #edf0fd;
+  --copper-25:  #f4f6fe;
 
   /* ---------- COLOR — Semantic ---------------------------------------- */
-  --green-700: #155c3b;
-  --green-600: #1f7a4d;   /* approved / active / success */
-  --green-100: #d6ead9;
-  --green-50:  #ebf5ec;
+  --green-700: #2d7a5a;
+  --green-600: #3d9e74;   /* profit / success — sage green */
+  --green-100: #c8ead9;
+  --green-50:  #e4f5ec;
 
-  --red-700:   #8c2828;
-  --red-600:   #b43a3a;    /* declined / error / danger */
-  --red-100:   #f4d6d6;
-  --red-50:    #faeaea;
+  --red-700:   #a04040;
+  --red-600:   #c96060;   /* loss / error — rose red */
+  --red-100:   #f2d4d4;
+  --red-50:    #faeded;
 
-  --amber-700: #8a6310;
-  --amber-600: #b68a1f;    /* pending / warning */
-  --amber-100: #f3e3b5;
-  --amber-50:  #faf2d7;
+  --amber-700: #8a7010;
+  --amber-600: #b8981f;   /* pending / warning */
+  --amber-100: #f3eab5;
+  --amber-50:  #faf5d7;
 
   --blue-700:  #1f4a85;
-  --blue-600:  #2962ab;    /* info / informational tag */
-  --blue-100:  #d4e0f0;
-  --blue-50:   #eaf0f8;
+  --blue-600:  #5577cc;   /* info / informational tag */
+  --blue-100:  #d4dcf5;
+  --blue-50:   #eaeefd;
 
   /* ---------- COLOR — Roles (semantic aliases) ------------------------ */
   --bg-app:        var(--paper);
@@ -143,8 +143,8 @@
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
   --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.10), 0 1px 4px rgba(0, 0, 0, 0.06);
   --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.16), 0 4px 12px rgba(0, 0, 0, 0.08);
-  --shadow-focus: 0 0 0 3px rgba(94, 92, 230, 0.30);
-  --shadow-focus-danger: 0 0 0 3px rgba(255, 69, 58, 0.28);
+  --shadow-focus: 0 0 0 3px rgba(98, 114, 212, 0.28);
+  --shadow-focus-danger: 0 0 0 3px rgba(201, 96, 96, 0.28);
 
   /* ---------- MOTION -------------------------------------------------- */
   --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
