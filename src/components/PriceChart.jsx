@@ -154,14 +154,23 @@ function CandleChart({ bars, daysBack }) {
     if (m !== lastMon) { xLabels.push({ i, label: d.toLocaleString([], { month: 'short' }) }); lastMon = m; }
   }
 
-  // ── Indicators computed over display slice ──────────────────────────────
+  // ── Indicators computed over a warm-up window then trimmed to display ──────
+  // Prepend extra bars so indicators are fully seeded by bar 0 of `display`.
+  const WARMUP = 200; // enough for EMA200 and RSI
+  const startIdx = Math.max(0, bars.length - (daysBack || bars.length) - WARMUP);
+  const warmBars = bars.slice(startIdx);
+  const warmCloses = warmBars.map(b => b.c);
+  const trim = warmBars.length - display.length; // bars to drop from front after calc
+
+  function _trim(arr) { return arr.slice(trim); }
+
+  const ema20  = _trim(_iEma(warmCloses, 20));
+  const ema50  = _trim(_iEma(warmCloses, 50));
+  const ema100 = _trim(_iEma(warmCloses, 100));
+  const ema200 = _trim(_iEma(warmCloses, 200));
+  const rsi14  = _trim(_iRsi(warmCloses, 14));
+  const macd   = (() => { const m = _iMacd(warmCloses, 12, 26, 9); return { line: _trim(m.line), signal: _trim(m.signal), hist: _trim(m.hist) }; })();
   const closes = display.map(b => b.c);
-  const ema20  = _iEma(closes, 20);
-  const ema50  = _iEma(closes, 50);
-  const ema100 = _iEma(closes, 100);
-  const ema200 = _iEma(closes, 200);
-  const rsi14  = _iRsi(closes, 14);
-  const macd   = _iMacd(closes, 12, 26, 9);
 
   const EMA_LINES = [
     { data: ema20,  color: '#2979ff', label: 'EMA20'  },
