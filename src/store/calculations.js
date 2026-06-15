@@ -157,6 +157,7 @@
   }
 
   function grandTotalInTHB(state) {
+    if (!state || !state.fx) return 0;
     const rate = state.fx.USDTHB || window.SEED_FX_USDTHB;
     let value = 0;
     for (const cls of window.ASSET_CLASSES) {

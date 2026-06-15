@@ -285,6 +285,7 @@
   // ── Snapshot ──────────────────────────────────────────────────────────────────
   function takeSnapshot() {
     const { state } = _ctx;
+    if (!state || !state.fx) return;
     const today = new Date().toISOString().slice(0, 10);
     const value = window.StoreCalc.grandTotalInTHB(state);
     if (value <= 0) return;

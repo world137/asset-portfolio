@@ -483,42 +483,38 @@ function formatReportMessage(groups, assetData, summary) {
   }
   msg += `${D}\n`;
 
-  // Section 4: Ranked all-holdings table (class column removed, rank added)
-  const allRows = groups.flatMap(g =>
-    g.assets.map(a => ({
-      name:  a.name,
-      pct:   a.pct,
-      price: fmtPrice(a.price, a.ccy),
-      chg:   a.changeAbs != null ? fmtChange(a.changeAbs, a.ccy) : '—',
-    }))
-  ).sort((a, b) => b.pct - a.pct);
+  // Section 4: Per-class ranked tables
+  const pad    = (s, n) => String(s).padEnd(n);
+  const padR   = (s, n) => String(s).padStart(n);
+  const pctStr = r => (r.pct >= 0 ? '▲+' : '▼') + r.pct.toFixed(2) + '%';
 
-  if (allRows.length) {
-    const pad    = (s, n) => String(s).padEnd(n);
-    const padR   = (s, n) => String(s).padStart(n);
-    const pctStr = r => (r.pct >= 0 ? '▲+' : '▼') + r.pct.toFixed(2) + '%';
+  for (const g of groups) {
+    const em   = CLASS_EMOJI[g.key] || '📁';
+    const rows = [...g.assets]
+      .sort((a, b) => b.pct - a.pct)
+      .map((a, i) => ({
+        rank:  String(i + 1) + '.',
+        name:  a.name,
+        pct:   pctStr(a),
+        price: fmtPrice(a.price, a.ccy),
+        chg:   a.changeAbs != null ? fmtChange(a.changeAbs, a.ccy) : '—',
+      }));
 
-    const formattedRows = allRows.map((r, i) => ({
-      rank:  String(i + 1) + '.',
-      name:  r.name,
-      pct:   pctStr(r),
-      price: r.price,
-      chg:   r.chg,
-    }));
+    if (!rows.length) continue;
 
-    const rkW = Math.max(2, ...formattedRows.map(r => r.rank.length));
-    const nW  = Math.max(4, ...formattedRows.map(r => r.name.length));
-    const pW  = Math.max(5, ...formattedRows.map(r => r.pct.length));
-    const prW = Math.max(5, ...formattedRows.map(r => r.price.length));
-    const gW  = Math.max(3, ...formattedRows.map(r => r.chg.length));
+    const rkW = Math.max(2, ...rows.map(r => r.rank.length));
+    const nW  = Math.max(4, ...rows.map(r => r.name.length));
+    const pW  = Math.max(5, ...rows.map(r => r.pct.length));
+    const prW = Math.max(5, ...rows.map(r => r.price.length));
+    const gW  = Math.max(3, ...rows.map(r => r.chg.length));
 
     const hdr  = pad('#', rkW) + ' ' + pad('Name', nW) + '  ' + padR('Day%', pW) + '  ' + padR('Price', prW) + '  ' + padR('Chg', gW);
     const sep  = '─'.repeat(hdr.length);
-    const body = formattedRows.map(r =>
+    const body = rows.map(r =>
       pad(r.rank, rkW) + ' ' + pad(r.name, nW) + '  ' + padR(r.pct, pW) + '  ' + padR(r.price, prW) + '  ' + padR(r.chg, gW)
     ).join('\n');
 
-    msg += `<pre>${escHtml(`${hdr}\n${sep}\n${body}`)}</pre>\n`;
+    msg += `${em} <b>${escHtml(g.label)}</b>\n<pre>${escHtml(`${hdr}\n${sep}\n${body}`)}</pre>\n`;
   }
 
   return msg;
