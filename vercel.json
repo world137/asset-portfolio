@@ -14,7 +14,7 @@
       "maxDuration": 15
     },
     "api/telegram.js": {
-      "maxDuration": 30
+      "maxDuration": 60
     },
     "api/bonds.js": {
       "maxDuration": 20

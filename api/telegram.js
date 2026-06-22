@@ -560,6 +560,32 @@ async function tgPhoto(chatId, photoUrl, caption) {
 
 // ── Core report sender (shared by cron/manual and /report command) ─────────────
 
+async function tgSendSafe(chatId, text) {
+  const MAX = 4096;
+  if (text.length <= MAX) {
+    const r = await tgSend(chatId, text);
+    if (!r.ok) throw new Error('Telegram API error: ' + JSON.stringify(r));
+    return;
+  }
+  // Split on paragraph boundaries to stay under limit
+  const chunks = [];
+  let current = '';
+  for (const para of text.split('\n')) {
+    const line = para + '\n';
+    if (current.length + line.length > MAX) {
+      if (current) chunks.push(current.trimEnd());
+      current = line;
+    } else {
+      current += line;
+    }
+  }
+  if (current.trim()) chunks.push(current.trimEnd());
+  for (const chunk of chunks) {
+    const r = await tgSend(chatId, chunk);
+    if (!r.ok) throw new Error('Telegram API error: ' + JSON.stringify(r));
+  }
+}
+
 async function runReport(portfolioId) {
   const [holdings, meta] = await Promise.all([
     loadHoldings(portfolioId),
@@ -612,8 +638,7 @@ async function runReport(portfolioId) {
     }
   }
 
-  const result = await tgSend(CHAT_ID, message);
-  if (!result.ok) throw new Error('Telegram API error: ' + JSON.stringify(result));
+  await tgSendSafe(CHAT_ID, message);
 
   console.log('[telegram] sent ok');
   return {
