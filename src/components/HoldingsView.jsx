@@ -190,7 +190,7 @@ function LotRows({ position, classKey, ccy, onEdit }) {
                   <tr key={lot.id}>
                     <td className="lbl">Lot {i + 1}</td>
                     <td className="num">{window.fmtPrice(lot.price, ccy)}</td>
-                    <td className="num">{window.fmtQty(lot.qty)}</td>
+                    <td className="num">{window.fmtQty(lot.qty, classKey === 'crypto' ? 8 : undefined)}</td>
                     <td className="num">{window.fmtMoney(lot.cost, ccy, 2)}</td>
                     <td className="num">{window.fmtMoney(lot.value, ccy, 2)}</td>
                     <td className={'num ' + (lot.profit >= 0 ? 'up' : 'down')}>{(lot.profit >= 0 ? '+' : '−') + window.fmtMoney(Math.abs(lot.profit), ccy, 2)}</td>
@@ -710,11 +710,12 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
                   <SortTh col="profit"   label="P/L"      right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
                   <SortTh col="pct"      label="%"        right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
                   <th className="num" style={{ whiteSpace: 'nowrap', width: 80 }}>Weight</th>
+                  <th style={{ width: 44 }}></th>
                 </tr>
               </thead>
               <tbody>
                 {sortedFiltered.length === 0 && (
-                  <tr><td colSpan={10 + (hasDayChg && !isOther ? 1 : 0) + (hasPE && !isOther ? 1 : 0)}><div className="empty">No holdings yet. <a className="t-link" onClick={() => onAdd(classKey)}>Add your first one →</a></div></td></tr>
+                  <tr><td colSpan={11 + (hasDayChg && !isOther ? 1 : 0) + (hasPE && !isOther ? 1 : 0)}><div className="empty">No holdings yet. <a className="t-link" onClick={() => onAdd(classKey)}>Add your first one →</a></div></td></tr>
                 )}
                 {sortedFiltered.map(p => {
                   const color   = window.CLASS_COLORS[classKey];
@@ -761,7 +762,7 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
                         <td onClick={e => e.stopPropagation()}>
                           <PositionTagCell classKey={classKey} positionName={p.name} />
                         </td>
-                        <td className="num">{window.fmtQty(p.qty)}</td>
+                        <td className="num">{window.fmtQty(p.qty, isCrypto ? 8 : undefined)}</td>
                         <td className="num" style={{ color: 'var(--fg-3)' }}>{window.fmtPrice(p.avgPrice, cls.ccy)}</td>
                         <td className="num" onClick={e => e.stopPropagation()}>
                           <PriceEdit position={p} classKey={classKey} ccy={cls.ccy} />
@@ -802,6 +803,12 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
                               </div>
                             );
                           })()}
+                        </td>
+                        <td onClick={e => e.stopPropagation()} style={{ textAlign: 'center' }}>
+                          <button className="chart-open-btn" title={'Add lot to ' + p.name}
+                                  onClick={() => onAdd(classKey, p.name)}>
+                            <Icon name="plus" size={13} />
+                          </button>
                         </td>
                       </tr>
                       {open && <LotRows position={p} classKey={classKey} ccy={cls.ccy} onEdit={onEditLot} />}

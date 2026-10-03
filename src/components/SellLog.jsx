@@ -154,7 +154,7 @@ function SellLogView() {
                 </datalist>
                 {selectedPos && (
                   <div className="t-small" style={{ marginTop: 5, color: 'var(--fg-3)' }}>
-                    Holding: <strong>{window.fmtQty(availableQty)}</strong> units &nbsp;·&nbsp; Avg cost: <strong>{window.fmtMoney(avgCost, cls.ccy, 4)}</strong>
+                    Holding: <strong>{window.fmtQty(availableQty, classKey === 'crypto' ? 8 : undefined)}</strong> units &nbsp;·&nbsp; Avg cost: <strong>{window.fmtMoney(avgCost, cls.ccy, 4)}</strong>
                   </div>
                 )}
                 {name.trim() && !selectedPos && (
@@ -193,7 +193,7 @@ function SellLogView() {
                 )}
                 {overQty && (
                   <div className="t-small" style={{ marginTop: 5, color: '#f59e0b' }}>
-                    Warning: exceeds current holding of {window.fmtQty(availableQty)} units.
+                    Warning: exceeds current holding of {window.fmtQty(availableQty, classKey === 'crypto' ? 8 : undefined)} units.
                   </div>
                 )}
               </div>
@@ -366,7 +366,7 @@ function SellLogView() {
                         </span>
                       </td>
                       <td><span style={{ font: '600 13px/1 var(--font-sans)' }}>{s.name.replace(/THB$/, '')}</span></td>
-                      <td className="num">{window.fmtQty(s.qty)}</td>
+                      <td className="num">{window.fmtQty(s.qty, s.classKey === 'crypto' ? 8 : undefined)}</td>
                       <td className="num" style={{ color: 'var(--fg-3)' }}>{window.fmtMoney(s.buyPrice, s.ccy, 4)}</td>
                       <td className="num">{window.fmtMoney(s.sellPrice, s.ccy, 4)}</td>
                       <td className="num" style={{ color: 'var(--fg-3)' }}>{sym}{window.fmtBig(dispCost)}</td>
