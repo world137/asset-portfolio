@@ -1,0 +1,32 @@
+# Local stand-in for Supabase: Postgres + PostgREST. Used by `make local`.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: asset-portfolio-db
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: portfolio
+    ports: ["54329:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./database/auth_migration.sql:/docker-entrypoint-initdb.d/02-auth.sql:ro
+      - ./database/eco_events_migration.sql:/docker-entrypoint-initdb.d/03-eco.sql:ro
+      - ./database/local_seed.sql:/docker-entrypoint-initdb.d/04-seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d portfolio"]
+      interval: 2s
+      retries: 30
+  rest:
+    image: postgrest/postgrest:latest
+    container_name: asset-portfolio-rest
+    depends_on:
+      db: { condition: service_healthy }
+    ports: ["3001:3000"]
+    environment:
+      PGRST_DB_URI: postgres://postgres:postgres@db:5432/portfolio
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: postgres
+      PGRST_JWT_SECRET: local-dev-secret-local-dev-secret-123
+volumes:
+  pgdata:

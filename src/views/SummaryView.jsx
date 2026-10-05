@@ -190,7 +190,7 @@ function SummaryView() {
                     </td>
                     <td><span style={{ font: '600 13px/1 var(--font-sans)', color: 'var(--fg-1)' }}>{r.name.replace(/THB$/, '')}</span></td>
                     <td><span className="sectorchip" style={{ cursor: 'default' }}>{r.sector}</span></td>
-                    <td className="num">{window.fmtQty(r.qty)}</td>
+                    <td className="num">{window.fmtQty(r.qty, r.classKey === 'crypto' ? 8 : undefined)}</td>
                     <td className="num" style={{ color: 'var(--fg-3)' }}>{sym}{window.fmtBig(r.avgPriceDisp)}</td>
                     <td className="num">
                       <span className={r.priceChg >= 0 ? 'up' : 'down'} style={{ fontWeight: 600 }}>
@@ -442,7 +442,7 @@ function SectorDrillModal({ sector, color, onClose }) {
                         {p.name.replace(/THB$/, '')}
                       </span>
                     </td>
-                    <td className="num">{window.fmtQty(p.qty)}</td>
+                    <td className="num">{window.fmtQty(p.qty, cls.key === 'crypto' ? 8 : undefined)}</td>
                     <td className="num">{window.fmtPrice(p.cur, cls.ccy)}</td>
                     <td className="num">{sym}{window.fmtBig(dispVal)}</td>
                     <td className={'num ' + (p.profit >= 0 ? 'up' : 'down')}>

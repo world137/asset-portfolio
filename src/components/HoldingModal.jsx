@@ -3,7 +3,7 @@
 
 const OTHER_TYPES = ['Provident Fund', 'Insurance', 'Debenture', 'Bond', 'Other'];
 
-function HoldingModal({ open, onClose, classKey, lot }) {
+function HoldingModal({ open, onClose, classKey, lot, presetName }) {
   const cls     = classKey ? Store.classByKey(classKey) : null;
   const isOther = classKey === 'other';
   const isCrypto = classKey === 'crypto';
@@ -29,12 +29,12 @@ function HoldingModal({ open, onClose, classKey, lot }) {
         note:   Store.getHoldingNote(classKey, lot.name) || '',
       });
     } else {
-      setF(blank);
+      setF({ ...blank, name: presetName || '' });
       setDeductOn(false);
       setWalletAccId('');
       setWalletFxRate('');
     }
-  }, [open, lot, classKey]);
+  }, [open, lot, classKey, presetName]);
 
   if (!open || !cls) return null;
   const set = (k) => (e) => setF(s => ({ ...s, [k]: e.target.value }));
@@ -96,7 +96,7 @@ function HoldingModal({ open, onClose, classKey, lot }) {
           <label className="flabel">{isOther ? 'Name / Symbol' : 'Ticker / Symbol'}</label>
           <input className="input" value={f.name} onChange={set('name')}
                  placeholder={isOther ? 'e.g. BCP292A' : isCrypto ? 'e.g. BTC, ETH, SOL' : 'e.g. AAPL'}
-                 autoFocus />
+                 autoFocus={!presetName} />
         </div>
 
         {isOther && (
@@ -114,7 +114,7 @@ function HoldingModal({ open, onClose, classKey, lot }) {
         </div>
         <div>
           <label className="flabel">Quantity / Units</label>
-          <input className="input" type="number" step="any" value={f.qty} onChange={set('qty')} placeholder="0" />
+          <input className="input" type="number" step={isCrypto ? '0.00000001' : 'any'} value={f.qty} onChange={set('qty')} placeholder="0" />
         </div>
 
         <div>

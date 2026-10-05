@@ -42,17 +42,10 @@ function LoginPage({ onSuccess }) {
   const [pw,    setPw]    = React.useState('');
   const [error, setError] = React.useState('');
   const [busy,  setBusy]  = React.useState(false);
-  const [step,  setStep]  = React.useState('username'); // 'username' | 'password'
-
-  const goToPassword = (e) => {
-    e.preventDefault();
-    if (!username.trim()) { setError('Please enter your name.'); return; }
-    setError('');
-    setStep('password');
-  };
 
   const submit = async (e) => {
     e.preventDefault();
+    if (!username.trim()) { setError('Please enter your username.'); return; }
     setBusy(true);
     try {
       const passwordHash = await sha256Hex(pw);
@@ -93,78 +86,43 @@ function LoginPage({ onSuccess }) {
               <path d="M4 19V9M10 19V5M16 19v-7M22 19H2" />
             </svg>
           </div>
-          <div className="login-title">
-            {step === 'username' ? 'Sign in' : `Welcome, ${username}`}
-          </div>
-          <div className="login-sub">
-            {step === 'username' ? 'to continue to Portfolio Tracker' : 'Enter your password to continue'}
-          </div>
+          <div className="login-title">Sign in</div>
+          <div className="login-sub">to continue to Portfolio Tracker</div>
         </div>
 
-        {step === 'username' ? (
-          <form className="login-form" onSubmit={goToPassword} autoComplete="off">
-            <div className="login-field">
-              <label className="login-label" htmlFor="ptf-user">Username</label>
-              <input
-                id="ptf-user"
-                className={'login-input' + (error ? ' err' : '')}
-                type="text"
-                placeholder="Your name"
-                value={username}
-                onChange={e => { setUsername(e.target.value); setError(''); }}
-                autoFocus
-                autoComplete="username"
-                required
-              />
-              {error && <div className="login-error">{error}</div>}
-            </div>
-            <button className="login-btn" type="submit" disabled={!username.trim()}>
-              Next
-            </button>
-          </form>
-        ) : (
-          <form className="login-form" onSubmit={submit} autoComplete="off">
-            <div className="login-field">
-              {/* Username display chip */}
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14,
-                padding: '8px 12px', borderRadius: 10, background: 'var(--bg-sunken)',
-                border: '1px solid var(--border-2)',
-              }}>
-                <div style={{
-                  width: 28, height: 28, borderRadius: '50%', background: 'var(--accent)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: '#fff', fontWeight: 700, fontSize: 13, flexShrink: 0,
-                }}>
-                  {username.slice(0, 1).toUpperCase()}
-                </div>
-                <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--fg-1)' }}>{username}</span>
-                <button type="button"
-                  onClick={() => { setStep('username'); setError(''); setPw(''); }}
-                  style={{ fontSize: 11, color: 'var(--fg-3)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-                  Change
-                </button>
-              </div>
-
-              <label className="login-label" htmlFor="ptf-pw">Password</label>
-              <input
-                id="ptf-pw"
-                className={'login-input' + (error ? ' err' : '')}
-                type="password"
-                placeholder="Enter your password"
-                value={pw}
-                onChange={e => { setPw(e.target.value); setError(''); }}
-                autoFocus
-                autoComplete="current-password"
-                required
-              />
-              {error && <div className="login-error">{error}</div>}
-            </div>
-            <button className="login-btn" type="submit" disabled={busy || !pw}>
-              {busy ? 'Checking…' : 'Sign in'}
-            </button>
-          </form>
-        )}
+        <form className="login-form" onSubmit={submit} autoComplete="off">
+          <div className="login-field">
+            <label className="login-label" htmlFor="ptf-user">Username</label>
+            <input
+              id="ptf-user"
+              className={'login-input' + (error ? ' err' : '')}
+              type="text"
+              placeholder="Your username"
+              value={username}
+              onChange={e => { setUsername(e.target.value); setError(''); }}
+              autoFocus
+              autoComplete="username"
+              required
+            />
+          </div>
+          <div className="login-field">
+            <label className="login-label" htmlFor="ptf-pw">Password</label>
+            <input
+              id="ptf-pw"
+              className={'login-input' + (error ? ' err' : '')}
+              type="password"
+              placeholder="Enter your password"
+              value={pw}
+              onChange={e => { setPw(e.target.value); setError(''); }}
+              autoComplete="current-password"
+              required
+            />
+            {error && <div className="login-error">{error}</div>}
+          </div>
+          <button className="login-btn" type="submit" disabled={busy || !username.trim() || !pw}>
+            {busy ? 'Checking…' : 'Sign in'}
+          </button>
+        </form>
       </div>
     </div>
   );

@@ -111,7 +111,43 @@ function _linePath(vals, xOf, yOf) {
 
 // ── Shared Candle Chart (used by TechnicalAnalysis too via window.CandleChart) ─
 
-function CandleChart({ bars, daysBack }) {
+function CandleChart({ bars, daysBack, storageKey, daysOptions, onDaysBack }) {
+  const symKey = storageKey ? String(storageKey).trim().toUpperCase() : null;
+  const dr = window.useChartDrawings(symKey);
+  const [S, setS] = React.useState(window.pvLoadSettings);
+  const [showPine, setShowPine] = React.useState(false);
+  const [full, setFull] = React.useState(false);
+  const [win, setWin] = React.useState({ w: window.innerWidth, h: window.innerHeight });
+  const pineClip = React.useRef('pvclip' + Math.random().toString(36).slice(2, 8)).current;
+  const pine = React.useMemo(() => {
+    if (!bars.length) return null;
+    const dlen = Math.min(bars.length, daysBack || bars.length);
+    const start = Math.max(0, bars.length - dlen - window.pvWarmup(S));
+    const warm = bars.slice(start);
+    return { data: window.computePine(warm, S), trim: warm.length - dlen };
+  }, [bars, daysBack, S]);
+  function patchPine(patch) {
+    setS(prev => { const next = { ...prev, ...patch }; window.pvSaveSettings(next); return next; });
+  }
+  function resetPine() { setS({ ...window.PV_DEFAULTS }); window.pvSaveSettings(window.PV_DEFAULTS); }
+
+  // Full-page mode: track window size, lock page scroll, Esc to leave
+  React.useEffect(() => {
+    if (!full) return;
+    const onResize = () => setWin({ w: window.innerWidth, h: window.innerHeight });
+    const onKey = e => { if (e.key === 'Escape' && dr.tool === 'cursor' && !dr.draft && !dr.selId) setFull(false); };
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    onResize();
+    window.addEventListener('resize', onResize);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [full, dr.tool, dr.draft, dr.selId]);
+
   const [hoverIdx,   setHoverIdx]   = React.useState(null);
   const [showInds,   setShowInds]   = React.useState(false);
   const svgRef = React.useRef(null);
@@ -120,7 +156,8 @@ function CandleChart({ bars, daysBack }) {
   const display = bars.slice(-(daysBack || bars.length));
   if (!display.length) return <div className="linechart-empty">No candle data.</div>;
 
-  const W = 680, H = 220;
+  const W = full ? Math.max(900, win.w - 48) : 680;
+  const H = full ? Math.max(320, win.h - (showInds ? 480 : 270)) : 220;
   const PAD = { t: 10, r: 10, b: 28, l: 64 };
   const iW = W - PAD.l - PAD.r;
   const iH = H - PAD.t - PAD.b;
@@ -134,11 +171,23 @@ function CandleChart({ bars, daysBack }) {
   const yRange = yHi - yLo;
 
   const n    = display.length;
-  const step = iW / n;
+  const extra = pine && S.showIchi ? S.ichiDisp - 1 : 0; // room for the Ichimoku forward span
+  const step = iW / (n + extra);
   const cw   = Math.max(2, step * 0.6);
 
   const xOf  = i => PAD.l + i * step + step / 2;
   const yOf  = v => PAD.t + (1 - (v - yLo) / yRange) * iH;
+
+  // Geometry shared with the drawing layer
+  const geom = { W, H, PAD, iW, iH, n, step, yLo, yRange, display, times: display.map(b => b.t) };
+  const svgPt = e => {
+    const r = svgRef.current.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) };
+  };
+
+  const pineParts = pine && window.renderPine(pine.data, S, {
+    display, trim: pine.trim, n, extra, xOf, yOf, PAD, iW, iH, step, clipId: pineClip,
+  });
 
   const yTicks = [0, 0.25, 0.5, 0.75, 1].map(f => ({
     y: PAD.t + (1 - f) * iH,
@@ -193,8 +242,29 @@ function CandleChart({ bars, daysBack }) {
 
   const hovered = hoverIdx != null ? display[hoverIdx] : null;
 
-  return (
-    <div>
+  const fullStyle = full ? {
+    position: 'fixed', inset: 0, zIndex: 10000, overflow: 'auto', padding: '12px 24px',
+    background: 'var(--bg-app, var(--bg-surface))',
+  } : undefined;
+
+  const content = (
+    <div style={fullStyle}>
+      {full && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+          <b style={{ fontSize: 15 }}>{symKey || 'Chart'}</b>
+          {daysOptions && onDaysBack && (
+            <div className="layoutseg">
+              {daysOptions.map(d => (
+                <button key={d} className={daysBack === d ? 'on' : ''} onClick={() => onDaysBack(d)}>{d}D</button>
+              ))}
+            </div>
+          )}
+          <div style={{ flex: 1 }} />
+          <span style={{ fontSize: 11, color: 'var(--fg-4)' }}>Esc to close</span>
+        </div>
+      )}
+      <window.ChartDrawToolbar dr={dr} symbol={symKey} />
+
       {/* ── Tip row + Indicators toggle ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
         <div className="price-chart-tip" style={{ flex: 1, marginBottom: 0 }}>
@@ -232,7 +302,35 @@ function CandleChart({ bars, daysBack }) {
           }}>
           Indicators
         </button>
+        <button
+          onClick={() => setShowPine(v => !v)}
+          title="CDC ActionZone + Ichimoku + Confluence + Volume Profile overlays"
+          style={{
+            marginTop: 4,
+            fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 8, cursor: 'pointer', flexShrink: 0,
+            background: showPine ? 'var(--bg-selected)' : 'var(--bg-surface)',
+            border: '1px solid ' + (showPine ? 'var(--accent)' : 'var(--border-2)'),
+            color: showPine ? 'var(--accent)' : 'var(--fg-3)',
+          }}>
+          CDC Pro
+        </button>
+        <button
+          onClick={() => setFull(v => !v)}
+          title={full ? 'Exit full page' : 'Open chart full page'}
+          style={{
+            marginTop: 4,
+            fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 8, cursor: 'pointer', flexShrink: 0,
+            background: full ? 'var(--bg-selected)' : 'var(--bg-surface)',
+            border: '1px solid ' + (full ? 'var(--accent)' : 'var(--border-2)'),
+            color: full ? 'var(--accent)' : 'var(--fg-3)',
+          }}>
+          {full ? 'Close ✕' : 'Full page ⛶'}
+        </button>
       </div>
+
+      {showPine && (
+        <window.PineSettingsPanel S={S} onChange={patchPine} onReset={resetPine} onClose={() => setShowPine(false)} />
+      )}
 
       {/* ── EMA Legend (when indicators on) ── */}
       {showInds && (
@@ -251,14 +349,18 @@ function CandleChart({ bars, daysBack }) {
 
       {/* ── Main candle SVG ── */}
       <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className="linechart-svg"
+        style={{ cursor: dr.tool === 'cursor' ? undefined : 'crosshair', userSelect: 'none', maxHeight: full ? 'none' : undefined }}
         onMouseMove={e => {
           const svg = svgRef.current;
           if (!svg) return;
           const rect = svg.getBoundingClientRect();
           const mx = (e.clientX - rect.left) * (W / rect.width) - PAD.l;
           setHoverIdx(Math.max(0, Math.min(n - 1, Math.floor(mx / step))));
+          dr.handleMove(svgPt(e), geom);
         }}
-        onMouseLeave={() => setHoverIdx(null)}>
+        onMouseUp={dr.endDrag}
+        onClick={e => dr.handleClick(svgPt(e), geom)}
+        onMouseLeave={() => { setHoverIdx(null); dr.endDrag(); }}>
 
         {yTicks.map((tk, i) => (
           <g key={i}>
@@ -280,6 +382,9 @@ function CandleChart({ bars, daysBack }) {
             {label}
           </text>
         ))}
+
+        {pineParts && pineParts.defs}
+        {pineParts && pineParts.back}
 
         {display.map((b, i) => {
           const up  = b.c >= (b.o ?? b.c);
@@ -306,11 +411,16 @@ function CandleChart({ bars, daysBack }) {
           return d ? <path key={e.label} d={d} fill="none" stroke={e.color} strokeWidth="1.2" opacity="0.85" /> : null;
         })}
 
+        {pineParts && pineParts.front}
+
         {hoverIdx != null && (
           <line x1={xOf(hoverIdx).toFixed(1)} x2={xOf(hoverIdx).toFixed(1)}
                 y1={PAD.t} y2={PAD.t + iH}
                 stroke="var(--fg-3)" strokeWidth="0.8" strokeDasharray="3 4" />
         )}
+
+        {/* Drawing tools layer */}
+        <window.ChartDrawingsLayer dr={dr} g={geom} />
       </svg>
 
       {/* ── RSI sub-chart ── */}
@@ -441,6 +551,7 @@ function CandleChart({ bars, daysBack }) {
       )}
     </div>
   );
+  return full ? ReactDOM.createPortal(content, document.body) : content;
 }
 
 // ── Line chart (price modal) ──────────────────────────────────────────────────
@@ -720,7 +831,7 @@ function PriceChartModal({ classKey, name, onClose }) {
         <PriceLineChart points={points} range={opt.range} />
       )}
       {!error && chartData && chartType === 'candle' && candleBars.length > 1 && (
-        <CandleChart bars={candleBars} />
+        <CandleChart bars={candleBars} storageKey={symbol} />
       )}
     </Modal>
   );

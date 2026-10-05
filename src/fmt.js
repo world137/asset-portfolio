@@ -24,9 +24,10 @@ window.fmtNum = (n, dec = 2) => {
   return n.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec });
 };
 
-// Quantity: up to 6 significant decimals, trims trailing zeros.
-window.fmtQty = (n) => {
+// Quantity: trims trailing zeros. Default 6 decimals (2 above 1000); pass dec=8 for crypto.
+window.fmtQty = (n, dec) => {
   if (n == null || isNaN(n)) return '—';
+  if (dec != null) return parseFloat(n.toFixed(dec)).toLocaleString('en-US', { maximumFractionDigits: dec });
   if (n >= 1000) return n.toLocaleString('en-US', { maximumFractionDigits: 2 });
   return parseFloat(n.toFixed(6)).toLocaleString('en-US', { maximumFractionDigits: 6 });
 };

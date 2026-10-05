@@ -1249,7 +1249,7 @@ function TechnicalAnalysisCore({ initSymbol, compact }) {
               </div>
             </div>
             <div style={{ padding: '0 8px 12px' }}>
-              <CandleChart bars={candleBars} daysBack={candleDays} />
+              <CandleChart bars={candleBars} daysBack={candleDays} storageKey={symbol} daysOptions={CANDLE_DAYS_OPTS} onDaysBack={setCandleDays} />
             </div>
           </div>
 

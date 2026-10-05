@@ -198,7 +198,7 @@ function App() {
   const totals   = Store.grandTotals();
   const [route,   setRoute]  = React.useState('dashboard');
   const [drawer,  setDrawer] = React.useState(false);
-  const [modal,   setModal]  = React.useState({ open: false, classKey: null, lot: null });
+  const [modal,   setModal]  = React.useState({ open: false, classKey: null, lot: null, name: '' });
   const [syncing,     setSyncing]   = React.useState(false);
   const [dbReady,     setDbReady]   = React.useState(false);
   const [dtOpen,      setDtOpen]    = React.useState(false);
@@ -225,9 +225,9 @@ function App() {
     return () => clearInterval(timer);
   }, [dbReady]);
 
-  const openAdd  = (classKey) => setModal({ open: true, classKey, lot: null });
+  const openAdd  = (classKey, name = '') => setModal({ open: true, classKey, lot: null, name });
   const openEdit = (lot) => setModal({ open: true, classKey: route, lot });
-  const closeModal = () => setModal({ open: false, classKey: null, lot: null });
+  const closeModal = () => setModal({ open: false, classKey: null, lot: null, name: '' });
 
   const refresh = async () => {
     setSyncing(true);
@@ -376,7 +376,7 @@ function App() {
           {Store.classByKey(route) && <HoldingsView classKey={route} onAdd={openAdd} onEditLot={openEdit} />}
         </div>
       </div>
-      <HoldingModal open={modal.open} classKey={modal.classKey} lot={modal.lot} onClose={closeModal} />
+      <HoldingModal open={modal.open} classKey={modal.classKey} lot={modal.lot} presetName={modal.name} onClose={closeModal} />
       <DataTransferModal open={dtOpen} onClose={() => setDtOpen(false)} />
     </div>
   );
