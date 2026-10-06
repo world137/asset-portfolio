@@ -114,18 +114,81 @@ function _linePath(vals, xOf, yOf) {
 function CandleChart({ bars, daysBack, storageKey, daysOptions, onDaysBack }) {
   const symKey = storageKey ? String(storageKey).trim().toUpperCase() : null;
   const dr = window.useChartDrawings(symKey);
+  const svgRef = React.useRef(null);
+
+  // ── Pan / zoom view window (indices into `bars`) ───────────────────────────
+  const total = bars.length;
+  const [view, setView] = React.useState(() => ({
+    count: Math.max(1, Math.min(daysBack || total, total) || 1),
+    end: total - 1,
+  }));
+  const [yZoom, setYZoom] = React.useState(1);
+  const [isPanning, setIsPanning] = React.useState(false);
+  const prevKeyRef      = React.useRef(symKey);
+  const prevDaysBackRef = React.useRef(daysBack);
+  const prevTotalRef    = React.useRef(total);
+  const zoomStateRef    = React.useRef({});
+
+  // Reset to "last N" whenever the symbol changes, a quick-jump button is pressed,
+  // or the underlying dataset size changes (new range/refresh load).
+  React.useEffect(() => {
+    const symChanged   = prevKeyRef.current !== symKey;
+    const daysChanged  = prevDaysBackRef.current !== daysBack;
+    const totalChanged = prevTotalRef.current !== total;
+    prevKeyRef.current = symKey;
+    prevDaysBackRef.current = daysBack;
+    prevTotalRef.current = total;
+    if (!total) return;
+    if (symChanged || daysChanged || totalChanged) {
+      setView({ count: Math.max(1, Math.min(daysBack || total, total)), end: total - 1 });
+      setYZoom(1);
+    }
+  }, [symKey, daysBack, total]);
+
+  const MIN_VIEW = 10;
+  const viewCount = Math.max(1, Math.min(view.count, total || 1));
+  const viewEnd   = Math.max(viewCount - 1, Math.min(view.end, (total || 1) - 1));
+  const viewStart = Math.max(0, viewEnd - viewCount + 1);
+  const isDefaultView = yZoom === 1 && viewEnd === total - 1
+    && viewCount === Math.max(1, Math.min(daysBack || total, total));
+
   const [S, setS] = React.useState(window.pvLoadSettings);
   const [showPine, setShowPine] = React.useState(false);
   const [full, setFull] = React.useState(false);
   const [win, setWin] = React.useState({ w: window.innerWidth, h: window.innerHeight });
   const pineClip = React.useRef('pvclip' + Math.random().toString(36).slice(2, 8)).current;
+
+  // Scroll/trackpad-pinch zoom. Attached as a native (non-passive) listener because
+  // React's synthetic onWheel is passive, so e.preventDefault() there can't stop page scroll.
+  React.useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    function onWheel(e) {
+      const st = zoomStateRef.current;
+      if (!st.total) return;
+      e.preventDefault();
+      const rect = svg.getBoundingClientRect();
+      const mx = (e.clientX - rect.left) * (st.W / rect.width) - st.PAD.l;
+      const frac = Math.max(0, Math.min(1, mx / st.iW));
+      const anchorAbs = st.viewStart + frac * (st.viewCount - 1);
+      const zoomFactor = e.deltaY > 0 ? 1.15 : 1 / 1.15;
+      const nextCount = Math.max(st.MIN_VIEW, Math.min(st.total, Math.round(st.viewCount * zoomFactor)));
+      let nextStart = Math.round(anchorAbs - frac * (nextCount - 1));
+      nextStart = Math.max(0, Math.min(st.total - nextCount, nextStart));
+      setView({ count: nextCount, end: nextStart + nextCount - 1 });
+    }
+    svg.addEventListener('wheel', onWheel, { passive: false });
+    return () => svg.removeEventListener('wheel', onWheel);
+  }, [full]);
+  // Anchored to the current pan/zoom window, not always the latest bars, so the
+  // CDC/Ichimoku overlay stays aligned with whatever range is visible.
   const pine = React.useMemo(() => {
     if (!bars.length) return null;
-    const dlen = Math.min(bars.length, daysBack || bars.length);
-    const start = Math.max(0, bars.length - dlen - window.pvWarmup(S));
-    const warm = bars.slice(start);
+    const dlen = viewEnd - viewStart + 1;
+    const start = Math.max(0, viewStart - window.pvWarmup(S));
+    const warm = bars.slice(start, viewEnd + 1);
     return { data: window.computePine(warm, S), trim: warm.length - dlen };
-  }, [bars, daysBack, S]);
+  }, [bars, viewStart, viewEnd, S]);
   function patchPine(patch) {
     setS(prev => { const next = { ...prev, ...patch }; window.pvSaveSettings(next); return next; });
   }
@@ -150,10 +213,9 @@ function CandleChart({ bars, daysBack, storageKey, daysOptions, onDaysBack }) {
 
   const [hoverIdx,   setHoverIdx]   = React.useState(null);
   const [showInds,   setShowInds]   = React.useState(false);
-  const svgRef = React.useRef(null);
 
   // bars: { t (ms), o, h, l, c, v? }  — t in milliseconds
-  const display = bars.slice(-(daysBack || bars.length));
+  const display = bars.slice(viewStart, viewEnd + 1);
   if (!display.length) return <div className="linechart-empty">No candle data.</div>;
 
   const W = full ? Math.max(900, win.w - 48) : 680;
@@ -166,14 +228,22 @@ function CandleChart({ bars, daysBack, storageKey, daysOptions, onDaysBack }) {
   const yMin = Math.min(...display.map(b => b.l || b.c));
   const ySpan = (yMax - yMin) || yMax * 0.02 || 1;
   const yPad  = ySpan * 0.08;
-  const yLo   = yMin - yPad;
-  const yHi   = yMax + yPad;
+  const autoYLo = yMin - yPad;
+  const autoYHi = yMax + yPad;
+  // Manual Y-axis rescale (drag on the axis): zoom around the auto-fit center.
+  const yMid  = (autoYLo + autoYHi) / 2;
+  const yHalf = (autoYHi - autoYLo) / 2 / yZoom;
+  const yLo   = yMid - yHalf;
+  const yHi   = yMid + yHalf;
   const yRange = yHi - yLo;
 
   const n    = display.length;
   const extra = pine && S.showIchi ? S.ichiDisp - 1 : 0; // room for the Ichimoku forward span
   const step = iW / (n + extra);
   const cw   = Math.max(2, step * 0.6);
+
+  // Keep the native wheel handler's closure (registered once per `full` toggle) fresh.
+  zoomStateRef.current = { total, viewStart, viewCount, W, iW, PAD, step, MIN_VIEW };
 
   const xOf  = i => PAD.l + i * step + step / 2;
   const yOf  = v => PAD.t + (1 - (v - yLo) / yRange) * iH;
@@ -205,9 +275,11 @@ function CandleChart({ bars, daysBack, storageKey, daysOptions, onDaysBack }) {
 
   // ── Indicators computed over a warm-up window then trimmed to display ──────
   // Prepend extra bars so indicators are fully seeded by bar 0 of `display`.
+  // Anchored to the current pan/zoom window (viewStart/viewEnd), not always the
+  // latest bars, so overlays stay aligned with whatever range is visible.
   const WARMUP = 200; // enough for EMA200 and RSI
-  const startIdx = Math.max(0, bars.length - (daysBack || bars.length) - WARMUP);
-  const warmBars = bars.slice(startIdx);
+  const warmStartIdx = Math.max(0, viewStart - WARMUP);
+  const warmBars = bars.slice(warmStartIdx, viewEnd + 1);
   const warmCloses = warmBars.map(b => b.c);
   const trim = warmBars.length - display.length; // bars to drop from front after calc
 
@@ -288,9 +360,23 @@ function CandleChart({ bars, daysBack, storageKey, daysOptions, onDaysBack }) {
               )}
             </>
           ) : (
-            <span style={{ color: 'var(--fg-4)', fontSize: 12 }}>{n} candles · hover to inspect</span>
+            <span style={{ color: 'var(--fg-4)', fontSize: 12 }}>
+              {n} candles · drag to pan · scroll to zoom · drag price axis to rescale
+            </span>
           )}
         </div>
+        {!isDefaultView && (
+          <button
+            onClick={() => { setView({ count: Math.max(1, Math.min(daysBack || total, total)), end: total - 1 }); setYZoom(1); }}
+            title="Reset pan/zoom to default view"
+            style={{
+              marginTop: 4,
+              fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 8, cursor: 'pointer', flexShrink: 0,
+              background: 'var(--bg-surface)', border: '1px solid var(--border-2)', color: 'var(--fg-3)',
+            }}>
+            Reset view
+          </button>
+        )}
         <button
           onClick={() => setShowInds(v => !v)}
           style={{
@@ -349,7 +435,30 @@ function CandleChart({ bars, daysBack, storageKey, daysOptions, onDaysBack }) {
 
       {/* ── Main candle SVG ── */}
       <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className="linechart-svg"
-        style={{ cursor: dr.tool === 'cursor' ? undefined : 'crosshair', userSelect: 'none', maxHeight: full ? 'none' : undefined }}
+        style={{
+          cursor: dr.tool === 'cursor' ? (isPanning ? 'grabbing' : 'grab') : 'crosshair',
+          userSelect: 'none', maxHeight: full ? 'none' : undefined,
+        }}
+        onMouseDown={e => {
+          if (dr.tool !== 'cursor') return;
+          const startX = e.clientX, startEnd = viewEnd, startCount = viewCount;
+          setIsPanning(true);
+          function onMove(ev) {
+            const svg = svgRef.current;
+            if (!svg) return;
+            const rect = svg.getBoundingClientRect();
+            const dBars = Math.round((ev.clientX - startX) * (W / rect.width) / step);
+            const nextEnd = Math.max(startCount - 1, Math.min(total - 1, startEnd - dBars));
+            setView(v => (v.end === nextEnd && v.count === startCount) ? v : { count: startCount, end: nextEnd });
+          }
+          function onUp() {
+            setIsPanning(false);
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+          }
+          window.addEventListener('mousemove', onMove);
+          window.addEventListener('mouseup', onUp);
+        }}
         onMouseMove={e => {
           const svg = svgRef.current;
           if (!svg) return;
@@ -375,6 +484,39 @@ function CandleChart({ bars, daysBack, storageKey, daysOptions, onDaysBack }) {
 
         <line x1={PAD.l} x2={W - PAD.r} y1={PAD.t + iH} y2={PAD.t + iH}
               stroke="var(--border-2)" strokeWidth="0.8" />
+
+        {/* Y-axis drag-to-rescale zone (invisible, sits over the price labels) */}
+        <rect x={0} y={PAD.t} width={PAD.l} height={iH} fill="transparent"
+              style={{ cursor: 'ns-resize' }}
+              onMouseDown={e => {
+                e.stopPropagation();
+                const startY = e.clientY, startZoom = yZoom;
+                function onMove(ev) {
+                  const dy = ev.clientY - startY;
+                  setYZoom(Math.max(0.15, Math.min(10, startZoom * Math.exp(-dy / 150))));
+                }
+                function onUp() {
+                  window.removeEventListener('mousemove', onMove);
+                  window.removeEventListener('mouseup', onUp);
+                }
+                window.addEventListener('mousemove', onMove);
+                window.addEventListener('mouseup', onUp);
+              }}
+              onDoubleClick={e => { e.stopPropagation(); setYZoom(1); }} />
+
+        {/* Visible-range high/low reference line */}
+        <line x1={PAD.l} x2={W - PAD.r} y1={yOf(yMax).toFixed(1)} y2={yOf(yMax).toFixed(1)}
+              stroke="var(--accent)" strokeWidth="0.8" strokeDasharray="2 3" opacity="0.55" />
+        <text x={W - PAD.r - 2} y={yOf(yMax) - 3} textAnchor="end" fontSize="9"
+              fill="var(--accent)" fontFamily="var(--font-mono)" opacity="0.85">
+          H {fmtChartPrice(yMax)}
+        </text>
+        <line x1={PAD.l} x2={W - PAD.r} y1={yOf(yMin).toFixed(1)} y2={yOf(yMin).toFixed(1)}
+              stroke="var(--accent)" strokeWidth="0.8" strokeDasharray="2 3" opacity="0.55" />
+        <text x={W - PAD.r - 2} y={yOf(yMin) + 10} textAnchor="end" fontSize="9"
+              fill="var(--accent)" fontFamily="var(--font-mono)" opacity="0.85">
+          L {fmtChartPrice(yMin)}
+        </text>
 
         {xLabels.map(({ i, label }) => (
           <text key={i} x={xOf(i).toFixed(1)} y={H - 4} textAnchor="middle"
