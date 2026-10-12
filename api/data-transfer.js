@@ -78,6 +78,14 @@ async function importAll(id, mode, portfolio, wallet) {
       await sbDelete('sectors',   `user_id=eq.${uid}`);
       await sbDelete('snapshots', `user_id=eq.${uid}`);
       await sbDelete('sales',     `user_id=eq.${uid}`);
+      await sbDelete('holding_tags',      `user_id=eq.${uid}`); // before asset_tags (FK)
+      await sbDelete('asset_tags',        `user_id=eq.${uid}`);
+      await sbDelete('goals',             `user_id=eq.${uid}`);
+      await sbDelete('dividends',         `user_id=eq.${uid}`);
+      await sbDelete('target_allocation', `user_id=eq.${uid}`);
+      await sbDelete('price_alerts',      `user_id=eq.${uid}`);
+      await sbDelete('holding_notes',     `user_id=eq.${uid}`);
+      await sbDelete('eco_events',        `user_id=eq.${uid}`);
     }
 
     // Holdings
@@ -103,12 +111,15 @@ async function importAll(id, mode, portfolio, wallet) {
     await sbUpsert('sectors', sectorRows, 'merge-duplicates');
 
     // Snapshots (topup: keep existing date values; override: replace)
+    // day_change is only sent when the backup has it, so older backups still
+    // import into a DB that hasn't run snapshots_day_change_migration.sql.
+    const hasDayChange = (p.snapshots || []).some(s => s.dayChange != null);
     const snapshotRows = (p.snapshots || []).map(s => ({
       user_id: id, date: s.date, value: s.value,
       thai_stock: s.thaiStock ?? null, usa_stock: s.usaStock ?? null,
       etf: s.etf ?? null, fund: s.fund ?? null, crypto: s.crypto ?? null,
       gold: s.gold ?? null, other: s.other ?? null,
-      day_change: s.dayChange ?? null,
+      ...(hasDayChange ? { day_change: s.dayChange ?? null } : {}),
     }));
     await sbUpsert('snapshots', snapshotRows, res);
 
@@ -120,6 +131,63 @@ async function importAll(id, mode, portfolio, wallet) {
       realized_pnl: s.realizedPnl, pnl_pct: s.pnlPct,
     }));
     await sbUpsert('sales', saleRows, res);
+
+    // Tags, then the holding↔tag links that reference them
+    const tagRows = (p.tags || []).map((t, i) => ({
+      id: t.id, user_id: id, name: t.name, color: t.color || '#6b7280', sort_order: i,
+    }));
+    await sbUpsert('asset_tags', tagRows, res);
+
+    const holdingTagRows = [];
+    for (const [key, tagIds] of Object.entries(p.holdingTags || {})) {
+      const ci = key.indexOf(':');
+      if (ci < 0) continue;
+      for (const tagId of (tagIds || [])) {
+        holdingTagRows.push({ user_id: id, class_key: key.slice(0, ci), name: key.slice(ci + 1), tag_id: tagId });
+      }
+    }
+    await sbUpsert('holding_tags', holdingTagRows, res);
+
+    const goalRows = (p.goals || []).map((g, i) => ({
+      id: g.id, user_id: id, name: g.name, target_amount: g.targetAmount ?? 0,
+      target_date: g.targetDate || null, note: g.note || null, emoji: g.emoji || null,
+      created_at: g.createdAt || null, sort_order: i,
+    }));
+    await sbUpsert('goals', goalRows, res);
+
+    const dividendRows = (p.dividends || []).map(d => ({
+      id: d.id, user_id: id, class_key: d.classKey, name: d.name,
+      ex_date: d.exDate || null, pay_date: d.payDate || null,
+      amount_per_share: d.amountPerShare ?? null, total_amount: d.totalAmount ?? null,
+      currency: d.currency || 'THB', note: d.note || null,
+    }));
+    await sbUpsert('dividends', dividendRows, res);
+
+    const allocRows = Object.entries(p.targetAllocation || {})
+      .filter(([, pct]) => pct != null && !isNaN(pct))
+      .map(([classKey, pct]) => ({ user_id: id, class_key: classKey, target_pct: pct }));
+    await sbUpsert('target_allocation', allocRows, res);
+
+    const alertRows = (p.priceAlerts || []).map(a => ({
+      id: a.id, user_id: id, class_key: a.classKey, name: a.name,
+      condition: a.condition, price: a.price, note: a.note || null,
+      triggered: a.triggered ?? false,
+    }));
+    await sbUpsert('price_alerts', alertRows, res);
+
+    const noteRows = [];
+    for (const [key, note] of Object.entries(p.holdingNotes || {})) {
+      const ci = key.indexOf(':');
+      if (ci < 0 || !note) continue;
+      noteRows.push({ user_id: id, class_key: key.slice(0, ci), name: key.slice(ci + 1), note });
+    }
+    await sbUpsert('holding_notes', noteRows, res);
+
+    const ecoRows = (p.ecoEvents || []).map(e => ({
+      id: e.id, user_id: id, date: e.date, type: e.type || 'other', label: e.label,
+      importance: e.importance || 'medium', note: e.note || null,
+    }));
+    await sbUpsert('eco_events', ecoRows, res);
 
     // FX rates (override only — topup keeps existing live rates)
     if (mode === 'override') {
@@ -138,6 +206,9 @@ async function importAll(id, mode, portfolio, wallet) {
       // Delete in dependency order (transactions → accounts/debts → categories)
       await sbDelete('wallet_transactions', `user_id=eq.${uid}`);
       await sbDelete('wallet_debts',        `user_id=eq.${uid}`);
+      await sbDelete('wallet_bills',        `user_id=eq.${uid}`);
+      await sbDelete('wallet_savings_goals', `user_id=eq.${uid}`);
+      await sbDelete('wallet_snapshots',    `user_id=eq.${uid}`);
       await sbDelete('wallet_accounts',     `user_id=eq.${uid}`);
       await sbDelete('wallet_categories',   `user_id=eq.${uid}`);
     }
@@ -174,6 +245,26 @@ async function importAll(id, mode, portfolio, wallet) {
       installment:        d.installment || null,
     }));
     await sbUpsert('wallet_debts', debtRows, res);
+
+    const billRows = (w.bills || []).map(b => ({
+      id: b.id, user_id: id, name: b.name, amount: b.amount ?? 0,
+      currency: b.currency || 'THB', due_day: b.dueDay ?? null,
+      category_id: b.categoryId || null, note: b.note || null, active: b.active ?? true,
+    }));
+    await sbUpsert('wallet_bills', billRows, res);
+
+    const savingsGoalRows = (w.savingsGoals || []).map(g => ({
+      id: g.id, user_id: id, name: g.name, target_amount: g.targetAmount ?? 0,
+      currency: g.currency || 'THB', target_date: g.targetDate || null,
+      linked_account_id: g.linkedAccountId || null, note: g.note || null, emoji: g.emoji || null,
+    }));
+    await sbUpsert('wallet_savings_goals', savingsGoalRows, res);
+
+    const walletSnapshotRows = (w.walletSnapshots || []).map(s => ({
+      user_id: id, date: s.date, net_worth: s.netWorth ?? 0,
+      cash: s.cash ?? null, liabilities: s.liabilities ?? null,
+    }));
+    await sbUpsert('wallet_snapshots', walletSnapshotRows, res);
   }
 }
 
