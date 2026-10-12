@@ -7,7 +7,7 @@ function Nav({ route, setRoute, totals, open, onClose }) {
   const settings = Store.settings();
   const sym      = window.ccySymbol(settings.displayCcy);
 
-  const NO_VAL_ROUTES = new Set(['dashboard','summary','networth','wallet','transactions','debts','walletsummary','walletcalendar','bills','savingsgoals','reconcile','pixelworld','watchlist','sectors','selllog','technical','dayreport','rebalancing','dividends','goals','benchmark','risk','alerts','planning','analysis']);
+  const NO_VAL_ROUTES = new Set(['dashboard','summary','networth','wallet','transactions','debts','walletsummary','walletcalendar','bills','savingsgoals','reconcile','pixelworld','watchlist','sectors','selllog','technical','dayreport','rebalancing','dividends','goals','benchmark','risk','alerts','planning','analysis','scanner']);
 
   const billsDue = Store.getBillsDueSoon ? Store.getBillsDueSoon(3) : [];
 
@@ -50,6 +50,7 @@ function Nav({ route, setRoute, totals, open, onClose }) {
         {item('dayreport',  'Day Report',   'send')}
         {item('watchlist',  'Watchlist',    'eye')}
         {item('technical',  'Technical',    'activity')}
+        {item('scanner',    'Stock Scanner','activity')}
         <div className="grp-h">Wallet</div>
         {item('wallet',         'Accounts',     'wallet')}
         {item('transactions',   'Transactions', 'repeat')}
@@ -281,6 +282,7 @@ function App() {
     : route === 'watchlist'      ? 'Watchlist'
     : route === 'technical'      ? 'Technical Analysis'
     : route === 'dayreport'      ? 'Day Report'
+    : route === 'scanner'        ? 'Stock Scanner'
     : (Store.classByKey(route) || {}).label;
 
   return (
@@ -373,6 +375,7 @@ function App() {
           {route === 'watchlist'     && <WatchlistView />}
           {route === 'technical'     && <TechnicalAnalysis />}
           {route === 'dayreport'     && <DayReportView />}
+          {route === 'scanner'       && <ScannerView />}
           {Store.classByKey(route) && <HoldingsView classKey={route} onAdd={openAdd} onEditLot={openEdit} />}
         </div>
       </div>

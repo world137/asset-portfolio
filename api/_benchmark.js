@@ -1,5 +1,4 @@
 /* api/benchmark.js — Fetch benchmark index data via Yahoo Finance */
-const { readBody } = require('./_lib');
 
 const BENCHMARKS = {
   set:   { symbol: '^SET.BK',   label: 'SET (Thailand)' },
@@ -24,7 +23,7 @@ async function fetchYahooRange(symbol, range, interval) {
            .filter(p => p.close != null);
 }
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 'public, s-maxage=3600');
 
@@ -54,4 +53,4 @@ module.exports = async (req, res) => {
   }));
 
   res.status(200).json({ benchmarks: results, errors });
-};
+}
