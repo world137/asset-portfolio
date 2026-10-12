@@ -111,7 +111,7 @@ function ScannerView() {
         <React.Fragment>
           <div className="t-small" style={{ marginBottom: 10 }}>
             {candidates.length} candidate{candidates.length !== 1 ? 's' : ''} ·
-            data as of {window.timeAgo ? window.timeAgo(result.market_data_timestamp) : result.market_data_timestamp}
+            data as of {window.timeAgo ? window.timeAgo(Date.parse(result.market_data_timestamp)) : result.market_data_timestamp}
           </div>
           {candidates.length === 0 ? (
             <div className="card">

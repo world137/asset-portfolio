@@ -32,9 +32,27 @@ returned candidates in a table.
 - [x] Wire into `src/app.jsx`: nav item, title mapping, route render block.
 - [x] Add `<script type="text/babel" src="src/components/ScannerView.jsx">`
       to `index.html` in the right load order.
-- [ ] Manually verify: run `node dev-server.mjs` (or `vercel dev`) in
+- [x] Manually verify: run `node dev-server.mjs` (or `vercel dev`) in
       asset-portfolio, click the button, confirm it shells out to
       stock-scanner and renders real candidates.
 
 ## Notes
-(decisions/discoveries go here as I go)
+- Fixed a bug found during implementation: request body wasn't being parsed
+  (used ad-hoc `JSON.parse(req.body)` instead of the shared `readBody()`
+  helper other api/*.js files use) — caused every request to silently fall
+  back to `--all` regardless of params. Fixed by importing `readBody` from
+  `./_lib.js`.
+- Verified live end-to-end via Chrome: logged into the local dev server
+  (demo/demo), opened the new "Stock Scanner" nav item, clicked
+  "Run scan (--all)", watched it build+run the Go binary against live
+  Yahoo Finance data (~4 min), and the table rendered 15 real candidates
+  (VTRS, TMO, BE, SJM, RSG, NUE, IRM, MRK, ETN, ...) with correct scores/
+  ratings/colors.
+- Found + fixed a second bug during that same verification: the
+  "data as of ... ago" line showed "NaNd ago" because `window.timeAgo()`
+  expects a ms epoch number but the scanner returns an ISO 8601 string —
+  fixed by wrapping it in `Date.parse(...)`.
+- Added `EXCELLENT` (the scanner's top rating tier, used alongside
+  `STRONG`/`WATCHLIST`) to `RATING_COLOR` in ScannerView.jsx, found by
+  grepping stock-scanner's scorer.go/scorer_test.go for the real rating
+  strings rather than guessing.
