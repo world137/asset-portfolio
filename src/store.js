@@ -145,6 +145,24 @@
       if (!lot || lot.cur == null) return null;
       return ((lot.cur - prevClose) / prevClose) * 100;
     },
+    // Pre/post-market move in native currency for the whole position (vs regular close)
+    prePostChangeAmt(classKey, name) {
+      const pp = state.prePostPrices[`${classKey}:${name}`];
+      if (!pp || pp.price == null) return null;
+      const lots = (state.holdings[classKey] || []).filter(l => l.name === name);
+      if (!lots.length || lots[0].cur == null) return null;
+      const qty = lots.reduce((s, l) => s + (l.qty || 0), 0);
+      return qty * (pp.price - lots[0].cur);
+    },
+    // Day change in native currency for the whole position (qty × price move)
+    dayChangeAmt(classKey, name) {
+      const prevClose = (state.dayChangePrices || {})[`${classKey}:${name}`];
+      if (prevClose == null || prevClose === 0) return null;
+      const lots = (state.holdings[classKey] || []).filter(l => l.name === name);
+      if (!lots.length || lots[0].cur == null) return null;
+      const qty = lots.reduce((s, l) => s + (l.qty || 0), 0);
+      return qty * (lots[0].cur - prevClose);
+    },
 
     // Settings
     setSetting(k, v)  { state.settings[k] = v; emit(); },

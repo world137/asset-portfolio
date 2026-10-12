@@ -571,6 +571,25 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
 
   const hasChart   = cls.live && cls.live !== 'settrade';
   const hasDayChg  = !!cls.live; // all live-price classes show day change
+  // Sum of day change across all positions in this class (native ccy)
+  const dayTotals = (hasDayChg && classKey !== 'other') ? positions.reduce((acc, p) => {
+    const amt = Store.dayChangeAmt(classKey, p.name);
+    if (amt == null) return acc;
+    acc.amt += amt;
+    acc.prevValue += p.value - amt;
+    acc.n++;
+    return acc;
+  }, { amt: 0, prevValue: 0, n: 0 }) : null;
+  // Sum of pre/post-market moves (vs regular close) across positions that have them
+  const ppTotals = dayTotals ? positions.reduce((acc, p) => {
+    const pp = Store.prePostPrice(classKey, p.name);
+    const amt = pp ? Store.prePostChangeAmt(classKey, p.name) : null;
+    if (amt == null) return acc;
+    acc.amt += amt; acc.value += p.value; acc.n++;
+    acc.type = acc.type && acc.type !== pp.type ? 'mixed' : pp.type;
+    return acc;
+  }, { amt: 0, value: 0, n: 0, type: null }) : null;
+  const dayTotalPct = dayTotals && dayTotals.prevValue > 0 ? (dayTotals.amt / dayTotals.prevValue) * 100 : null;
   const hasPE      = cls.live === 'yahoo'; // P/E only from Yahoo Finance (stocks, ETFs, gold)
   const isLive     = !!cls.live;
   const isOther    = classKey === 'other';
@@ -587,6 +606,9 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
     let av, bv;
     if (sortBy === 'sector' && isOther) {
       av = a.type || ''; bv = b.type || '';
+    } else if (sortBy === 'dayAmt') {
+      av = Store.dayChangeAmt(classKey, a.name) ?? -Infinity;
+      bv = Store.dayChangeAmt(classKey, b.name) ?? -Infinity;
     } else if (sortBy === 'dayPct') {
       av = Store.dayChangePct(classKey, a.name) ?? -Infinity;
       bv = Store.dayChangePct(classKey, b.name) ?? -Infinity;
@@ -630,7 +652,7 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
       </div>
 
       {/* Class summary strip */}
-      <div className="kpis" style={{ gridTemplateColumns: 'repeat(3,1fr)', marginBottom: 18 }}>
+      <div className="kpis" style={{ gridTemplateColumns: `repeat(${dayTotals ? 4 : 3},1fr)`, marginBottom: 18 }}>
         <div className="kpi"><div className="lab">Market Value ({cls.ccy})</div><div className="big">{window.fmtMoney(totals.valueNative, cls.ccy, 0)}</div></div>
         <div className="kpi"><div className="lab">Cost ({cls.ccy})</div><div className="big">{window.fmtMoney(totals.costNative, cls.ccy, 0)}</div></div>
         <div className="kpi">
@@ -640,6 +662,28 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
           </div>
           <div className={'delta ' + (totals.profit >= 0 ? 'up' : 'down')}>{window.fmtPct(totals.pct)}</div>
         </div>
+        {dayTotals && (
+          <div className="kpi">
+            <div className="lab">Day Change</div>
+            {dayTotals.n > 0 ? (
+              <React.Fragment>
+                <div className={'big ' + (dayTotals.amt >= 0 ? 'up' : 'down')}>
+                  {(dayTotals.amt >= 0 ? '+' : '−') + window.fmtMoney(Math.abs(dayTotals.amt), cls.ccy, 0)}
+                </div>
+                {dayTotalPct != null && (
+                  <div className={'delta ' + (dayTotals.amt >= 0 ? 'up' : 'down')}>{window.fmtPct(dayTotalPct)}</div>
+                )}
+                {ppTotals && ppTotals.n > 0 && (
+                  <div style={{ fontSize: 11, marginTop: 3, color: ppTotals.amt >= 0 ? 'var(--up,#1a9e5c)' : 'var(--down,#d63b3b)' }}>
+                    <span style={{ color: 'var(--fg-4)', marginRight: 3 }}>{ppTotals.type === 'pre' ? 'Pre' : ppTotals.type === 'post' ? 'Post' : 'Pre/Post'}</span>
+                    {(ppTotals.amt >= 0 ? '+' : '−') + window.fmtMoney(Math.abs(ppTotals.amt), cls.ccy, 0)}
+                    {ppTotals.value > 0 && <span style={{ marginLeft: 3 }}>({window.fmtPct(ppTotals.amt / (ppTotals.value) * 100)})</span>}
+                  </div>
+                )}
+              </React.Fragment>
+            ) : <div className="big" style={{ color: 'var(--fg-4)' }}>—</div>}
+          </div>
+        )}
       </div>
 
       {isLive && !liveNow && (
@@ -705,6 +749,7 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
                   <SortTh col="avgPrice" label="Avg cost" right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
                   <SortTh col="cur"      label="Current"  right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
                   {hasPE && !isOther && <th className="num" style={{ whiteSpace: 'nowrap' }}>P/E</th>}
+                  {hasDayChg && !isOther && <SortTh col="dayAmt" label="Day P/L" right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />}
                   {hasDayChg && !isOther && <SortTh col="dayPct" label="% Day" right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />}
                   <SortTh col="value"    label="Value"    right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
                   <SortTh col="profit"   label="P/L"      right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
@@ -715,12 +760,15 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
               </thead>
               <tbody>
                 {sortedFiltered.length === 0 && (
-                  <tr><td colSpan={11 + (hasDayChg && !isOther ? 1 : 0) + (hasPE && !isOther ? 1 : 0)}><div className="empty">No holdings yet. <a className="t-link" onClick={() => onAdd(classKey)}>Add your first one →</a></div></td></tr>
+                  <tr><td colSpan={11 + (hasDayChg && !isOther ? 2 : 0) + (hasPE && !isOther ? 1 : 0)}><div className="empty">No holdings yet. <a className="t-link" onClick={() => onAdd(classKey)}>Add your first one →</a></div></td></tr>
                 )}
                 {sortedFiltered.map(p => {
                   const color   = window.CLASS_COLORS[classKey];
                   const open    = !!expanded[p.name];
                   const dayPct  = hasDayChg && !isOther ? Store.dayChangePct(classKey, p.name) : null;
+                  const dayAmt  = hasDayChg && !isOther ? Store.dayChangeAmt(classKey, p.name) : null;
+                  const ppData  = hasDayChg && !isOther ? Store.prePostPrice(classKey, p.name) : null;
+                  const ppAmt   = ppData ? Store.prePostChangeAmt(classKey, p.name) : null;
                   const techSym = hasChart ? (window.resolveChartSymbol && window.resolveChartSymbol(classKey, p.name)) : null;
 
                   return (
@@ -780,12 +828,33 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
                         )}
                         {hasDayChg && !isOther && (
                           <td className="num">
+                            {dayAmt != null
+                              ? <span className={dayAmt >= 0 ? 'up' : 'down'} style={{ fontWeight: 600, fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
+                                  {(dayAmt >= 0 ? '+' : '−') + window.fmtMoney(Math.abs(dayAmt), cls.ccy, 2)}
+                                </span>
+                              : <span style={{ color: 'var(--fg-4)', fontSize: 11 }}>—</span>
+                            }
+                            {ppAmt != null && (
+                              <div style={{ fontSize: 11, marginTop: 2, whiteSpace: 'nowrap', color: ppAmt >= 0 ? 'var(--up,#1a9e5c)' : 'var(--down,#d63b3b)' }}>
+                                <span style={{ color: 'var(--fg-4)', marginRight: 3 }}>{ppData.type === 'pre' ? 'Pre' : 'Post'}</span>
+                                {(ppAmt >= 0 ? '+' : '−') + window.fmtMoney(Math.abs(ppAmt), cls.ccy, 2)}
+                              </div>
+                            )}
+                          </td>
+                        )}
+                        {hasDayChg && !isOther && (
+                          <td className="num">
                             {dayPct != null
                               ? <span className={dayPct >= 0 ? 'up' : 'down'} style={{ fontWeight: 600, fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
                                   {dayPct >= 0 ? '+' : ''}{dayPct.toFixed(2)}%
                                 </span>
                               : <span style={{ color: 'var(--fg-4)', fontSize: 11 }}>—</span>
                             }
+                            {ppData && ppData.pct != null && (
+                              <div style={{ fontSize: 11, marginTop: 2, whiteSpace: 'nowrap', color: ppData.pct >= 0 ? 'var(--up,#1a9e5c)' : 'var(--down,#d63b3b)' }}>
+                                {ppData.pct >= 0 ? '+' : ''}{ppData.pct.toFixed(2)}%
+                              </div>
+                            )}
                           </td>
                         )}
                         <td className="num">{window.fmtMoney(p.value, cls.ccy, 2)}</td>
