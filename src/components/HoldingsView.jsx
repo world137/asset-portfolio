@@ -212,6 +212,127 @@ function LotRows({ position, classKey, ccy, onEdit }) {
   );
 }
 
+// Small market-value sparkline from daily snapshots (stored in THB, shown in class currency)
+function ValueSparkline({ classKey, currentValue, width = 120, height = 32 }) {
+  const cls  = Store.classByKey(classKey);
+  const rate = Store.get().fx?.USDTHB || window.SEED_FX_USDTHB || 1;
+  const div  = cls.ccy === 'USD' ? rate : 1;
+  const vals = Store.getSnapshots().filter(sn => sn[classKey] != null).slice(-30).map(sn => sn[classKey] / div);
+  if (currentValue > 0) vals[vals.length ? vals.length - 1 : 0] = currentValue; // keep latest point live
+  if (vals.length < 2) return null;
+  const min = Math.min(...vals), max = Math.max(...vals), span = (max - min) || 1;
+  const x = i => (i / (vals.length - 1)) * (width - 2) + 1;
+  const y = v => height - 2 - ((v - min) / span) * (height - 4);
+  const d = vals.map((v, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(v).toFixed(1)).join('');
+  const up = vals[vals.length - 1] >= vals[0];
+  const color = up ? 'var(--green-600)' : 'var(--red-600)';
+  return (
+    <svg width={width} height={height} style={{ display: 'block', marginTop: 6 }}>
+      <title>{`Market value, last ${vals.length} snapshots`}</title>
+      <path d={`${d}L${x(vals.length - 1)} ${height}L${x(0)} ${height}Z`} fill={color} opacity="0.1" />
+      <path d={d} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// Market value history line chart from daily snapshots (no extra DB needed: snapshots already store per-class value)
+function ValueHistory({ classKey, currentValue }) {
+  const cls  = Store.classByKey(classKey);
+  const [rangeKey, setRangeKey] = React.useState('3M');
+  const [hover, setHover] = React.useState(null);
+  const rate = Store.get().fx?.USDTHB || window.SEED_FX_USDTHB || 1;
+  const div  = cls.ccy === 'USD' ? rate : 1;
+  const today = new Date().toISOString().slice(0, 10);
+
+  const all = Store.getSnapshots().filter(sn => sn[classKey] != null)
+    .map(sn => ({ date: sn.date, v: sn[classKey] / div }));
+  // keep the latest point live
+  if (currentValue > 0) {
+    if (all.length && all[all.length - 1].date === today) all[all.length - 1].v = currentValue;
+    else all.push({ date: today, v: currentValue });
+  }
+  const rows = (() => {
+    const now = new Date();
+    const back = n => { const d = new Date(now); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
+    const cut = { '1D': back(1), '5D': back(5), '1M': back(30), '3M': back(91), '6M': back(182),
+                  '1Y': back(365), '5Y': back(365 * 5), 'YTD': `${now.getFullYear()}-01-01` }[rangeKey];
+    const r = all.filter(x => x.date >= cut);
+    return r.length >= 2 ? r : all.slice(-2); // always try to show a line
+  })();
+
+  const W = 640, H = 170, padL = 4, padR = 4, padT = 12, padB = 6;
+  const first = rows[0], last = rows[rows.length - 1];
+  const vmin = rows.length ? Math.min(...rows.map(r => r.v)) : 0;
+  const vmax = rows.length ? Math.max(...rows.map(r => r.v)) : 0;
+  const pad  = (vmax - vmin) * 0.08 || vmax * 0.01 || 1;
+  const lo = vmin - pad, hi = vmax + pad;
+  const xOf = i => rows.length < 2 ? W / 2 : padL + (i / (rows.length - 1)) * (W - padL - padR);
+  const yOf = v => padT + ((hi - v) / (hi - lo)) * (H - padT - padB);
+  const up = rows.length > 1 && last.v >= first.v;
+  const color = up ? 'var(--green-600)' : 'var(--red-600)';
+  const h = hover != null ? rows[hover] : null;
+  const shown = h || last;
+  const chg = rows.length > 1 ? shown.v - first.v : null;
+  const chgPct = chg != null && first.v > 0 ? (chg / first.v) * 100 : null;
+
+  function onMove(e) {
+    if (rows.length < 2) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    const x = ((cx - rect.left) / rect.width) * W;
+    setHover(Math.max(0, Math.min(rows.length - 1, Math.round(((x - padL) / (W - padL - padR)) * (rows.length - 1)))));
+  }
+  const path = rows.map((r, i) => (i ? 'L' : 'M') + xOf(i).toFixed(1) + ' ' + yOf(r.v).toFixed(1)).join('');
+
+  return (
+    <div className="card" style={{ marginBottom: 18 }}>
+      <div className="card-h">
+        <div>
+          <h3>Market value history</h3>
+          <div className="s">From daily snapshots · includes buys and sells, not just price moves</div>
+        </div>
+        <div className="range-btns">
+          {['1D', '5D', '1M', '3M', '6M', '1Y', '5Y', 'YTD'].map(k => (
+            <button key={k} className={rangeKey === k ? 'on' : ''} onClick={() => { setRangeKey(k); setHover(null); }}>{k}</button>
+          ))}
+        </div>
+      </div>
+      <div className="card-b">
+        {rows.length < 2 ? (
+          <div className="t-small" style={{ color: 'var(--fg-3)' }}>Not enough snapshots yet — one is saved each day prices refresh.</div>
+        ) : (
+          <React.Fragment>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', marginBottom: 6, flexWrap: 'wrap', minHeight: 20 }}>
+              <span style={{ fontSize: 18, fontWeight: 700, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
+                {window.fmtMoney(shown.v, cls.ccy, 0)}
+              </span>
+              {chg != null && (
+                <span className={chg >= 0 ? 'up' : 'down'} style={{ fontSize: 12, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                  {(chg >= 0 ? '+' : '−') + window.fmtMoney(Math.abs(chg), cls.ccy, 0)}
+                  {chgPct != null && ` (${chgPct >= 0 ? '+' : ''}${chgPct.toFixed(2)}%)`}
+                </span>
+              )}
+              <span style={{ fontSize: 11, color: 'var(--fg-3)' }}>{h ? h.date : `since ${first.date}`}</span>
+            </div>
+            <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block', touchAction: 'pan-y' }}
+                 onMouseMove={onMove} onTouchMove={onMove} onTouchStart={onMove} onMouseLeave={() => setHover(null)}>
+              <path d={`${path}L${xOf(rows.length - 1).toFixed(1)} ${H - padB}L${xOf(0).toFixed(1)} ${H - padB}Z`} fill={color} opacity="0.1" />
+              <path d={path} fill="none" stroke={color} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
+              {rows.length <= 40 && rows.map((r, i) => <circle key={r.date} cx={xOf(i)} cy={yOf(r.v)} r="2.2" fill={color} />)}
+              {h && (
+                <React.Fragment>
+                  <line x1={xOf(hover)} x2={xOf(hover)} y1={padT} y2={H - padB} stroke="var(--border-2)" strokeDasharray="3 3" />
+                  <circle cx={xOf(hover)} cy={yOf(h.v)} r="4" fill={color} stroke="var(--bg-1, #fff)" strokeWidth="1.5" />
+                </React.Fragment>
+              )}
+            </svg>
+          </React.Fragment>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ClassAnalysis({ classKey }) {
   const settings  = Store.settings();
   const positions = Store.positions(classKey);
@@ -653,7 +774,7 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
 
       {/* Class summary strip */}
       <div className="kpis" style={{ gridTemplateColumns: `repeat(${dayTotals ? 4 : 3},1fr)`, marginBottom: 18 }}>
-        <div className="kpi"><div className="lab">Market Value ({cls.ccy})</div><div className="big">{window.fmtMoney(totals.valueNative, cls.ccy, 0)}</div></div>
+        <div className="kpi"><div className="lab">Market Value ({cls.ccy})</div><div className="big">{window.fmtMoney(totals.valueNative, cls.ccy, 0)}</div><ValueSparkline classKey={classKey} currentValue={totals.valueNative} /></div>
         <div className="kpi"><div className="lab">Cost ({cls.ccy})</div><div className="big">{window.fmtMoney(totals.costNative, cls.ccy, 0)}</div></div>
         <div className="kpi">
           <div className="lab">Unrealized P/L</div>
@@ -694,6 +815,8 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
       )}
 
       <ClassAnalysis classKey={classKey} />
+      <ValueHistory classKey={classKey} currentValue={totals.valueNative} />
+      {hasDayChg && !isOther && window.ClassChangeChart && <window.ClassChangeChart classKey={classKey} />}
 
       {/* ── Bento view ── */}
       {viewMode === 'bento' && (
@@ -751,6 +874,7 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
                   {hasPE && !isOther && <th className="num" style={{ whiteSpace: 'nowrap' }}>P/E</th>}
                   {hasDayChg && !isOther && <SortTh col="dayAmt" label="Day P/L" right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />}
                   {hasDayChg && !isOther && <SortTh col="dayPct" label="% Day" right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />}
+                  {hasChart && !isOther && <th className="num" style={{ whiteSpace: 'nowrap' }}>Day chart</th>}
                   <SortTh col="value"    label="Value"    right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
                   <SortTh col="profit"   label="P/L"      right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
                   <SortTh col="pct"      label="%"        right sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
@@ -760,7 +884,7 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
               </thead>
               <tbody>
                 {sortedFiltered.length === 0 && (
-                  <tr><td colSpan={11 + (hasDayChg && !isOther ? 2 : 0) + (hasPE && !isOther ? 1 : 0)}><div className="empty">No holdings yet. <a className="t-link" onClick={() => onAdd(classKey)}>Add your first one →</a></div></td></tr>
+                  <tr><td colSpan={11 + (hasDayChg && !isOther ? 2 : 0) + (hasChart && !isOther ? 1 : 0) + (hasPE && !isOther ? 1 : 0)}><div className="empty">No holdings yet. <a className="t-link" onClick={() => onAdd(classKey)}>Add your first one →</a></div></td></tr>
                 )}
                 {sortedFiltered.map(p => {
                   const color   = window.CLASS_COLORS[classKey];
@@ -857,6 +981,9 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
                             )}
                           </td>
                         )}
+                        {hasChart && !isOther && (
+                          <td className="num">{window.DaySparkline && <window.DaySparkline classKey={classKey} name={p.name} />}</td>
+                        )}
                         <td className="num">{window.fmtMoney(p.value, cls.ccy, 2)}</td>
                         <td className={'num ' + (p.profit >= 0 ? 'up' : 'down')}>{(p.profit >= 0 ? '+' : '−') + window.fmtMoney(Math.abs(p.profit), cls.ccy, 0)}</td>
                         <td className={'num ' + (p.profit >= 0 ? 'up' : 'down')}>{window.fmtPct(p.pct)}</td>
@@ -880,6 +1007,11 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
                           </button>
                         </td>
                       </tr>
+                      {open && hasChart && window.InlinePriceChart && (
+                        <tr><td colSpan={20} style={{ background: 'var(--bg-sunken)' }}>
+                          <window.InlinePriceChart classKey={classKey} name={p.name} />
+                        </td></tr>
+                      )}
                       {open && <LotRows position={p} classKey={classKey} ccy={cls.ccy} onEdit={onEditLot} />}
                     </React.Fragment>
                   );

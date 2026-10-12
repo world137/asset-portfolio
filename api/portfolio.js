@@ -163,6 +163,7 @@ function buildState(settingsRows, holdingRows, sectorRows, snapshotRows, saleRow
       if (r.crypto     != null) snap.crypto    = parseFloat(r.crypto);
       if (r.gold       != null) snap.gold      = parseFloat(r.gold);
       if (r.other      != null) snap.other     = parseFloat(r.other);
+      if (r.day_change != null) snap.dayChange = r.day_change;
       return snap;
     }),
     sales:         saleRows.map(r => ({
@@ -241,7 +242,7 @@ export default async function handler(req, res) {
 
     const uid = encodeURIComponent(id);
     try {
-      const SNAPSHOT_COLS = 'date,value,thai_stock,usa_stock,etf,fund,crypto,gold,other';
+      const SNAPSHOT_COLS = 'date,value,thai_stock,usa_stock,etf,fund,crypto,gold,other,day_change';
       const [settingsRows, holdingRows, sectorRows, snapshotRows, saleRows, fxRows, marketPriceRows, tagRows, holdingTagRows,
              goalRows, dividendRows, allocationRows, alertRows, noteRows, ecoEventRows] =
         await Promise.all([
@@ -370,6 +371,7 @@ export default async function handler(req, res) {
         crypto:     s.crypto    ?? null,
         gold:       s.gold      ?? null,
         other:      s.other     ?? null,
+        day_change: s.dayChange ?? null,
       }));
       await sbUpsert('snapshots', snapshotRows);
 
