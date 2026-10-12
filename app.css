@@ -154,7 +154,7 @@ body { background: var(--bg-app); display: block; padding: 0; }
 /* ============================================================================
    KPI cards
    ============================================================================ */
-.kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
+.kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-bottom: 22px; }
 .kpi { background: var(--bg-surface); border: 1px solid var(--border-1); border-radius: var(--radius-lg); padding: 18px 18px 16px; position: relative; overflow: hidden; }
 [data-theme="dark"] .kpi { background: #1c1b2e; box-shadow: 0 2px 12px rgba(0,0,0,0.22); }
 .kpi .lab { font: 600 10.5px/1 var(--font-sans); letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg-3); margin-bottom: 10px; }

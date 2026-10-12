@@ -18,6 +18,9 @@
     },
     "api/bonds.js": {
       "maxDuration": 20
+    },
+    "api/scanner.js": {
+      "maxDuration": 60
     }
   },
   "crons": [

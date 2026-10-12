@@ -773,7 +773,7 @@ function HoldingsView({ classKey, onAdd, onEditLot }) {
       </div>
 
       {/* Class summary strip */}
-      <div className="kpis" style={{ gridTemplateColumns: `repeat(${dayTotals ? 4 : 3},1fr)`, marginBottom: 18 }}>
+      <div className="kpis" style={{ marginBottom: 18 }}>
         <div className="kpi"><div className="lab">Market Value ({cls.ccy})</div><div className="big">{window.fmtMoney(totals.valueNative, cls.ccy, 0)}</div><ValueSparkline classKey={classKey} currentValue={totals.valueNative} /></div>
         <div className="kpi"><div className="lab">Cost ({cls.ccy})</div><div className="big">{window.fmtMoney(totals.costNative, cls.ccy, 0)}</div></div>
         <div className="kpi">
