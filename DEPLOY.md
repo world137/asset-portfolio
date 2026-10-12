@@ -67,6 +67,27 @@ vercel dev
 
 Then open the printed `localhost` URL — the API works exactly as in production.
 
+## Stock Scanner in production
+
+Vercel can't run the Go `stock-scanner` (no Go toolchain, and a full scan takes
+~4 minutes), so host it separately and let the app read its results:
+
+1. Deploy the `stock-scanner` repo's Docker image to any container host
+   (Fly.io, Render, Railway, Cloud Run, a VPS…). It runs `serve`, scans on
+   startup and re-scans hourly, and serves the latest result at
+   `GET /api/v1/scan`. Set `SCANNER_API_TOKEN` on the container so the API
+   requires a bearer token. Give it a persistent volume for `/app/data` if you
+   want the universe cache to survive restarts.
+2. In the Vercel project add env vars, then redeploy:
+   - `SCANNER_URL` — e.g. `https://stock-scanner.example.com` (no trailing path)
+   - `SCANNER_API_TOKEN` — same token as the container
+3. Open **Stock Scanner** — it loads the latest scan automatically; the button
+   becomes "Refresh results". The first scan after a container start takes a few
+   minutes (the page shows "still running its first scan" until then).
+
+Without `SCANNER_URL`, the page falls back to local mode (`vercel dev` next to
+the `stock-scanner` folder, button runs `run-scan.sh --all`).
+
 ## Notes / limits
 
 - Data is stored per-browser in `localStorage` (no account, no cross-device sync).

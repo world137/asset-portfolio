@@ -1,6 +1,6 @@
 /* eslint-disable */
-/* ScannerView.jsx — Trigger the stock-scanner project's `run-scan.sh --all`
-   (local dev only) and render the returned candidates. */
+/* ScannerView.jsx — Show stock-scanner candidates. Production: latest scan from the
+   hosted scanner service (via /api/scanner). Local dev: can also trigger run-scan.sh --all. */
 
 const RATING_COLOR = {
   EXCELLENT:  'var(--green-600)',
@@ -39,6 +39,19 @@ function ScannerView() {
   const [result,  setResult]  = React.useState(null);
   const [error,   setError]   = React.useState(null);
   const [log,     setLog]     = React.useState(null);
+  const [mode,    setMode]    = React.useState(null); // 'remote' | 'local' | 'unavailable'
+
+  // Load whatever the latest scan is (never triggers a scan)
+  React.useEffect(() => {
+    let dead = false;
+    fetch('/api/scanner').then(r => r.json()).then(j => {
+      if (dead) return;
+      setMode(j.mode || null);
+      if (j.ok) setResult(j.result);
+      else if (j.error === 'scan-pending' || j.error === 'scanner-unreachable' || j.error === 'scanner-error' || j.error === 'scanner-unavailable') setError(j.message);
+    }).catch(() => {});
+    return () => { dead = true; };
+  }, []);
 
   async function runScan() {
     setRunning(true);
@@ -50,6 +63,7 @@ function ScannerView() {
         body: JSON.stringify({ all: true }),
       });
       const j = await r.json();
+      if (j.mode) setMode(j.mode);
       if (!j.ok) {
         setError(j.message || j.error || 'Scan failed');
         setLog(j.log || null);
@@ -72,11 +86,11 @@ function ScannerView() {
         <div>
           <h1 className="t-h1" style={{ margin: '0 0 2px' }}>Stock Scanner</h1>
           <div className="t-small">
-            Pullback / EMA / RSI / Volume Profile screen over SP500 + NASDAQ100 + SET50 · local dev only
+            Pullback / EMA / RSI / Volume Profile screen over SP500 + NASDAQ100 + SET50{mode === 'remote' ? ' · scanner service re-scans hourly' : ''}
           </div>
         </div>
-        <Button variant="primary" size="sm" icon="refresh-cw" onClick={runScan} disabled={running}>
-          {running ? 'Scanning…' : 'Run scan (--all)'}
+        <Button variant="primary" size="sm" icon="refresh-cw" onClick={runScan} disabled={running || mode === 'unavailable'}>
+          {running ? (mode === 'remote' ? 'Loading…' : 'Scanning…') : (mode === 'remote' ? 'Refresh results' : 'Run scan (--all)')}
         </Button>
       </div>
 
@@ -94,7 +108,7 @@ function ScannerView() {
           <div style={{ padding: '52px 24px', textAlign: 'center', color: 'var(--fg-3)' }}>
             <Icon name="activity" size={36} />
             <div style={{ fontSize: 15, fontWeight: 600, margin: '14px 0 6px' }}>No scan yet</div>
-            <div style={{ fontSize: 13 }}>Click "Run scan (--all)" to build and run stock-scanner.</div>
+            <div style={{ fontSize: 13 }}>{mode === 'remote' ? 'Click "Refresh results" to load the latest scan.' : 'Click "Run scan (--all)" to build and run stock-scanner.'}</div>
           </div>
         </div>
       )}
@@ -102,7 +116,7 @@ function ScannerView() {
       {running && (
         <div className="card">
           <div style={{ padding: '52px 24px', textAlign: 'center', color: 'var(--fg-3)' }}>
-            Scanning sp500 + nasdaq100 + set50… this can take a minute or two.
+            {mode === 'remote' ? 'Loading latest scan…' : 'Scanning sp500 + nasdaq100 + set50… this can take a few minutes.'}
           </div>
         </div>
       )}
