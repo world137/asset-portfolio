@@ -3,6 +3,9 @@
    GET ?symbol=AAPL&range=1mo
    ============================================================================ */
 
+import benchmarkHandler from './_benchmark.js';
+import macroHandler from './_macro.js';
+
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
 const INTERVAL_MAP = {
@@ -19,6 +22,10 @@ const INTERVAL_MAP = {
 };
 
 export default async function handler(req, res) {
+  // Merged routes (Hobby plan function limit) — vercel.json rewrites /api/benchmark and /api/macro here
+  if (req.query?.type === 'benchmark') return benchmarkHandler(req, res);
+  if (req.query?.type === 'macro') return macroHandler(req, res);
+
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
