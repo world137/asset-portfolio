@@ -1,18 +1,20 @@
 /* ============================================================================
-   api/scanner.js — Vercel Serverless Function (local dev only)
+   api/scanner.js — Vercel Serverless Function
 
-   Shells out to the sibling `stock-scanner` Go project and runs its
-   `scripts/run-scan.sh --all` wrapper, then returns the resulting
-   results/latest.json. This only works where a real filesystem + bash +
-   Go toolchain are available (i.e. `vercel dev` / `node dev-server.mjs`
-   on your own machine) — it cannot work on deployed Vercel production,
-   which has no sibling project directory and no Go toolchain. In that
-   case this handler returns a `scanner-unavailable` error instead of
-   crashing, same as api/watchlist.js falls back when Supabase isn't
-   configured.
+   Two modes:
+   • remote (production): set SCANNER_URL to a hosted stock-scanner container
+     (its `serve` mode, see stock-scanner/Dockerfile) and, if the container
+     has SCANNER_API_TOKEN set, the same token here. The function proxies
+     GET {SCANNER_URL}/api/v1/scan, which returns the latest completed scan
+     (the container re-scans on its own schedule). Vercel itself has no Go
+     toolchain and a 4-minute scan would exceed function limits.
+   • local (dev): without SCANNER_URL, POST shells out to the sibling
+     `stock-scanner/scripts/run-scan.sh --all` (needs `vercel dev` /
+     `node dev-server.mjs` on a machine with Go).
 
-   POST /api/scanner   body: { all?: true, index?: 'sp500'|'nasdaq100'|'set50', top?: number }
-     → { ok: true, result: <results/latest.json>, log: <script stdout tail> }
+   GET  /api/scanner → { ok, mode, result }   latest scan, never runs one
+   POST /api/scanner → remote: same as GET; local: runs a scan first
+     body (local only): { all?: true, index?, top?, minScore? }
    ============================================================================ */
 
 import { access } from 'fs/promises';
@@ -26,6 +28,8 @@ const execFileAsync = promisify(execFile);
 const SCANNER_DIR = resolve(process.env.STOCK_SCANNER_DIR || join(process.cwd(), '..', 'stock-scanner'));
 const RUN_SCRIPT = join(SCANNER_DIR, 'scripts', 'run-scan.sh');
 const TIMEOUT_MS = 10 * 60 * 1000; // scanning ~600+ symbols can take a while
+const REMOTE_URL = (process.env.SCANNER_URL || '').replace(/\/+$/, '');
+const REMOTE_TOKEN = process.env.SCANNER_API_TOKEN || '';
 
 async function scannerAvailable() {
   try { await access(RUN_SCRIPT); return true; } catch { return false; }
@@ -40,16 +44,55 @@ function buildArgs(body) {
   return args.length ? args : ['--all'];
 }
 
+async function fetchRemote(res) {
+  try {
+    const r = await fetch(`${REMOTE_URL}/api/v1/scan`, {
+      headers: REMOTE_TOKEN ? { Authorization: `Bearer ${REMOTE_TOKEN}` } : {},
+      signal: AbortSignal.timeout(20000),
+    });
+    if (r.status === 503) {
+      return res.status(200).json({ ok: false, mode: 'remote', error: 'scan-pending',
+        message: 'The scanner is still running its first scan — try again in a few minutes.' });
+    }
+    if (!r.ok) {
+      return res.status(200).json({ ok: false, mode: 'remote', error: 'scanner-error',
+        message: `Scanner service returned HTTP ${r.status}${r.status === 401 ? ' (check SCANNER_API_TOKEN)' : ''}.` });
+    }
+    return res.status(200).json({ ok: true, mode: 'remote', result: await r.json() });
+  } catch (e) {
+    return res.status(200).json({ ok: false, mode: 'remote', error: 'scanner-unreachable',
+      message: `Could not reach the scanner service: ${e.message}` });
+  }
+}
+
+async function readLatestLocal(res) {
+  if (!(await scannerAvailable())) {
+    return res.status(200).json({ ok: false, mode: 'unavailable', error: 'scanner-unavailable',
+      message: 'Scanner is not configured. Set SCANNER_URL to a hosted stock-scanner service (see DEPLOY.md), or run locally next to the stock-scanner project.' });
+  }
+  try {
+    const { readFile } = await import('fs/promises');
+    const result = JSON.parse(await readFile(join(SCANNER_DIR, 'results', 'latest.json'), 'utf8'));
+    return res.status(200).json({ ok: true, mode: 'local', result });
+  } catch {
+    return res.status(200).json({ ok: false, mode: 'local', error: 'no-results', message: 'No scan results yet — run a scan.' });
+  }
+}
+
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
 
-  if (req.method !== 'POST') return res.status(405).end();
+  if (req.method !== 'POST' && req.method !== 'GET') return res.status(405).end();
+
+  if (REMOTE_URL) return fetchRemote(res);
+  if (req.method === 'GET') return readLatestLocal(res);
 
   if (!(await scannerAvailable())) {
     return res.status(200).json({
       ok: false,
       error: 'scanner-unavailable',
-      message: `stock-scanner not found at ${SCANNER_DIR} (local dev only — not available in production).`,
+      mode: 'unavailable',
+      message: `Scanner not configured: stock-scanner not found at ${SCANNER_DIR}. In production set SCANNER_URL to a hosted stock-scanner service (see DEPLOY.md).`,
     });
   }
 
@@ -71,6 +114,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
+      mode: 'local',
       result,
       log: (stdout || stderr || '').split('\n').slice(-40).join('\n'),
     });
