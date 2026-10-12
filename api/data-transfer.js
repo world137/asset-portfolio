@@ -108,6 +108,7 @@ async function importAll(id, mode, portfolio, wallet) {
       thai_stock: s.thaiStock ?? null, usa_stock: s.usaStock ?? null,
       etf: s.etf ?? null, fund: s.fund ?? null, crypto: s.crypto ?? null,
       gold: s.gold ?? null, other: s.other ?? null,
+      day_change: s.dayChange ?? null,
     }));
     await sbUpsert('snapshots', snapshotRows, res);
 

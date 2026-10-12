@@ -7,9 +7,11 @@ const RANGE_OPTS = [
   { label: '1D',  range: '1d'  },
   { label: '5D',  range: '5d'  },
   { label: '1M',  range: '1mo' },
+  { label: '3M',  range: '3mo' },
   { label: '6M',  range: '6mo' },
   { label: 'YTD', range: 'ytd' },
   { label: '1Y',  range: '1y'  },
+  { label: '2Y',  range: '2y'  },
   { label: '5Y',  range: '5y'  },
   { label: 'Max', range: 'max' },
 ];
@@ -979,6 +981,244 @@ function PriceChartModal({ classKey, name, onClose }) {
   );
 }
 
+// Inline chart shown inside an expanded holding row (same data/cache as the modal)
+function InlinePriceChart({ classKey, name }) {
+  const symbol = resolveChartSymbol(classKey, name);
+  const [rangeIdx, setRangeIdx] = React.useState(0); // default 1D
+  const [chartData, setChartData] = React.useState(null);
+  const [loading, setLoading]     = React.useState(false);
+  const [error, setError]         = React.useState(null);
+  const opt = RANGE_OPTS[rangeIdx];
+
+  React.useEffect(() => {
+    if (!symbol) return;
+    let dead = false;
+    const cached = getCachedChart(symbol, opt.range);
+    if (cached) { setChartData(cached.data); setError(null); return; }
+    setLoading(true); setError(null);
+    fetch(`/api/chart?symbol=${encodeURIComponent(symbol)}&range=${opt.range}`)
+      .then(async r => { const j = await r.json(); if (!r.ok || j.error) throw new Error(j.error || 'HTTP ' + r.status); return j; })
+      .then(j => { if (dead) return; setCachedChart(symbol, opt.range, j); setChartData(j); })
+      .catch(e => { if (!dead) setError(e.message); })
+      .finally(() => { if (!dead) setLoading(false); });
+    return () => { dead = true; };
+  }, [symbol, rangeIdx]);
+
+  if (!symbol) return null;
+
+  const points    = chartData?.points || [];
+  const lastClose = points[points.length - 1]?.c ?? chartData?.price;
+  const baseline  = opt.range === '1d' ? (chartData?.prevClose ?? points[0]?.c) : points[0]?.c;
+  const change    = lastClose != null && baseline != null ? lastClose - baseline : null;
+  const changePct = change != null && baseline ? (change / baseline) * 100 : null;
+  const isUp      = change != null && change >= 0;
+
+  return (
+    <div onClick={e => e.stopPropagation()} style={{ padding: '10px 4px 6px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+        <div className="range-btns">
+          {RANGE_OPTS.map((r, i) => (
+            <button key={r.range} className={i === rangeIdx ? 'on' : ''} onClick={() => setRangeIdx(i)}>{r.label}</button>
+          ))}
+        </div>
+        {change != null && (
+          <span style={{ fontSize: 12, fontWeight: 600, color: isUp ? 'var(--green-600)' : 'var(--red-600)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
+            {isUp ? '+' : ''}{fmtChartPrice(change)} ({isUp ? '+' : ''}{changePct.toFixed(2)}%)
+            <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--fg-3)', marginLeft: 6 }}>
+              {opt.range === '1d' ? 'vs prev close' : `vs ${opt.label} ago`}
+            </span>
+          </span>
+        )}
+      </div>
+      {loading && !chartData && <div style={{ height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--fg-3)', fontSize: 13 }}>Loading chart…</div>}
+      {error && <div style={{ color: 'var(--fg-3)', fontSize: 12 }}>Could not load chart: {error}</div>}
+      {!error && chartData && <PriceLineChart points={points} range={opt.range} />}
+    </div>
+  );
+}
+
+// Tiny 1D sparkline for a holding row (in-memory cache + request dedupe, 5 min TTL)
+const _sparkCache = {};
+function loadSpark(symbol) {
+  const hit = _sparkCache[symbol];
+  if (hit && Date.now() - hit.ts < 5 * 60 * 1000) return hit.p;
+  const p = fetch(`/api/chart?symbol=${encodeURIComponent(symbol)}&range=1d`)
+    .then(async r => { const j = await r.json(); if (!r.ok || j.error) throw new Error(j.error || 'HTTP ' + r.status); return j; });
+  _sparkCache[symbol] = { ts: Date.now(), p };
+  p.catch(() => { delete _sparkCache[symbol]; });
+  return p;
+}
+
+function DaySparkline({ classKey, name, width = 90, height = 28 }) {
+  const symbol = resolveChartSymbol(classKey, name);
+  const [data, setData] = React.useState(null);
+  React.useEffect(() => {
+    if (!symbol) return;
+    let dead = false;
+    loadSpark(symbol).then(j => { if (!dead) setData(j); }).catch(() => {});
+    return () => { dead = true; };
+  }, [symbol]);
+
+  const pts = (data?.points || []).filter(p => p.c != null);
+  if (!symbol || pts.length < 2) return <span style={{ color: 'var(--fg-4)', fontSize: 11 }}>—</span>;
+
+  const base = data.prevClose ?? pts[0].c;
+  const vals = pts.map(p => p.c).concat(base);
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const span = max - min || 1;
+  const x = i => (i / (pts.length - 1)) * (width - 2) + 1;
+  const y = v => height - 2 - ((v - min) / span) * (height - 4);
+  const up = pts[pts.length - 1].c >= base;
+  const color = up ? 'var(--green-600)' : 'var(--red-600)';
+  const d = pts.map((p, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(p.c).toFixed(1)).join('');
+
+  return (
+    <svg width={width} height={height} style={{ display: 'block', marginLeft: 'auto' }}>
+      <line x1="0" x2={width} y1={y(base)} y2={y(base)} stroke="var(--border-2)" strokeDasharray="2 2" />
+      <path d={d} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// ── Tab-level day-change line chart, built from each holding's price history ──
+const CLASS_RANGES = [['1D','1d'],['5D','5d'],['1M','1mo'],['3M','3mo'],['6M','6mo'],['1Y','1y'],['5Y','5y'],['YTD','ytd']];
+const _chartMem = {};
+function fetchChartMem(symbol, range) {
+  const k = symbol + '|' + range;
+  const hit = _chartMem[k];
+  if (hit && Date.now() - hit.ts < 5 * 60 * 1000) return hit.p;
+  const p = fetch(`/api/chart?symbol=${encodeURIComponent(symbol)}&range=${range}`)
+    .then(async r => { const j = await r.json(); if (!r.ok || j.error) throw new Error(j.error || 'HTTP ' + r.status); return j; });
+  _chartMem[k] = { ts: Date.now(), p };
+  p.catch(() => { delete _chartMem[k]; });
+  return p;
+}
+
+function ClassChangeChart({ classKey }) {
+  const cls = Store.classByKey(classKey);
+  const positions = Store.positions(classKey);
+  const sig = positions.map(p => `${p.name}:${p.qty}:${p.cur}`).join('|');
+  const [rangeKey, setRangeKey] = React.useState('1D');
+  const [data, setData] = React.useState(null);
+  const [loading, setLoading] = React.useState(false);
+  const [hover, setHover] = React.useState(null);
+  const range = CLASS_RANGES.find(r => r[0] === rangeKey)[1];
+
+  React.useEffect(() => {
+    let dead = false;
+    setLoading(true);
+    Promise.all(positions.map(async p => {
+      const sym = resolveChartSymbol(classKey, p.name);
+      if (!sym || !(p.qty > 0)) return null;
+      let j; try { j = await fetchChartMem(sym, range); } catch (_) { return null; }
+      const pts = (j.points || []).filter(x => x.c != null);
+      if (pts.length < 2) return null;
+      const lastC = pts[pts.length - 1].c;
+      // Scale chart-currency prices to the holding's own currency via its current price
+      const f = lastC > 0 && p.cur > 0 ? p.cur / lastC : 1;
+      const base = range === '1d' ? (j.prevClose ?? pts[0].c) : pts[0].c;
+      return { pts, base, f, qty: p.qty };
+    })).then(list => {
+      if (dead) return;
+      const items = list.filter(Boolean);
+      let times = [...new Set(items.flatMap(it => it.pts.map(x => x.t)))].sort((a, b) => a - b);
+      if (times.length > 300) {
+        const step = Math.ceil(times.length / 300);
+        times = times.filter((_, i) => i % step === 0 || i === times.length - 1);
+      }
+      const ptr = items.map(() => -1);
+      const baseVal = items.reduce((a, it) => a + it.qty * it.f * it.base, 0);
+      const series = times.map(t => {
+        let amt = 0;
+        items.forEach((it, k) => {
+          while (ptr[k] + 1 < it.pts.length && it.pts[ptr[k] + 1].t <= t) ptr[k]++;
+          if (ptr[k] >= 0) amt += it.qty * it.f * (it.pts[ptr[k]].c - it.base);
+        });
+        return { t, amt, pct: baseVal > 0 ? (amt / baseVal) * 100 : null };
+      });
+      setData({ series, used: items.length, total: positions.length });
+      setLoading(false);
+    });
+    return () => { dead = true; };
+  }, [classKey, range, sig]);
+
+  const series = data?.series || [];
+  const last = series[series.length - 1];
+  const W = 640, H = 170, padL = 4, padR = 4, padT = 12, padB = 6;
+  const vals = series.map(r => r.amt).concat(0);
+  const vmax = Math.max(...vals), vmin = Math.min(...vals);
+  const span = (vmax - vmin) || 1;
+  const xOf = i => series.length < 2 ? W / 2 : padL + (i / (series.length - 1)) * (W - padL - padR);
+  const yOf = v => padT + ((vmax - v) / span) * (H - padT - padB);
+  const color = last && last.amt < 0 ? 'var(--red-600)' : 'var(--green-600)';
+  const h = hover != null ? series[hover] : null;
+  const shown = h || last;
+
+  function onMove(e) {
+    if (series.length < 2) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    const x = ((cx - rect.left) / rect.width) * W;
+    setHover(Math.max(0, Math.min(series.length - 1, Math.round(((x - padL) / (W - padL - padR)) * (series.length - 1)))));
+  }
+
+  let path = '', area = '';
+  if (series.length > 1) {
+    path = series.map((r, i) => (i ? 'L' : 'M') + xOf(i).toFixed(1) + ' ' + yOf(r.amt).toFixed(1)).join('');
+    area = path + `L${xOf(series.length - 1).toFixed(1)} ${yOf(0).toFixed(1)}L${xOf(0).toFixed(1)} ${yOf(0).toFixed(1)}Z`;
+  }
+
+  return (
+    <div className="card" style={{ marginBottom: 18 }}>
+      <div className="card-h">
+        <div>
+          <h3>Day change history</h3>
+          <div className="s">Change in this tab's value over the range, from your current quantities × price history</div>
+        </div>
+        <div className="range-btns">
+          {CLASS_RANGES.map(([k]) => <button key={k} className={rangeKey === k ? 'on' : ''} onClick={() => { setRangeKey(k); setHover(null); }}>{k}</button>)}
+        </div>
+      </div>
+      <div className="card-b">
+        {loading && !data && <div style={{ height: 170, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--fg-3)', fontSize: 13 }}>Loading chart…</div>}
+        {data && series.length < 2 && (
+          <div className="t-small" style={{ color: 'var(--fg-3)' }}>No price history available for the holdings in this tab.</div>
+        )}
+        {data && series.length >= 2 && (
+          <React.Fragment>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', marginBottom: 6, fontSize: 13, flexWrap: 'wrap', minHeight: 20 }}>
+              <span style={{ fontWeight: 700, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', color: shown.amt >= 0 ? 'var(--green-600)' : 'var(--red-600)' }}>
+                {(shown.amt >= 0 ? '+' : '−') + window.fmtMoney(Math.abs(shown.amt), cls.ccy, 2)}
+                {shown.pct != null && ` (${shown.pct >= 0 ? '+' : ''}${shown.pct.toFixed(2)}%)`}
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--fg-3)' }}>
+                {h ? fmtChartDateFull(h.t, range) : (range === '1d' ? 'vs prev close' : `vs ${rangeKey} ago`)}
+                {data.used < data.total && ` · ${data.used}/${data.total} holdings with chart data`}
+              </span>
+            </div>
+            <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block', touchAction: 'pan-y' }}
+                 onMouseMove={onMove} onTouchMove={onMove} onTouchStart={onMove}
+                 onMouseLeave={() => setHover(null)}>
+              <line x1={padL} x2={W - padR} y1={yOf(0)} y2={yOf(0)} stroke="var(--border-2)" strokeDasharray="3 3" />
+              <path d={area} fill={color} opacity="0.1" />
+              <path d={path} fill="none" stroke={color} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
+              {h && (
+                <React.Fragment>
+                  <line x1={xOf(hover)} x2={xOf(hover)} y1={padT} y2={H - padB} stroke="var(--border-2)" strokeDasharray="3 3" />
+                  <circle cx={xOf(hover)} cy={yOf(h.amt)} r="4" fill={color} stroke="var(--bg-1, #fff)" strokeWidth="1.5" />
+                </React.Fragment>
+              )}
+            </svg>
+          </React.Fragment>
+        )}
+      </div>
+    </div>
+  );
+}
+
+window.ClassChangeChart   = ClassChangeChart;
+window.DaySparkline       = DaySparkline;
+window.InlinePriceChart   = InlinePriceChart;
 window.PriceChartModal    = PriceChartModal;
 window.resolveChartSymbol = resolveChartSymbol;
 window.CandleChart        = CandleChart;

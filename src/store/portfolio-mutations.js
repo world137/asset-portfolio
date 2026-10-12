@@ -291,15 +291,24 @@
     if (value <= 0) return;
     const rate = state.fx.USDTHB || window.SEED_FX_USDTHB;
     const snap = { date: today, value };
+    const prevCloses = state.dayChangePrices || {};
+    const dayChange = {};
     for (const cls of window.ASSET_CLASSES) {
-      let v = 0;
+      let v = 0, dc = 0, hasDc = false;
       for (const lot of (state.holdings[cls.key] || [])) {
         const m = window.StoreCalc.lotMetrics(lot);
-        v += cls.ccy === 'USD' ? m.value * rate : m.value;
+        const fx = cls.ccy === 'USD' ? rate : 1;
+        v += m.value * fx;
+        const prev = prevCloses[`${cls.key}:${lot.name}`];
+        if (prev != null && prev !== 0 && lot.cur != null) { dc += (lot.qty || 0) * (lot.cur - prev) * fx; hasDc = true; }
       }
       snap[cls.key] = v;
+      if (hasDc) dayChange[cls.key] = dc;
     }
+    if (Object.keys(dayChange).length) snap.dayChange = dayChange;
     const idx = state.snapshots.findIndex(s => s.date === today);
+    // Keep the stored day change if this refresh had no previous-close data
+    if (idx >= 0 && !snap.dayChange && state.snapshots[idx].dayChange) snap.dayChange = state.snapshots[idx].dayChange;
     if (idx >= 0) state.snapshots[idx] = snap;
     else state.snapshots.push(snap);
     if (state.snapshots.length > window.MAX_SNAPSHOTS) {
