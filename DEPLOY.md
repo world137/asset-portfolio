@@ -67,26 +67,16 @@ vercel dev
 
 Then open the printed `localhost` URL — the API works exactly as in production.
 
-## Stock Scanner in production
+## Stock Scanner
 
-Vercel can't run the Go `stock-scanner` (no Go toolchain, and a full scan takes
-~4 minutes), so production works by **publishing**: you run one script on your
-own machine and the deployed page shows the latest result.
+Self-contained — no extra env vars, tables or scripts. The scan logic is in
+`api/_scanner/` (a JS port of the Go `stock-scanner`) over a bundled
+SP500 + NASDAQ100 + SET50 universe (`api/_scanner/universe.js`), with prices
+from Yahoo. Click **Run scan**: the page calls `/api/scanner` in slices of 80
+symbols (each fits easily in a function call), ranks per index, and keeps the
+latest result in the browser. Works the same on Vercel and `vercel dev`.
 
-1. In the Supabase SQL editor run `database/scanner_results_migration.sql`.
-2. In Vercel add env var `SCANNER_PUSH_TOKEN` (any long random string) and
-   redeploy. (`SUPABASE_URL` / `SUPABASE_SERVICE_KEY` are already used by the app.)
-3. In the `stock-scanner` folder create `.env` with:
-   ```
-   PORTFOLIO_URL=https://your-app.vercel.app
-   SCANNER_PUSH_TOKEN=<same token>
-   ```
-4. Run `scripts/publish-scan.sh` (runs `run-scan.sh --all`, then uploads
-   `results/latest.json`). Put it in cron to automate, e.g.
-   `30 17 * * 1-5 /path/to/stock-scanner/scripts/publish-scan.sh`.
-5. Open **Stock Scanner** on the deployed site — it shows the last published scan
-   ("Refresh results" reloads it). Locally (`vercel dev` next to the
-   `stock-scanner` folder) the button still runs `run-scan.sh --all` directly.
+To refresh the universe after index changes, regenerate `universe.js`.
 
 ## Notes / limits
 
