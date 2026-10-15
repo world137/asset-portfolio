@@ -8,6 +8,12 @@ const RATING_COLOR = {
   WATCHLIST:  'var(--accent)',
 };
 
+const INDEX_LABEL = {
+  SP500:     { text: 'S&P 500', color: 'var(--accent)' },
+  NASDAQ100: { text: 'NASDAQ',  color: 'var(--green-600)' },
+  SET50:     { text: 'SET50',   color: 'var(--red-600)' },
+};
+
 function ScannerRow({ c }) {
   return (
     <tr className="pos">
@@ -17,6 +23,16 @@ function ScannerRow({ c }) {
         </div>
         <div className="s" style={{ fontSize: 11, color: 'var(--fg-3)' }}>
           {c.company_name}{c.sector ? ` · ${c.sector}` : ''}
+        </div>
+      </td>
+      <td>
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'nowrap' }}>
+          {(c.indexes || []).map(ix => (
+            <span key={ix} style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, whiteSpace: 'nowrap',
+              color: INDEX_LABEL[ix]?.color || 'var(--fg-2)', background: 'var(--bg-2, rgba(128,128,128,.12))' }}>
+              {INDEX_LABEL[ix]?.text || ix}
+            </span>
+          ))}
         </div>
       </td>
       <td className="num">${window.fmtBig ? window.fmtBig(c.price) : c.price.toFixed(2)}</td>
@@ -108,7 +124,8 @@ function ScannerView() {
     }
   }
 
-  const candidates = (result && result.candidates) || [];
+  // Highest score first (ties: higher RSI)
+  const candidates = [...((result && result.candidates) || [])].sort((a, b) => b.score - a.score || b.rsi - a.rsi);
 
   return (
     <div className="page">
@@ -163,17 +180,18 @@ function ScannerView() {
               </div>
             </div>
           ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table className="ptable">
+            <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', maxWidth: '100%' }}>
+              <table className="ptable" style={{ minWidth: 900 }}>
                 <thead>
                   <tr>
                     <th>Symbol</th>
+                    <th>Index</th>
                     <th className="num">Price</th>
                     <th className="num">Pullback</th>
                     <th>EMA touch</th>
                     <th className="num">RSI</th>
                     <th>VP signal</th>
-                    <th className="num">Score</th>
+                    <th className="num">Score ↓</th>
                     <th>Rating</th>
                   </tr>
                 </thead>
