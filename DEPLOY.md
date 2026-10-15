@@ -70,23 +70,23 @@ Then open the printed `localhost` URL — the API works exactly as in production
 ## Stock Scanner in production
 
 Vercel can't run the Go `stock-scanner` (no Go toolchain, and a full scan takes
-~4 minutes), so host it separately and let the app read its results:
+~4 minutes), so production works by **publishing**: you run one script on your
+own machine and the deployed page shows the latest result.
 
-1. Deploy the `stock-scanner` repo's Docker image to any container host
-   (Fly.io, Render, Railway, Cloud Run, a VPS…). It runs `serve`, scans on
-   startup and re-scans hourly, and serves the latest result at
-   `GET /api/v1/scan`. Set `SCANNER_API_TOKEN` on the container so the API
-   requires a bearer token. Give it a persistent volume for `/app/data` if you
-   want the universe cache to survive restarts.
-2. In the Vercel project add env vars, then redeploy:
-   - `SCANNER_URL` — e.g. `https://stock-scanner.example.com` (no trailing path)
-   - `SCANNER_API_TOKEN` — same token as the container
-3. Open **Stock Scanner** — it loads the latest scan automatically; the button
-   becomes "Refresh results". The first scan after a container start takes a few
-   minutes (the page shows "still running its first scan" until then).
-
-Without `SCANNER_URL`, the page falls back to local mode (`vercel dev` next to
-the `stock-scanner` folder, button runs `run-scan.sh --all`).
+1. In the Supabase SQL editor run `database/scanner_results_migration.sql`.
+2. In Vercel add env var `SCANNER_PUSH_TOKEN` (any long random string) and
+   redeploy. (`SUPABASE_URL` / `SUPABASE_SERVICE_KEY` are already used by the app.)
+3. In the `stock-scanner` folder create `.env` with:
+   ```
+   PORTFOLIO_URL=https://your-app.vercel.app
+   SCANNER_PUSH_TOKEN=<same token>
+   ```
+4. Run `scripts/publish-scan.sh` (runs `run-scan.sh --all`, then uploads
+   `results/latest.json`). Put it in cron to automate, e.g.
+   `30 17 * * 1-5 /path/to/stock-scanner/scripts/publish-scan.sh`.
+5. Open **Stock Scanner** on the deployed site — it shows the last published scan
+   ("Refresh results" reloads it). Locally (`vercel dev` next to the
+   `stock-scanner` folder) the button still runs `run-scan.sh --all` directly.
 
 ## Notes / limits
 
