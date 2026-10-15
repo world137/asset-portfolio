@@ -1,24 +1,25 @@
 /* ============================================================================
    api/scanner.js — Vercel Serverless Function
 
-   Two modes:
-   • remote (production): set SCANNER_URL to a hosted stock-scanner container
-     (its `serve` mode, see stock-scanner/Dockerfile) and, if the container
-     has SCANNER_API_TOKEN set, the same token here. The function proxies
-     GET {SCANNER_URL}/api/v1/scan, which returns the latest completed scan
-     (the container re-scans on its own schedule). Vercel itself has no Go
-     toolchain and a 4-minute scan would exceed function limits.
-   • local (dev): without SCANNER_URL, POST shells out to the sibling
-     `stock-scanner/scripts/run-scan.sh --all` (needs `vercel dev` /
-     `node dev-server.mjs` on a machine with Go).
+   Vercel can't run the Go stock-scanner, so production works by *publishing*:
+   you run stock-scanner/scripts/publish-scan.sh on your own machine (or cron),
+   which runs `run-scan.sh --all` and POSTs results/latest.json here; it is
+   stored in Supabase (`scanner_results`, see database/scanner_results_migration.sql)
+   and the Scanner page reads it back.
 
    GET  /api/scanner → { ok, mode, result }   latest scan, never runs one
-   POST /api/scanner → remote: same as GET; local: runs a scan first
-     body (local only): { all?: true, index?, top?, minScore? }
+        local dev (stock-scanner folder present) → results/latest.json
+        production → latest published scan from Supabase
+   POST /api/scanner
+        Authorization: Bearer <SCANNER_PUSH_TOKEN>, body { result: <latest.json> }
+          → stores it as the latest scan (what publish-scan.sh sends)
+        otherwise (local dev only): body { all?, index?, top?, minScore? } runs
+          `run-scan.sh` and returns the result
    ============================================================================ */
 
 import { access } from 'fs/promises';
 import { join, resolve } from 'path';
+import { timingSafeEqual } from 'crypto';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { readBody } from './_lib.js';
@@ -28,8 +29,58 @@ const execFileAsync = promisify(execFile);
 const SCANNER_DIR = resolve(process.env.STOCK_SCANNER_DIR || join(process.cwd(), '..', 'stock-scanner'));
 const RUN_SCRIPT = join(SCANNER_DIR, 'scripts', 'run-scan.sh');
 const TIMEOUT_MS = 10 * 60 * 1000; // scanning ~600+ symbols can take a while
-const REMOTE_URL = (process.env.SCANNER_URL || '').replace(/\/+$/, '');
-const REMOTE_TOKEN = process.env.SCANNER_API_TOKEN || '';
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
+const PUSH_TOKEN = process.env.SCANNER_PUSH_TOKEN || '';
+
+function sbHeaders(extra = {}) {
+  return { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', ...extra };
+}
+
+function tokenOk(req) {
+  const got = String(req.headers?.authorization || '');
+  const want = `Bearer ${PUSH_TOKEN}`;
+  if (!PUSH_TOKEN || got.length !== want.length) return false;
+  return timingSafeEqual(Buffer.from(got), Buffer.from(want));
+}
+
+async function readPublished(res) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    return res.status(200).json({ ok: false, mode: 'unavailable', error: 'scanner-unavailable',
+      message: 'Scanner is not configured. Publish results with stock-scanner/scripts/publish-scan.sh (see DEPLOY.md), or run locally next to the stock-scanner project.' });
+  }
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/scanner_results?id=eq.latest&select=result,updated_at`, { headers: sbHeaders() });
+    if (!r.ok) throw new Error(`HTTP ${r.status} ${(await r.text().catch(() => '')).slice(0, 120)}`);
+    const rows = await r.json();
+    if (!rows.length) {
+      return res.status(200).json({ ok: false, mode: 'published', error: 'no-results',
+        message: 'No scan has been published yet. Run stock-scanner/scripts/publish-scan.sh.' });
+    }
+    return res.status(200).json({ ok: true, mode: 'published', result: rows[0].result, publishedAt: rows[0].updated_at });
+  } catch (e) {
+    return res.status(200).json({ ok: false, mode: 'published', error: 'scanner-error', message: `Could not load published scan: ${e.message}` });
+  }
+}
+
+async function publish(req, res) {
+  if (!PUSH_TOKEN) return res.status(503).json({ ok: false, error: 'publish-disabled', message: 'SCANNER_PUSH_TOKEN is not set on the server.' });
+  if (!tokenOk(req)) return res.status(401).json({ ok: false, error: 'unauthorized' });
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(503).json({ ok: false, error: 'supabase-not-configured' });
+  let body = {};
+  try { body = await readBody(req); } catch { body = {}; }
+  const result = body.result;
+  if (!result || typeof result !== 'object' || !Array.isArray(result.candidates)) {
+    return res.status(400).json({ ok: false, error: 'bad-result', message: 'Body must be { result: <latest.json> } with a candidates array.' });
+  }
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/scanner_results`, {
+    method: 'POST',
+    headers: sbHeaders({ Prefer: 'resolution=merge-duplicates,return=minimal' }),
+    body: JSON.stringify([{ id: 'latest', result, updated_at: new Date().toISOString() }]),
+  });
+  if (!r.ok) return res.status(500).json({ ok: false, error: 'save-failed', message: (await r.text().catch(() => '')).slice(0, 200) });
+  return res.status(200).json({ ok: true, candidates: result.candidates.length });
+}
 
 async function scannerAvailable() {
   try { await access(RUN_SCRIPT); return true; } catch { return false; }
@@ -44,32 +95,7 @@ function buildArgs(body) {
   return args.length ? args : ['--all'];
 }
 
-async function fetchRemote(res) {
-  try {
-    const r = await fetch(`${REMOTE_URL}/api/v1/scan`, {
-      headers: REMOTE_TOKEN ? { Authorization: `Bearer ${REMOTE_TOKEN}` } : {},
-      signal: AbortSignal.timeout(20000),
-    });
-    if (r.status === 503) {
-      return res.status(200).json({ ok: false, mode: 'remote', error: 'scan-pending',
-        message: 'The scanner is still running its first scan — try again in a few minutes.' });
-    }
-    if (!r.ok) {
-      return res.status(200).json({ ok: false, mode: 'remote', error: 'scanner-error',
-        message: `Scanner service returned HTTP ${r.status}${r.status === 401 ? ' (check SCANNER_API_TOKEN)' : ''}.` });
-    }
-    return res.status(200).json({ ok: true, mode: 'remote', result: await r.json() });
-  } catch (e) {
-    return res.status(200).json({ ok: false, mode: 'remote', error: 'scanner-unreachable',
-      message: `Could not reach the scanner service: ${e.message}` });
-  }
-}
-
 async function readLatestLocal(res) {
-  if (!(await scannerAvailable())) {
-    return res.status(200).json({ ok: false, mode: 'unavailable', error: 'scanner-unavailable',
-      message: 'Scanner is not configured. Set SCANNER_URL to a hosted stock-scanner service (see DEPLOY.md), or run locally next to the stock-scanner project.' });
-  }
   try {
     const { readFile } = await import('fs/promises');
     const result = JSON.parse(await readFile(join(SCANNER_DIR, 'results', 'latest.json'), 'utf8'));
@@ -84,15 +110,16 @@ export default async function handler(req, res) {
 
   if (req.method !== 'POST' && req.method !== 'GET') return res.status(405).end();
 
-  if (REMOTE_URL) return fetchRemote(res);
-  if (req.method === 'GET') return readLatestLocal(res);
+  const local = await scannerAvailable();
+  if (req.method === 'GET') return local ? readLatestLocal(res) : readPublished(res);
+  if (String(req.headers?.authorization || '').startsWith('Bearer ')) return publish(req, res);
 
-  if (!(await scannerAvailable())) {
+  if (!local) {
     return res.status(200).json({
       ok: false,
       error: 'scanner-unavailable',
       mode: 'unavailable',
-      message: `Scanner not configured: stock-scanner not found at ${SCANNER_DIR}. In production set SCANNER_URL to a hosted stock-scanner service (see DEPLOY.md).`,
+      message: `Scanner not configured: stock-scanner not found at ${SCANNER_DIR}. In production, results are published with stock-scanner/scripts/publish-scan.sh (see DEPLOY.md).`,
     });
   }
 

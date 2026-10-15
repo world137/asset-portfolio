@@ -39,7 +39,8 @@ function ScannerView() {
   const [result,  setResult]  = React.useState(null);
   const [error,   setError]   = React.useState(null);
   const [log,     setLog]     = React.useState(null);
-  const [mode,    setMode]    = React.useState(null); // 'remote' | 'local' | 'unavailable'
+  const [mode,    setMode]    = React.useState(null); // 'published' | 'local' | 'unavailable'
+  const [publishedAt, setPublishedAt] = React.useState(null);
 
   // Load whatever the latest scan is (never triggers a scan)
   React.useEffect(() => {
@@ -47,8 +48,8 @@ function ScannerView() {
     fetch('/api/scanner').then(r => r.json()).then(j => {
       if (dead) return;
       setMode(j.mode || null);
-      if (j.ok) setResult(j.result);
-      else if (j.error === 'scan-pending' || j.error === 'scanner-unreachable' || j.error === 'scanner-error' || j.error === 'scanner-unavailable') setError(j.message);
+      if (j.ok) { setResult(j.result); setPublishedAt(j.publishedAt || null); }
+      else if (j.message && j.error !== 'no-results') setError(j.message);
     }).catch(() => {});
     return () => { dead = true; };
   }, []);
@@ -57,13 +58,13 @@ function ScannerView() {
     setRunning(true);
     setError(null);
     try {
-      const r = await fetch('/api/scanner', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ all: true }),
-      });
+      // Local dev can run the scan itself; elsewhere just reload the latest published scan
+      const r = mode === 'local'
+        ? await fetch('/api/scanner', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ all: true }) })
+        : await fetch('/api/scanner');
       const j = await r.json();
       if (j.mode) setMode(j.mode);
+      if (j.publishedAt) setPublishedAt(j.publishedAt);
       if (!j.ok) {
         setError(j.message || j.error || 'Scan failed');
         setLog(j.log || null);
@@ -86,11 +87,11 @@ function ScannerView() {
         <div>
           <h1 className="t-h1" style={{ margin: '0 0 2px' }}>Stock Scanner</h1>
           <div className="t-small">
-            Pullback / EMA / RSI / Volume Profile screen over SP500 + NASDAQ100 + SET50{mode === 'remote' ? ' · scanner service re-scans hourly' : ''}
+            Pullback / EMA / RSI / Volume Profile screen over SP500 + NASDAQ100 + SET50{mode === 'published' && publishedAt ? ` · last published ${window.timeAgo ? window.timeAgo(Date.parse(publishedAt)) : publishedAt}` : ''}
           </div>
         </div>
         <Button variant="primary" size="sm" icon="refresh-cw" onClick={runScan} disabled={running || mode === 'unavailable'}>
-          {running ? (mode === 'remote' ? 'Loading…' : 'Scanning…') : (mode === 'remote' ? 'Refresh results' : 'Run scan (--all)')}
+          {running ? (mode === 'published' ? 'Loading…' : 'Scanning…') : (mode === 'published' ? 'Refresh results' : 'Run scan (--all)')}
         </Button>
       </div>
 
@@ -108,7 +109,7 @@ function ScannerView() {
           <div style={{ padding: '52px 24px', textAlign: 'center', color: 'var(--fg-3)' }}>
             <Icon name="activity" size={36} />
             <div style={{ fontSize: 15, fontWeight: 600, margin: '14px 0 6px' }}>No scan yet</div>
-            <div style={{ fontSize: 13 }}>{mode === 'remote' ? 'Click "Refresh results" to load the latest scan.' : 'Click "Run scan (--all)" to build and run stock-scanner.'}</div>
+            <div style={{ fontSize: 13 }}>{mode === 'published' ? 'No scan published yet — run stock-scanner/scripts/publish-scan.sh, then click "Refresh results".' : 'Click "Run scan (--all)" to build and run stock-scanner.'}</div>
           </div>
         </div>
       )}
@@ -116,7 +117,7 @@ function ScannerView() {
       {running && (
         <div className="card">
           <div style={{ padding: '52px 24px', textAlign: 'center', color: 'var(--fg-3)' }}>
-            {mode === 'remote' ? 'Loading latest scan…' : 'Scanning sp500 + nasdaq100 + set50… this can take a few minutes.'}
+            {mode === 'published' ? 'Loading latest scan…' : 'Scanning sp500 + nasdaq100 + set50… this can take a few minutes.'}
           </div>
         </div>
       )}
